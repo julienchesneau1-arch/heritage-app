@@ -174,6 +174,12 @@ L'audio ne sort pas de l'appareil. La bibliothèque et les poids, eux, viennent 
 
 Clé API (optionnelle, pour un second avis ou un appareil trop faible) : https://platform.openai.com/api-keys.
 
+### Une mesure impossible ne vaut pas zéro
+
+La page Transmission affichait des zéros là où rien n'avait pu être mesuré : `distorsion 0/100` sur une famille sans aucune lecture enregistrée se lit « mémoire parfaitement fidèle » ; `transmission 0 %` sur trois récits se lit comme un échec. Ces valeurs portent maintenant `null` et s'affichent « — », avec la raison.
+
+Un récit jamais relu n'est plus compté comme « oublié depuis douze mois » s'il a été écrit la semaine dernière — c'était factuellement faux, et cela remplissait la veillée de nouveautés présentées comme du patrimoine en péril.
+
 ### Isolation des familles
 
 Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient le cookie signé ; une requête portant sur une autre famille reçoit `403`.

@@ -127,9 +127,11 @@ describe('Métrique de distorsion', () => {
     expect(await service.calculateDistortion(FAMILY)).toBe(50);
   });
 
-  it('vaut 0 sur une famille vide, sans planter', async () => {
+  it('ne se prononce pas sur une famille vide', async () => {
+    // Anciennement 0 — ce qui se lisait « mémoire parfaitement fidèle »
+    // alors qu'aucune mesure n'était possible.
     const service = serviceWith([], []);
-    expect(await service.calculateDistortion(FAMILY)).toBe(0);
+    expect(await service.calculateDistortion(FAMILY)).toBeNull();
   });
 });
 

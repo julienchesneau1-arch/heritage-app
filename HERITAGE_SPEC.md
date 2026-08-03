@@ -523,6 +523,23 @@ Ce ne sont pas des suggestions au sens du §6.1 : rien n'est recommandé, class�
 
 ## 9. MÉTRIQUES
 
+### 9.0 Une mesure impossible ne vaut pas zéro
+
+Défaut de forme trouvé en auditant la page Transmission : **le produit affichait des zéros là où il n'avait rien pu mesurer.**
+
+| Affiché | Signification réelle | Comment ça se lisait |
+|---|---|---|
+| `distorsion 0 / 100` | aucune lecture enregistrée | « mémoire parfaitement fidèle » |
+| `0 récit sur-exposé` | aucune impression à examiner | « nous avons vérifié, tout va bien » |
+| `transmission 0 %` | trois récits, corpus trop mince | « cette famille ne transmet pas » |
+| `conversion 0 %` | aucune question posée | « le Passeur ne sert à rien » |
+
+Ces quatre chiffres portent désormais `null`, et la page écrit « — » avec la raison. **Un zéro doit être un constat, jamais un aveu d'ignorance déguisé.**
+
+Le seuil de `MIN_STORIES_FOR_RATE = 5` n'est pas arbitraire : la cible V1 est « une histoire sur cinq ». En dessous de cinq récits, la mesure ne peut prendre que 0, 25, 50, 75 ou 100 % — elle saute par-dessus le seuil qu'elle est censée évaluer.
+
+**Erreur de fait corrigée au passage.** Un récit jamais relu était compté comme « non relu depuis douze mois » quelle que soit sa date de création : un récit écrit la veille était donc déclaré patrimoine en péril. C'était faux, et cela remplissait la première place de la veillée avec des nouveautés. La condition exige désormais que le récit **existe** depuis douze mois pour avoir pu être oublié pendant douze mois.
+
 ### 9.1 North Star
 
 ```

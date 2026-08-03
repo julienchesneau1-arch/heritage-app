@@ -13,13 +13,31 @@ import { prisma as defaultPrisma } from '@/lib/prisma';
  * PARENTS DISTINCTS — et on expose aussi le ratio brut pour comparaison.
  */
 
+/**
+ * En dessous de ce nombre de récits, le taux de transmission ne peut même
+ * pas exprimer sa propre cible.
+ *
+ * L'objectif V1 est « > 20 %, une histoire sur cinq ». Avec quatre récits,
+ * la mesure ne peut prendre que les valeurs 0, 25, 50, 75 ou 100 % : elle
+ * saute par-dessus le seuil qu'elle est censée évaluer. Afficher « 0 % » en
+ * gros à une famille qui compte trois récits n'est pas un constat, c'est un
+ * verdict rendu sans dossier.
+ */
+export const MIN_STORIES_FOR_RATE = 5;
+
 export interface TransmissionMetrics {
   storiesCount: number;
   passagesCount: number;
-  /** Part des récits ayant engendré au moins un autre récit. 0-1. */
-  transmissionRate: number;
-  /** passages / stories, tel qu'écrit littéralement dans la spec. 0-n. */
-  rawPassageRatio: number;
+  /**
+   * Part des récits ayant engendré au moins un autre récit. 0-1.
+   * `null` quand le corpus est trop mince pour que le chiffre veuille dire
+   * quelque chose — jamais 0 par défaut.
+   */
+  transmissionRate: number | null;
+  /** true dès que le corpus permet à la mesure d'exprimer sa cible. */
+  basisSufficient: boolean;
+  /** passages / stories, tel qu'écrit littéralement dans la spec. 0-n, `null` sur corpus vide. */
+  rawPassageRatio: number | null;
   /** Latence médiane, en jours, entre un récit et celui qu'il engendre. */
   medianLatencyDays: number | null;
   /** Plus longue chaîne de transmission (nombre de récits). */
@@ -27,8 +45,8 @@ export interface TransmissionMetrics {
   conversationsTotal: number;
   conversationsAnswered: number;
   conversationsConverted: number;
-  /** Part des conversations devenues un récit. 0-1. */
-  passeurConversion: number;
+  /** Part des conversations devenues un récit. 0-1, ou `null` si aucune question n'a été posée. */
+  passeurConversion: number | null;
 }
 
 export class MetricsService {
@@ -51,17 +69,22 @@ export class MetricsService {
     const conversationsTotal = [...byStatus.values()].reduce((sum, n) => sum + n, 0);
     const converted = byStatus.get('converted') ?? 0;
 
+    const basisSufficient = storiesCount >= MIN_STORIES_FOR_RATE;
+
     return {
       storiesCount,
       passagesCount: passages.length,
-      transmissionRate: storiesCount === 0 ? 0 : distinctParents.size / storiesCount,
-      rawPassageRatio: storiesCount === 0 ? 0 : passages.length / storiesCount,
+      transmissionRate: basisSufficient ? distinctParents.size / storiesCount : null,
+      basisSufficient,
+      rawPassageRatio: storiesCount === 0 ? null : passages.length / storiesCount,
       medianLatencyDays: median(latencies),
       maxChainDepth: longestChain(passages),
       conversationsTotal,
       conversationsAnswered: byStatus.get('answered') ?? 0,
       conversationsConverted: converted,
-      passeurConversion: conversationsTotal === 0 ? 0 : converted / conversationsTotal,
+      // Même principe : sans aucune question posée, il n'y a pas un taux de
+      // conversion nul, il n'y a pas de taux du tout.
+      passeurConversion: conversationsTotal === 0 ? null : converted / conversationsTotal,
     };
   }
 }

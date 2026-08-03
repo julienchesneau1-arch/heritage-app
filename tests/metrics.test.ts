@@ -18,19 +18,21 @@ function metricsWith(
 
 describe('transmission_rate', () => {
   it('compte les récits PARENTS distincts, pas les passages', async () => {
-    // s1 engendre s2 et s3 : un seul récit a transmis, sur 4.
-    const service = metricsWith(4, [
+    // s1 engendre s2 et s3 : un seul récit a transmis, sur 8.
+    const service = metricsWith(8, [
       { parentStoryId: 's1', childStoryId: 's2', latencyDays: 10 },
       { parentStoryId: 's1', childStoryId: 's3', latencyDays: 40 },
     ]);
     const metrics = await service.transmission('fam_1');
-    expect(metrics.transmissionRate).toBe(0.25);
-    expect(metrics.rawPassageRatio).toBe(0.5);
+    expect(metrics.transmissionRate).toBe(0.125);
+    expect(metrics.rawPassageRatio).toBe(0.25);
   });
 
-  it('vaut 0 sur une famille sans récit, sans division par zéro', async () => {
+  it('ne se prononce pas sur une famille sans récit', async () => {
+    // Anciennement 0 — ce qui se lisait comme un échec de transmission
+    // alors qu'il n'y a simplement rien à transmettre encore.
     const metrics = await metricsWith(0, []).transmission('fam_1');
-    expect(metrics.transmissionRate).toBe(0);
+    expect(metrics.transmissionRate).toBeNull();
     expect(metrics.medianLatencyDays).toBeNull();
     expect(metrics.maxChainDepth).toBe(0);
   });

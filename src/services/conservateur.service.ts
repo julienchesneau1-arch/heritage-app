@@ -40,9 +40,13 @@ const VIEW_DEDUPE_SECONDS = 30 * 60;
 export interface ConservateurReport {
   totalStories: number;
   invisibleStories: number;
-  overexposedStories: number;
+  /** null tant qu'aucune lecture n'a été enregistrée : rien n'est mesurable. */
+  overexposedStories: number | null;
   quarantinedStories: number;
-  distortionScore: number;
+  /** null quand la distorsion n'est pas mesurable. Jamais 0 par défaut. */
+  distortionScore: number | null;
+  /** Le socle de la mesure : sans impressions, les deux champs ci-dessus ne veulent rien dire. */
+  impressions: number;
 }
 
 export class ConservateurService {
@@ -145,7 +149,15 @@ export class ConservateurService {
         familyId,
         archived: false,
         quarantined: false,
-        OR: [{ lastViewedAt: { lt: since } }, { lastViewedAt: null }],
+        // Un récit jamais relu ne compte que s'il EXISTE depuis assez
+        // longtemps pour avoir pu l'être. Sans cette condition, un récit
+        // écrit hier était déclaré « non relu depuis douze mois » — ce qui
+        // est faux, et remplissait la veillée de nouveautés présentées
+        // comme du patrimoine en péril.
+        OR: [
+          { lastViewedAt: { lt: since } },
+          { lastViewedAt: null, createdAt: { lt: since } },
+        ],
       },
       orderBy: { createdAt: 'asc' },
       take: limit,
@@ -219,7 +231,7 @@ export class ConservateurService {
    * Elle est mesurée et affichée. Elle n'est pas corrigée : corriger, ce
    * serait imposer.
    */
-  async calculateDistortion(familyId: string, now = new Date()): Promise<number> {
+  async calculateDistortion(familyId: string, now = new Date()): Promise<number | null> {
     // Les impressions sont AGRÉGÉES en base et bornées à 12 mois, comme le
     // reste du Conservateur. La version précédente chargeait chaque ligne du
     // journal en mémoire : sur une famille active depuis dix ans, c'était
@@ -253,7 +265,11 @@ export class ConservateurService {
       totalViews += row._count.storyId;
     }
 
-    if (stories.length === 0 || totalViews === 0) return 0;
+    // Zéro voudrait dire « mémoire parfaitement fidèle ». Sans lecture
+    // enregistrée, on ne mesure rien du tout : c'est `null`, et la page le
+    // dit. Confondre l'absence de mesure avec un bon résultat serait
+    // exactement la faute que ce produit ne peut pas se permettre.
+    if (stories.length === 0 || totalViews === 0) return null;
     const corpusDistribution = countBy(stories.map(voiceOf));
 
     let distortion = 0;
@@ -269,26 +285,33 @@ export class ConservateurService {
 
   async report(familyId: string, now = new Date()): Promise<ConservateurReport> {
     const since = monthsAgo(now, FORGOTTEN_AFTER_MONTHS);
-    const [totalStories, invisibleStories, quarantinedStories, overexposed, distortionScore] =
+    const [totalStories, invisibleStories, quarantinedStories, overexposed, distortionScore, impressions] =
       await Promise.all([
         this.prisma.story.count({ where: { familyId } }),
         this.prisma.story.count({
           where: {
             familyId,
             archived: false,
-            OR: [{ lastViewedAt: { lt: since } }, { lastViewedAt: null }],
+            OR: [
+              { lastViewedAt: { lt: since } },
+              { lastViewedAt: null, createdAt: { lt: since } },
+            ],
           },
         }),
         this.prisma.storyMute.count({ where: { familyId } }),
         this.checkOverexposure(familyId, now),
-        this.calculateDistortion(familyId),
+        this.calculateDistortion(familyId, now),
+        this.prisma.visibilityLog.count({ where: { familyId, shownAt: { gte: since } } }),
       ]);
 
     return {
       totalStories,
       invisibleStories,
-      overexposedStories: overexposed.length,
+      // Sans aucune impression, « 0 récit sur-exposé » laisserait croire
+      // qu'on a vérifié. On n'a rien pu vérifier.
+      overexposedStories: impressions === 0 ? null : overexposed.length,
       quarantinedStories,
+      impressions,
       distortionScore,
     };
   }
