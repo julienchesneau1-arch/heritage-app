@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST — « Ne plus me montrer ».
- * Trois fois par le même membre : quarantaine. L'histoire reste lisible,
- * cherchable et exportable — elle cesse d'être suggérée.
+ * Trois fois par le même membre : le récit se tait POUR CE MEMBRE. Il reste
+ * lisible, cherchable et exportable, et les autres continuent de le voir.
  */
 export async function POST(
   request: NextRequest,

@@ -233,7 +233,11 @@ export class PasseurService {
     // Parcimonie : une question par session.
     if (await this.store.get(sessionKey(familyId, memberId))) return null;
 
-    const members = await this.prisma.member.findMany({ where: { familyId, isDeleted: false } });
+    const [members, muted] = await Promise.all([
+      this.prisma.member.findMany({ where: { familyId, isDeleted: false } }),
+      // Ce que CE membre a fait taire — pas ce que la famille a fait taire.
+      this.conservateur.mutedStoryIds(familyId, memberId),
+    ]);
     const context: PasseurContext = { members, memberId, now };
 
     // Une requête bornée par règle, en parallèle — jamais un scan du corpus.
@@ -241,7 +245,12 @@ export class PasseurService {
       PASSEUR_RULES.map(async (rule) => ({
         rule,
         stories: (await this.prisma.story.findMany({
-          where: { familyId, archived: false, quarantined: false, ...rule.where(context) },
+          where: {
+            familyId,
+            archived: false,
+            ...(muted.length > 0 ? { id: { notIn: muted } } : {}),
+            ...rule.where(context),
+          },
           include: {
             linkedEntities: true,
             // Bornées elles aussi : une question en attente suffit à décrire le vide.

@@ -101,11 +101,35 @@ Deux conséquences, l'une humaine, l'autre technique :
 
 `Story.narratorId` est donc ajouté, nullable — la plupart des récits sont saisis par celui qui les raconte. Le formulaire demande « Qui raconte ? » avant le titre. L'affichage dit « Raconté par Jeanne Martin, noté par Claire Martin ». La distorsion compte le narrateur quand il existe, l'auteur sinon.
 
-### 2.4 Stockage des archives
+### 2.4 Onboarding — ajout hors spec v1.0, assumé
+
+La spec ne prévoyait aucun moyen de créer une famille ou d'ajouter un membre : `family.create` n'existait que dans le seed. L'application ne pouvait servir qu'une seule famille, fictive.
+
+- `/commencer` fonde une famille avec son premier membre. Le fondateur repart avec une identité vérifiée : c'est lui qui distribuera les liens.
+- `/famille` liste les membres, permet de les ajouter, de les corriger, de les retirer (soft-delete, §2.1 règle 1), et affiche le lien personnel de chacun avec un bouton de révocation.
+- `/restaurer` recrée une famille depuis un export.
+
+### 2.5 Correction d'un récit
+
+`PATCH` ne savait qu'archiver. Une faute dans un récit dicté ne se rattrapait qu'en supprimant puis retapant — or `DELETE` efface les `Passage` attachés : **corriger une virgule coûtait une chaîne de transmission**, c'est-à-dire la seule chose que le produit mesure.
+
+`/recits/<id>/modifier` corrige le titre, le texte, le type, le ton et la date. L'auteur, le narrateur, les passages et les conversations ne bougent pas. Réservé à celui qui a saisi et à celui qui a raconté — personne d'autre n'a autorité sur ces mots.
+
+### 2.6 Sourdine par membre — remplace la quarantaine globale
+
+Le §3.2 comptait les rejets par membre mais appliquait la quarantaine globalement : trois refus d'Emma faisaient taire un récit pour Jeanne, qui n'avait rien demandé. Un membre peut décider de ne plus voir un récit ; il ne peut pas décider à la place des autres.
+
+Table `StoryMute`, portée par le couple (récit, membre), réversible par l'intéressé seul.
+
+### 2.7 Recherche insensible aux accents
+
+`Story.searchText` contient le titre et le contenu normalisés (sans accent, sans ponctuation), maintenu à la création et à la correction. Personne ne tape les accents sur un téléphone : « demenagement » doit trouver « déménagement ».
+
+### 2.8 Stockage des archives
 
 Les fichiers **ne sont jamais exposés à une URL publique**, même longue et imprévisible : une photo de famille sur un bucket public est une photo de famille indexable. Tout passe par `GET /api/family/:id/archives/:archiveId/file`, qui vérifie la famille avant de servir un octet, et répond `Cache-Control: private`.
 
-Le pilote par défaut écrit sur disque (`STORAGE_DIR`, défaut `.data/archives`). Un pilote S3/R2 se branche sur la même interface — poser, lire, retirer des octets — sans toucher au reste.
+Deux pilotes derrière la même interface — poser, lire, retirer des octets. Disque par défaut (`STORAGE_DIR`) ; **S3/R2 dès que `STORAGE_S3_BUCKET` est renseigné**, indispensable sur un hébergement au système de fichiers éphémère où les photos disparaîtraient au premier redéploiement. Le bucket n'a pas à être public, et ne doit pas l'être.
 
 Le type MIME déclaré doit figurer dans une liste fermée (JPEG, PNG, WebP, HEIC, PDF, MP3, M4A, WAV, WebM, MP4) et c'est lui qui détermine le type d'archive : la famille n'a rien à choisir. SVG est refusé — c'est un vecteur de script. Plafond : 25 Mo. La clé de stockage est cloisonnée par famille et n'est jamais dérivée du nom de fichier fourni.
 
@@ -147,10 +171,14 @@ Le type MIME déclaré doit figurer dans une liste fermée (JPEG, PNG, WebP, HEI
 
 | Mécanisme | Seuil | Effet |
 |---|---|---|
-| Budget de visibilité | > 15 % des impressions sur 12 mois | Le récit sort des **suggestions**. Il reste lisible, cherchable, exportable. |
+| Budget de visibilité | > `max(15 %, 2 × part uniforme)` sur 12 mois | Le récit sort des **suggestions**. Il reste lisible, cherchable, exportable. |
 | Rappel patrimonial | Non vu depuis 12 mois | Listé sur la page Transmission. Jamais injecté dans le flux. |
 | Quarantaine | 3 rejets explicites **du même membre** | Retiré des suggestions. Réversible à tout moment. |
 | Distorsion | — | Écart entre qui écrit et qui est lu. Mesuré, affiché, **jamais corrigé**. |
+
+**Seuil relatif.** Les 15 % de la spec supposent un corpus fourni. Sur une famille de cinq récits, la part moyenne de chacun est déjà de 20 % : tous seraient déclarés sur-exposés dès les premières lectures et le Passeur n'aurait plus rien à proposer. Le seuil est donc le double de la part uniforme, avec 15 % pour plancher — un récit n'est sur-exposé que s'il capte deux fois ce qu'il capterait si l'attention était également répartie.
+
+**Coût de la distorsion.** Les impressions sont agrégées en base et bornées à 12 mois. La version précédente chargeait chaque ligne du journal en mémoire : sur dix ans d'usage, des centaines de milliers d'enregistrements à chaque ouverture de la page Transmission. Les impressions d'un récit supprimé sont écartées des deux côtés du calcul — les compter au seul dénominateur inventerait une distorsion qui n'existe pas.
 
 **Déduplication des impressions.** Une lecture n'est journalisée qu'une fois par membre et par récit sur 30 minutes. Ce n'est pas une optimisation : le budget de visibilité se calcule sur ces journaux, donc sans déduplication un membre qui rafraîchit sa page pousse le récit au-delà des 15 % et l'exclut des suggestions. L'algorithme sanctionnerait une histoire pour un appui sur F5.
 
@@ -214,9 +242,20 @@ Toute sortie traverse deux filtres : la vérification propre à l'opération, pu
 
 ## 4. API REST
 
-### 4.1 Authentification
+### 4.1 Authentification — amendée
 
-V1 : accès par URL privée (`/f/<familyId>`) + cookie familial signé (HMAC). Pas de mot de passe. L'URL est le secret partagé.
+V1 n'avait qu'un secret : l'URL de la famille. Suffisant pour **lire** — c'est le choix assumé de la spec, il n'y a pas de mot de passe. Insuffisant pour **détruire** : l'identité du membre se choisissait librement dans une liste, et la suppression d'un récit la vérifiait contre un `?memberId=` fourni par l'appelant lui-même. La garde consistait à demander à quelqu'un s'il avait le droit, et à le croire.
+
+Deux niveaux désormais :
+
+| Lien | Forme | Identité | Peut |
+|---|---|---|---|
+| Familial | `/f/<familyId>` | **déclarée** | lire, écrire, questionner, répondre, archiver |
+| Personnel | `/f/<familyId>/m/<memberId>/<jeton>` | **vérifiée** | tout cela, **et supprimer ses propres récits** |
+
+Le cookie de membre est signé, niveau compris — sans quoi il suffirait de remplacer `declared` par `verified` à la main. Le jeton personnel intègre `Member.tokenVersion` : l'incrémenter **révoque le lien d'un seul membre**, sans déconnecter le reste de la famille. Retirer quelqu'un de la famille révoque son lien au passage.
+
+Les routes API dérivent l'identité du cookie signé, jamais d'un paramètre.
 
 ### 4.2 Endpoints
 
@@ -242,6 +281,8 @@ POST   /api/family/:id/conversations              → poser une question
 PATCH  /api/family/:id/conversations/:id          → répondre
 
 GET    /api/family/:id/graph                      → { nodes, links }
+DELETE /api/family/:id/stories/:storyId           → suppression (identité vérifiée, auteur seul)
+GET    /api/family/:id/archives/:archiveId/file   → le fichier, sous authentification
 GET    /api/family/:id/export                     → JSON complet (téléchargement)
 GET    /api/family/:id/metrics                    → { transmission, conservateur }
 ```
@@ -301,12 +342,14 @@ GET    /api/family/:id/metrics                    → { transmission, conservate
 
 Titre, auteur, date, texte intégral, entités liées, chaînes de transmission (ce récit est né de X, il a engendré Y), conversations, puis « Poser une question », « Archiver », « Raconter la suite ».
 
-### 5.3 Graphe familial
+### 5.3 Graphe familial — centré
+
+La disposition en deux anneaux tenait avec six entités ; à cinquante, les étiquettes se chevauchaient et le graphe ne disait plus rien. Le §5.3 interdit le zoom et la physique de particules, et il a raison : ce n'est pas un outil d'exploration, c'est une image à saisir d'un coup d'œil.
+
+L'interdit est conservé, la forme change : le graphe est **centré**. On entre par une personne, un lieu ou un objet — l'index propose les plus reliés — puis on voit ses voisins immédiats et on se déplace de proche en proche. Au plus 8 récits et 12 éléments affichés à la fois : le nombre de nœuds est borné par construction, quelle que soit la taille de la mémoire.
 
 - Cercles colorés : bleu (personne), marron (lieu), orange (objet), rouge (récit).
 - Lignes grises = liens déclarés, jamais déduits.
-- Cliquer sur un nœud filtre les récits liés.
-- Disposition déterministe en deux anneaux. Pas de zoom, pas de physique de particules.
 
 ### 5.4 La veillée — extension hors spec v1.0, assumée
 
@@ -450,7 +493,8 @@ Objectif V1 : > 20 %.
 | 7 | Service Worker, hors-ligne, lien d'évitement, page courante annoncée | fait |
 | — | La veillée (§5.4), questions en un geste (§5.5) | fait |
 | — | Narrateur ≠ scribe (§2.3), stockage et affichage des archives (§2.4), taille du texte | fait |
-| 7 | Upload binaire des archives, transcription Whisper, audit axe-core | ouvert |
+| — | Onboarding (§2.4), correction (§2.5), sourdine par membre (§2.6), recherche (§2.7), pilote S3 (§2.8), identité (§4.1), graphe centré (§5.3), restauration, CI | fait |
+| 7 | Transcription Whisper, audit axe-core automatisé | ouvert |
 
 ---
 
@@ -496,6 +540,11 @@ lettre-non-envoyee
 - [x] README d'installation < 10 minutes
 - [x] Service Worker (réseau d'abord, cache en secours, page hors-ligne)
 - [x] Lien d'évitement clavier, page courante annoncée (`aria-current`)
+- [x] Création de famille et gestion des membres
+- [x] Correction d'un récit sans perte des passages
+- [x] Identité vérifiée exigée pour supprimer ; liens révocables individuellement
+- [x] Restauration d'un export
+- [x] Intégration continue (`.github/workflows/ci.yml`)
 - [ ] Accessibilité : audit axe-core automatisé
 - [x] Upload binaire des archives, servi sous authentification
 - [x] Taille du texte réglable par appareil

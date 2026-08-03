@@ -29,7 +29,9 @@ Famille Martin créée.
 Lien familial : /f/cmsd7vodd0000jeoxqdli408g
 ```
 
-Ouvrir `http://localhost:3000/f/<cet-identifiant>`. Ce lien pose le cookie familial, puis demande qui consulte. C'est tout : il n'y a pas de mot de passe (§4.1 de la spec — l'URL est le secret partagé).
+Ouvrir `http://localhost:3000/f/<cet-identifiant>`. Ce lien pose le cookie familial, puis demande qui consulte.
+
+Pour une vraie famille, passer plutôt par **`/commencer`** : la page fonde une famille avec son premier membre, puis `/famille` permet d'ajouter les autres et de leur transmettre leur lien personnel.
 
 ### Sans Redis, sans OpenAI
 
@@ -58,6 +60,9 @@ Ouvrir `http://localhost:3000/f/<cet-identifiant>`. Ce lien pose le cookie famil
 src/
 ├── app/                    Pages (App Router) + routes API + actions serveur
 │   ├── page.tsx            « Aujourd'hui »  — au plus 1 Passeur, 1 signal
+│   ├── commencer/          Fonder une famille
+│   ├── famille/            Membres, liens personnels, révocation
+│   ├── restaurer/          Recréer une famille depuis un export
 │   ├── veillee/            Trois récits à lire à voix haute, ensemble
 │   ├── recits/             Liste, lecture, création
 │   ├── archives/           Photos, documents, enregistrements
@@ -117,6 +122,21 @@ C'est aussi ce qui donne enfin un usage au rappel patrimonial du Conservateur : 
 
 **Taille du texte réglable**, par appareil et non par membre : la tablette de la grand-mère et le téléphone de sa petite-fille n'ont pas les mêmes yeux, et c'est souvent le même compte familial qui sert sur les deux.
 
+### Deux liens, deux niveaux d'identité
+
+Il n'y a toujours pas de mot de passe — c'est le choix de la spec, et il tient pour **lire**. Il ne tenait pas pour **détruire** : l'identité se choisissait dans une liste, et la suppression la vérifiait contre un `?memberId=` fourni par l'appelant. La garde demandait à quelqu'un s'il avait le droit, et le croyait.
+
+| Lien | Identité | Peut |
+|---|---|---|
+| `/f/<familyId>` | déclarée | lire, écrire, questionner, répondre, archiver |
+| `/f/<familyId>/m/<memberId>/<jeton>` | vérifiée | tout cela, **et supprimer ses propres récits** |
+
+Le cookie de membre est signé, niveau compris — sinon il suffirait de remplacer `declared` par `verified` à la main. Le jeton personnel intègre un numéro de version : l'incrémenter **révoque le lien d'un seul membre**, sans déconnecter le reste de la famille. Les routes API dérivent l'identité du cookie signé, jamais d'un paramètre.
+
+### Corriger sans perdre la transmission
+
+`/recits/<id>/modifier` corrige le texte d'un récit. Ce n'est pas du confort : avant, la seule façon de rattraper une faute dans un récit dicté était de supprimer et retaper, et `DELETE` efface les `Passage` attachés. Corriger une virgule coûtait une chaîne de transmission — la seule chose que le produit mesure.
+
 ### Isolation des familles
 
 Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient le cookie signé ; une requête portant sur une autre famille reçoit `403`.
@@ -132,6 +152,7 @@ Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient
 | `REDIS_URL` | non | Compteurs partagés entre instances |
 | `OPENAI_API_KEY` | non | Classification, extraction d'entités, formulation des questions |
 | `STORAGE_DIR` | non | Répertoire des archives (défaut `.data/archives`) |
+| `STORAGE_S3_*` | en production | Bucket S3/R2. Sans lui, sur un hébergement éphémère, les photos disparaissent au redéploiement. |
 
 ---
 
@@ -141,4 +162,6 @@ Sprints 0 à 6 de la roadmap (§10) : schéma et seed, CRUD des récits, graphe 
 
 Sprint 7, fait : Service Worker (réseau d'abord, cache en secours, page hors-ligne), lien d'évitement clavier, page courante annoncée.
 
-Sprint 7, ouvert : pilote de stockage S3/R2 — le pilote disque est en place et l'interface est prête, mais sur un hébergement au système de fichiers éphémère il faut brancher un bucket ; transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil.
+Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, intégration continue.
+
+Ouvert : transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil. Le pilote S3 est écrit mais n'a pas pu être testé contre un vrai bucket depuis cet environnement.

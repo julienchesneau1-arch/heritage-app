@@ -82,6 +82,8 @@ function buildService(
       ],
     },
     visibilityLog: { groupBy: async () => [] },
+    // Rien n'est mis en sourdine par ce membre dans ces scénarios.
+    storyMute: { findMany: async () => [] },
   } as unknown as PrismaClient;
 
   return new PasseurService(prisma, store, llm, new ConservateurService(prisma, store));

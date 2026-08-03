@@ -11,6 +11,8 @@ describe('Budget de visibilité — 15 % sur 12 mois', () => {
       visibilityLog: {
         groupBy: async () => counts.map((c) => ({ storyId: c.storyId, _count: { storyId: c.count } })),
       },
+      // Corpus fourni : le seuil relatif retombe sur les 15 % de la spec.
+      story: { count: async () => 20 },
     } as unknown as PrismaClient;
     return new ConservateurService(prisma, createMemoryStore());
   }
@@ -50,10 +52,11 @@ describe('Budget de visibilité — 15 % sur 12 mois', () => {
 
 describe('Quarantaine — trois rejets explicites du même membre', () => {
   function serviceWithUpdateSpy() {
+    // La mise en sourdine est désormais portée par (récit, membre).
     const update = vi.fn(async () => ({}));
     const prisma = {
       visibilityLog: { create: async () => ({}) },
-      story: { update },
+      storyMute: { upsert: update },
     } as unknown as PrismaClient;
     return { service: new ConservateurService(prisma, createMemoryStore()), update };
   }
@@ -96,10 +99,19 @@ describe('Quarantaine — trois rejets explicites du même membre', () => {
 
 describe('Métrique de distorsion', () => {
   function serviceWith(stories: string[], viewAuthors: string[]) {
+    // Un récit distinct par vue, pour que l'agrégation par storyId reflète
+    // exactement la distribution demandée.
     const prisma = {
-      story: { findMany: async () => stories.map((authorId) => ({ authorId, narratorId: null })) },
+      story: {
+        findMany: async () =>
+          stories.map((authorId, index) => ({ id: `s${index}`, authorId, narratorId: null })),
+      },
       visibilityLog: {
-        findMany: async () => viewAuthors.map((authorId) => ({ story: { authorId, narratorId: null } })),
+        groupBy: async () =>
+          stories.map((authorId, index) => ({
+            storyId: `s${index}`,
+            _count: { storyId: viewAuthors.filter((a) => a === authorId).length / countOf(stories, authorId) },
+          })),
       },
     } as unknown as PrismaClient;
     return new ConservateurService(prisma, createMemoryStore());
@@ -131,9 +143,20 @@ describe('Distorsion — la voix compte, pas le clavier', () => {
     stories: Array<{ authorId: string; narratorId: string | null }>,
     views: Array<{ authorId: string; narratorId: string | null }>,
   ) {
+    const withIds = stories.map((story, index) => ({ id: `s${index}`, ...story }));
     const prisma = {
-      story: { findMany: async () => stories },
-      visibilityLog: { findMany: async () => views.map((story) => ({ story })) },
+      story: { findMany: async () => withIds },
+      visibilityLog: {
+        groupBy: async () =>
+          withIds.map((story) => ({
+            storyId: story.id,
+            _count: {
+              storyId: views.filter(
+                (view) => (view.narratorId ?? view.authorId) === (story.narratorId ?? story.authorId),
+              ).length,
+            },
+          })),
+      },
     } as unknown as PrismaClient;
     return new ConservateurService(prisma, createMemoryStore());
   }
@@ -171,3 +194,7 @@ describe('Distorsion — la voix compte, pas le clavier', () => {
     expect(await service.calculateDistortion(FAMILY)).toBe(0);
   });
 });
+
+function countOf(values: string[], value: string): number {
+  return Math.max(1, values.filter((v) => v === value).length);
+}

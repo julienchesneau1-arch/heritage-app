@@ -46,6 +46,10 @@ model Member {
   // Les histoires restent, l'auteur devient "Auteur anonymisé".
   isDeleted Boolean @default(false) @map("is_deleted")
 
+  // Révocation : incrémenter invalide le lien personnel de CE membre,
+  // sans déconnecter le reste de la famille.
+  tokenVersion Int @default(1) @map("token_version")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
@@ -56,6 +60,7 @@ model Member {
   questionsAsked   Conversation[] @relation("Questioner")
   answersGiven     Conversation[] @relation("Responder")
   archivesUploaded Archive[]
+  mutedStories     StoryMute[]
 
   @@index([familyId])
   @@map("members")
@@ -76,12 +81,16 @@ model Story {
   // saisis par celui qui les raconte.
   narratorId String? @map("narrator_id")
 
-  title    String
-  content  String // texte brut, max 5000 caractères (contrainte applicative, cf. lib/validation.ts)
+  title   String
+  content String // texte brut, max 5000 caractères (contrainte applicative, cf. lib/validation.ts)
 
   // Grammaire narrative : structure imposée par le système, jamais inventée par le LLM.
   // Valeurs autorisées : cf. src/lib/structure-types.ts (33 types, annexe B).
   structureType String @map("structure_type")
+
+  // Titre + contenu normalisés (sans accent, sans ponctuation) : la
+  // recherche doit trouver « demenagement » quand on a écrit « déménagement ».
+  searchText String @default("") @map("search_text")
 
   tone   String // intime, factuel, epique
   length String // micro (<300c), standard (<1500c), long (<5000c)
@@ -110,6 +119,7 @@ model Story {
   childPassages  Passage[] @relation("ChildStory")
 
   visibilityLogs VisibilityLog[]
+  mutes          StoryMute[]
 
   @@index([familyId, createdAt])
   @@map("stories")
@@ -232,6 +242,28 @@ model Passage {
   @@unique([parentStoryId, childStoryId])
   @@index([familyId])
   @@map("passages")
+}
+
+// ─── MISE EN SOURDINE (quarantaine, par membre) ───
+//
+// Trois refus d'Emma ne doivent pas faire taire un récit pour Jeanne.
+// La quarantaine est donc portée par le couple (récit, membre), et non
+// par le récit seul. Réversible à tout moment.
+model StoryMute {
+  id       String @id @default(cuid())
+  familyId String @map("family_id")
+  storyId  String @map("story_id")
+  memberId String @map("member_id")
+
+  reason    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  story  Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, memberId])
+  @@index([familyId, memberId])
+  @@map("story_mutes")
 }
 
 // ─── VISIBILITY LOG (audit Conservateur) ───

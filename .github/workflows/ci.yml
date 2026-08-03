@@ -1,0 +1,57 @@
+name: CI
+
+# « Les règles constitutionnelles sont des tests. Si un test échoue, le code
+# ne shippe pas » (§12). Encore faut-il que quelqu'un les exécute.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: heritage
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/heritage?schema=public
+      FAMILY_TOKEN_SECRET: ci-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Schéma valide
+        run: npx prisma validate
+
+      - name: Migrations sur base vierge
+        run: npx prisma migrate deploy
+
+      - name: Seed chargeable
+        run: npm run db:seed
+
+      - name: Typage strict
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

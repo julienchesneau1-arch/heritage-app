@@ -1,21 +1,25 @@
-import { cookies } from 'next/headers';
 import { prisma } from './prisma';
-import { currentFamilyId } from './session';
+import { currentFamilyId, currentIdentity, type IdentityLevel } from './session';
 
-export const MEMBER_COOKIE = 'member_id';
+export interface ContextMember {
+  id: string;
+  name: string;
+  generation: number;
+}
 
 export interface AppContext {
   family: { id: string; name: string };
-  member: { id: string; name: string; generation: number } | null;
-  members: Array<{ id: string; name: string; generation: number }>;
+  member: ContextMember | null;
+  /** « declared » : choisi dans une liste. « verified » : lien personnel. */
+  identityLevel: IdentityLevel | null;
+  members: ContextMember[];
 }
 
 /**
  * Qui consulte, et pour quelle famille.
  *
- * V1 : la famille vient du cookie signé (§4.1). En développement, s'il n'y
- * en a qu'une en base, on la prend — pour que `npm run dev` juste après le
- * seed affiche quelque chose.
+ * En développement, s'il n'existe qu'une seule famille en base, on la prend :
+ * `npm run dev` juste après le seed doit afficher quelque chose.
  */
 export async function loadContext(): Promise<AppContext | null> {
   let familyId = currentFamilyId();
@@ -38,8 +42,18 @@ export async function loadContext(): Promise<AppContext | null> {
     orderBy: [{ generation: 'asc' }, { name: 'asc' }],
   });
 
-  const memberId = cookies().get(MEMBER_COOKIE)?.value;
-  const member = members.find((m) => m.id === memberId) ?? null;
+  const identity = currentIdentity();
+  const member = identity ? (members.find((m) => m.id === identity.memberId) ?? null) : null;
 
-  return { family, member, members };
+  return {
+    family,
+    member,
+    identityLevel: member ? identity!.level : null,
+    members,
+  };
+}
+
+/** Seule une identité prouvée peut détruire (§4.1 amendé). */
+export function canDelete(context: AppContext): boolean {
+  return context.member !== null && context.identityLevel === 'verified';
 }

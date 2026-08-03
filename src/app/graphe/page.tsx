@@ -6,184 +6,263 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 /**
- * Graphe familial — §5.3.
- * Pas de zoom, pas de physique de particules. Une disposition déterministe,
- * lisible en un coup d'œil : les entités sur l'anneau extérieur, les récits
- * sur l'anneau intérieur.
+ * Graphe familial — §5.3, révisé.
+ *
+ * La disposition en deux anneaux tenait avec six entités ; à cinquante, les
+ * étiquettes se chevauchaient et le graphe ne disait plus rien. Le §5.3
+ * interdit le zoom et la physique de particules, et il a raison : ce n'est
+ * pas un outil d'exploration, c'est une image qu'on doit saisir d'un coup.
+ *
+ * On garde donc l'interdit et on change de forme : le graphe est CENTRÉ.
+ * On entre par une personne, un lieu ou un objet, on voit ses voisins
+ * immédiats, on se déplace de proche en proche. Le nombre de nœuds affichés
+ * est borné par construction, quelle que soit la taille de la mémoire.
  */
+
 const COLORS: Record<string, string> = {
-  PERSON: '#3b5f8a', // bleu
-  PLACE: '#6b4b2a', // marron
-  OBJECT: '#c1762a', // orange
+  PERSON: '#3b5f8a',
+  PLACE: '#6b4b2a',
+  OBJECT: '#c1762a',
   DATE: '#5c6b5a',
   CONCEPT: '#5c6b5a',
-  STORY: '#9b3021', // rouge
+  STORY: '#9b3021',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  PERSON: 'personne',
+  PLACE: 'lieu',
+  OBJECT: 'objet',
+  DATE: 'date',
+  CONCEPT: 'notion',
 };
 
 const WIDTH = 640;
-const HEIGHT = 640;
+const HEIGHT = 560;
 const CENTER = { x: WIDTH / 2, y: HEIGHT / 2 };
+const MAX_STORIES = 8;
+const MAX_NEIGHBOURS = 12;
 
 export default async function GraphPage({ searchParams }: { searchParams: { entite?: string } }) {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
 
-  const [entities, stories] = await Promise.all([
-    prisma.entity.findMany({ where: { familyId: context.family.id }, orderBy: { name: 'asc' } }),
-    prisma.story.findMany({
-      where: { familyId: context.family.id, archived: false },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, title: true, linkedEntities: { select: { id: true } } },
-    }),
-  ]);
-
-  const positions = new Map<string, { x: number; y: number }>();
-  entities.forEach((entity, index) => {
-    positions.set(entity.id, pointOnRing(index, entities.length, 260));
-  });
-  stories.forEach((story, index) => {
-    positions.set(story.id, pointOnRing(index, stories.length, 130));
-  });
-
   const selected = searchParams.entite
-    ? entities.find((entity) => entity.id === searchParams.entite)
-    : undefined;
+    ? await prisma.entity.findFirst({
+        where: { id: searchParams.entite, familyId: context.family.id },
+      })
+    : null;
 
-  const relatedStories = selected
-    ? stories.filter((story) => story.linkedEntities.some((entity) => entity.id === selected.id))
-    : [];
+  // ── Sans point d'entrée : l'index des entités les plus reliées ──
+  if (!selected) {
+    const entities = await prisma.entity.findMany({
+      where: { familyId: context.family.id },
+      include: { _count: { select: { stories: true } } },
+      orderBy: { stories: { _count: 'desc' } },
+      take: 40,
+    });
+
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl">Graphe</h1>
+        {entities.length === 0 ? (
+          <p className="justification">Rien à relier pour l’instant.</p>
+        ) : (
+          <>
+            <p className="leading-relaxed">Par où voulez-vous entrer ?</p>
+            <p className="justification">
+              Le graphe se lit de proche en proche : on part de quelqu’un, ou de quelque chose, et on
+              suit les récits qui y mènent.
+            </p>
+            <ul className="divide-y divide-rule border-y border-rule">
+              {entities.map((entity) => (
+                <li key={entity.id}>
+                  <Link
+                    href={`/graphe?entite=${entity.id}`}
+                    className="tap w-full justify-between px-1 text-left"
+                  >
+                    <span className="flex items-center gap-2 text-lg">
+                      <span
+                        aria-hidden
+                        className="inline-block h-3 w-3 rounded-full"
+                        style={{ backgroundColor: COLORS[entity.type] ?? COLORS.CONCEPT }}
+                      />
+                      {entity.name}
+                    </span>
+                    <span className="justification">
+                      {TYPE_LABELS[entity.type] ?? entity.type} · {entity._count.stories} récit
+                      {entity._count.stories > 1 ? 's' : ''}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ── Voisinage immédiat : les récits liés, et ce qu'ils touchent d'autre ──
+  const stories = await prisma.story.findMany({
+    where: {
+      familyId: context.family.id,
+      archived: false,
+      linkedEntities: { some: { id: selected.id } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: MAX_STORIES,
+    select: {
+      id: true,
+      title: true,
+      linkedEntities: { select: { id: true, name: true, type: true } },
+    },
+  });
+
+  const neighbours = new Map<string, { id: string; name: string; type: string }>();
+  for (const story of stories) {
+    for (const entity of story.linkedEntities) {
+      if (entity.id !== selected.id && neighbours.size < MAX_NEIGHBOURS) {
+        neighbours.set(entity.id, entity);
+      }
+    }
+  }
+  const neighbourList = [...neighbours.values()];
+
+  const storyPositions = new Map(
+    stories.map((story, index) => [story.id, pointOnRing(index, stories.length, 130)]),
+  );
+  const neighbourPositions = new Map(
+    neighbourList.map((entity, index) => [entity.id, pointOnRing(index, neighbourList.length, 235)]),
+  );
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl">Graphe</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-2xl">{selected.name}</h1>
+        <Link href="/graphe" className="justification underline">
+          Changer de point d’entrée
+        </Link>
+      </div>
+      {selected.description ? <p className="leading-relaxed">{selected.description}</p> : null}
 
-      {entities.length === 0 && stories.length === 0 ? (
-        <p className="justification">Rien à relier pour l’instant.</p>
+      {stories.length === 0 ? (
+        <p className="justification">Aucun récit actif ne mentionne cette entité.</p>
       ) : (
         <div className="overflow-x-auto">
           <svg
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
             className="h-auto w-full max-w-full"
             role="img"
-            aria-label={`Graphe familial : ${entities.length} entités, ${stories.length} récits.`}
+            aria-label={`${selected.name} : ${stories.length} récits, ${neighbourList.length} éléments liés.`}
           >
-            {stories.flatMap((story) =>
-              story.linkedEntities.map((entity) => {
-                const from = positions.get(story.id);
-                const to = positions.get(entity.id);
-                if (!from || !to) return null;
-                return (
+            {stories.map((story) => {
+              const position = storyPositions.get(story.id)!;
+              return (
+                <g key={`l-${story.id}`}>
                   <line
-                    key={`${story.id}-${entity.id}`}
-                    x1={from.x}
-                    y1={from.y}
-                    x2={to.x}
-                    y2={to.y}
+                    x1={CENTER.x}
+                    y1={CENTER.y}
+                    x2={position.x}
+                    y2={position.y}
                     stroke="#cfc8bc"
-                    strokeWidth={1}
+                    strokeWidth={1.5}
                   />
-                );
-              }),
-            )}
+                  {story.linkedEntities
+                    .filter((entity) => neighbourPositions.has(entity.id))
+                    .map((entity) => {
+                      const to = neighbourPositions.get(entity.id)!;
+                      return (
+                        <line
+                          key={`${story.id}-${entity.id}`}
+                          x1={position.x}
+                          y1={position.y}
+                          x2={to.x}
+                          y2={to.y}
+                          stroke="#e3ded5"
+                          strokeWidth={1}
+                        />
+                      );
+                    })}
+                </g>
+              );
+            })}
 
             {stories.map((story) => {
-              const position = positions.get(story.id)!;
+              const position = storyPositions.get(story.id)!;
               return (
-                <Node
-                  key={story.id}
-                  href={`/recits/${story.id}`}
-                  x={position.x}
-                  y={position.y}
-                  color={COLORS.STORY!}
-                  label={story.title}
-                  radius={7}
-                />
+                <a key={story.id} href={`/recits/${story.id}`}>
+                  <circle cx={position.x} cy={position.y} r={7} fill={COLORS.STORY} />
+                  <title>{story.title}</title>
+                </a>
               );
             })}
 
-            {entities.map((entity) => {
-              const position = positions.get(entity.id)!;
+            {neighbourList.map((entity) => {
+              const position = neighbourPositions.get(entity.id)!;
               return (
-                <Node
-                  key={entity.id}
-                  href={`/graphe?entite=${entity.id}`}
-                  x={position.x}
-                  y={position.y}
-                  color={COLORS[entity.type] ?? COLORS.CONCEPT!}
-                  label={entity.name}
-                  radius={9}
-                  showLabel
-                />
+                <a key={entity.id} href={`/graphe?entite=${entity.id}`}>
+                  <circle
+                    cx={position.x}
+                    cy={position.y}
+                    r={8}
+                    fill={COLORS[entity.type] ?? COLORS.CONCEPT}
+                  />
+                  <title>{entity.name}</title>
+                  <text
+                    x={position.x}
+                    y={position.y - 14}
+                    textAnchor="middle"
+                    fontSize={12}
+                    fill="#4a4642"
+                    fontFamily="system-ui, sans-serif"
+                  >
+                    {entity.name.length > 16 ? `${entity.name.slice(0, 15)}…` : entity.name}
+                  </text>
+                </a>
               );
             })}
+
+            <circle
+              cx={CENTER.x}
+              cy={CENTER.y}
+              r={13}
+              fill={COLORS[selected.type] ?? COLORS.CONCEPT}
+            />
+            <text
+              x={CENTER.x}
+              y={CENTER.y + 32}
+              textAnchor="middle"
+              fontSize={14}
+              fill="#1c1917"
+              fontFamily="system-ui, sans-serif"
+            >
+              {selected.name}
+            </text>
           </svg>
         </div>
       )}
 
       <p className="justification">
-        Bleu : personne · marron : lieu · orange : objet · rouge : récit. Les traits sont des liens déclarés
-        par la famille, jamais déduits.
+        Bleu : personne · marron : lieu · orange : objet · rouge : récit. Les traits sont des liens
+        déclarés par la famille, jamais déduits. Au plus {MAX_STORIES} récits et {MAX_NEIGHBOURS}{' '}
+        éléments à la fois — au-delà, l’image cesserait de se lire d’un coup d’œil.
       </p>
 
-      {selected ? (
+      {stories.length > 0 ? (
         <section className="space-y-2 border-t border-rule pt-6">
-          <h2 className="section-label">{selected.name}</h2>
-          {relatedStories.length === 0 ? (
-            <p className="justification">Aucun récit actif ne mentionne cette entité.</p>
-          ) : (
-            <ul className="space-y-1">
-              {relatedStories.map((story) => (
-                <li key={story.id}>
-                  <Link href={`/recits/${story.id}`} className="underline">
-                    {story.title}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Link href="/graphe" className="justification underline">
-            Retirer le filtre
-          </Link>
+          <h2 className="section-label">Les récits qui en parlent</h2>
+          <ul className="space-y-1">
+            {stories.map((story) => (
+              <li key={story.id}>
+                <Link href={`/recits/${story.id}`} className="underline">
+                  {story.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
     </div>
-  );
-}
-
-function Node({
-  href,
-  x,
-  y,
-  color,
-  label,
-  radius,
-  showLabel = false,
-}: {
-  href: string;
-  x: number;
-  y: number;
-  color: string;
-  label: string;
-  radius: number;
-  showLabel?: boolean;
-}) {
-  return (
-    <a href={href}>
-      <circle cx={x} cy={y} r={radius} fill={color} />
-      <title>{label}</title>
-      {showLabel ? (
-        <text
-          x={x}
-          y={y - radius - 6}
-          textAnchor="middle"
-          fontSize={12}
-          fill="#4a4642"
-          fontFamily="system-ui, sans-serif"
-        >
-          {label.length > 18 ? `${label.slice(0, 17)}…` : label}
-        </text>
-      ) : null}
-    </a>
   );
 }
 

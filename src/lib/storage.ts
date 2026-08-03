@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, normalize, resolve } from 'node:path';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /**
  * Stockage des archives familiales.
@@ -59,7 +60,74 @@ class LocalDiskDriver implements StorageDriver {
   }
 }
 
-export const storage: StorageDriver = new LocalDiskDriver();
+/**
+ * Pilote S3/R2. Activé dès que STORAGE_S3_BUCKET est renseigné.
+ *
+ * Indispensable sur un hébergement au système de fichiers éphémère
+ * (Vercel) : sans lui, les photos de la famille disparaissent au premier
+ * redéploiement, en laissant en base des clés qui ne pointent plus sur rien.
+ *
+ * Le bucket n'a AUCUN besoin d'être public — et ne doit pas l'être : les
+ * fichiers ne sont jamais servis directement, ils transitent par la route
+ * authentifiée qui vérifie la famille.
+ */
+class S3Driver implements StorageDriver {
+  private client: S3Client;
+
+  constructor(private bucket: string) {
+    this.client = new S3Client({
+      region: process.env.STORAGE_S3_REGION ?? 'auto',
+      endpoint: process.env.STORAGE_S3_ENDPOINT || undefined,
+      forcePathStyle: Boolean(process.env.STORAGE_S3_ENDPOINT),
+      credentials:
+        process.env.STORAGE_S3_ACCESS_KEY_ID && process.env.STORAGE_S3_SECRET_ACCESS_KEY
+          ? {
+              accessKeyId: process.env.STORAGE_S3_ACCESS_KEY_ID,
+              secretAccessKey: process.env.STORAGE_S3_SECRET_ACCESS_KEY,
+            }
+          : undefined,
+    });
+  }
+
+  async put(key: string, data: Buffer) {
+    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: data }));
+  }
+
+  async get(key: string) {
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      const bytes = await response.Body?.transformToByteArray();
+      return bytes ? Buffer.from(bytes) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async remove(key: string) {
+    try {
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    } catch {
+      /* Déjà absent : le résultat voulu est atteint. */
+    }
+  }
+}
+
+function createDriver(): StorageDriver {
+  const bucket = process.env.STORAGE_S3_BUCKET;
+  if (bucket) return new S3Driver(bucket);
+
+  if (process.env.NODE_ENV === 'production') {
+    console.warn(
+      '[storage] Aucun bucket configuré : les archives sont écrites sur disque. ' +
+        'Sur un hébergement éphémère, elles seront perdues au redéploiement.',
+    );
+  }
+  return new LocalDiskDriver();
+}
+
+export const storage: StorageDriver = createDriver();
 
 /** Ce que la famille peut déposer, et jusqu'à quelle taille. */
 export const ACCEPTED_TYPES: Record<string, { archiveType: string; extension: string }> = {

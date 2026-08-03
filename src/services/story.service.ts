@@ -8,7 +8,7 @@ import {
   type PassageTriggerType,
 } from '@/lib/structure-types';
 import { LLMOperatorService, llmOperator } from './llm-operator.service';
-import type { CreateStoryInput } from '@/lib/validation';
+import type { CreateStoryInput, UpdateStoryInput } from '@/lib/validation';
 
 /**
  * Création d'un récit — et, quand il y a lieu, du Passage qui l'attache
@@ -47,6 +47,7 @@ export class StoryService {
         tone: input.tone,
         length: lengthFromContent(input.content),
         eventDate: input.eventDate ?? null,
+        searchText: searchTextOf(input.title, input.content),
         linkedEntities: { connect: entities.map((entity) => ({ id: entity.id })) },
       },
     });
@@ -68,6 +69,32 @@ export class StoryService {
     }
 
     return story;
+  }
+
+  /**
+   * Correction d'un récit. Le texte change ; l'auteur, le narrateur, les
+   * passages et les conversations ne bougent pas. C'est tout l'intérêt :
+   * avant, corriger une virgule imposait de supprimer, donc d'effacer les
+   * chaînes de transmission attachées.
+   */
+  async updateStory(familyId: string, storyId: string, input: UpdateStoryInput) {
+    const structureType =
+      input.structureType ??
+      (this.llm.isAvailable ? await this.llm.classifyStructure(input.content) : DEFAULT_STRUCTURE_TYPE);
+
+    const result = await this.prisma.story.updateMany({
+      where: { id: storyId, familyId },
+      data: {
+        title: input.title,
+        content: input.content,
+        structureType,
+        tone: input.tone,
+        length: lengthFromContent(input.content),
+        eventDate: input.eventDate ?? null,
+        searchText: searchTextOf(input.title, input.content),
+      },
+    });
+    return result.count > 0;
   }
 
   /**
@@ -133,6 +160,15 @@ export class StoryService {
     }
     return resolved;
   }
+}
+
+/**
+ * Texte de recherche : titre et contenu normalisés, sans accent ni
+ * ponctuation. Sans lui, chercher « demenagement » ne trouvait pas
+ * « déménagement » — et personne ne tape les accents sur un téléphone.
+ */
+export function searchTextOf(title: string, content: string): string {
+  return normalizeName(`${title} ${content}`);
 }
 
 /**

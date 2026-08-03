@@ -9,6 +9,7 @@ import {
   answerQuestion,
   archiveStory,
   askQuestion,
+  deleteStory,
   releaseQuarantine,
   uploadArchive,
 } from '@/app/actions';
@@ -22,12 +23,18 @@ const DEPOT_MESSAGES: Record<string, string> = {
   type: 'Ce type de fichier n’est pas accepté.',
 };
 
+const SUPPR_MESSAGES: Record<string, string> = {
+  identite:
+    'La suppression demande une identité prouvée. Ouvrez votre lien personnel — celui qui vous a été transmis à vous seul — puis réessayez.',
+  auteur: 'Seul celui qui a saisi ce récit peut le supprimer.',
+};
+
 export default async function StoryPage({
   params,
   searchParams,
 }: {
   params: { storyId: string };
-  searchParams: { depot?: string };
+  searchParams: { depot?: string; suppr?: string; modif?: string };
 }) {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
@@ -54,6 +61,16 @@ export default async function StoryPage({
   if (!story) notFound();
 
   const depot = searchParams.depot ? DEPOT_MESSAGES[searchParams.depot] : null;
+  const suppression = searchParams.suppr ? SUPPR_MESSAGES[searchParams.suppr] : null;
+  const peutCorriger =
+    context.member !== null &&
+    (story.authorId === context.member.id || story.narratorId === context.member.id);
+  const muted = context.member
+    ? await prisma.storyMute.findFirst({
+        where: { storyId: story.id, memberId: context.member.id },
+        select: { reason: true },
+      })
+    : null;
 
   // Lecture effective : elle est journalisée, et elle compte.
   if (context.member) {
@@ -269,17 +286,41 @@ export default async function StoryPage({
           Raconter la suite
         </Link>
 
-        {story.quarantined ? (
+        {peutCorriger ? (
+          <Link href={`/recits/${story.id}/modifier`} className="btn">
+            Corriger
+          </Link>
+        ) : null}
+
+        {muted ? (
           <form action={releaseQuarantine} className="space-y-1">
             <input type="hidden" name="storyId" value={story.id} />
             <button type="submit" className="justification underline">
-              Sortir de quarantaine
+              Me remontrer ce récit
             </button>
             <p className="justification">
-              En quarantaine : {story.quarantineReason}. Ce récit reste lisible et exportable ; il n’est
-              simplement plus suggéré.
+              Vous ne le voyez plus dans les suggestions ({muted.reason}). Il reste lisible et exportable,
+              et les autres membres continuent de le voir.
             </p>
           </form>
+        ) : null}
+
+        {peutCorriger && story.authorId === context.member?.id ? (
+          <form action={deleteStory}>
+            <input type="hidden" name="storyId" value={story.id} />
+            <button type="submit" className="justification underline">
+              Supprimer définitivement
+            </button>
+          </form>
+        ) : null}
+      </section>
+
+      <section className="space-y-2">
+        {suppression ? <p className="justification text-accent">{suppression}</p> : null}
+        {searchParams.modif === 'interdit' ? (
+          <p className="justification text-accent">
+            Seuls celui qui a raconté et celui qui a noté peuvent corriger ce récit.
+          </p>
         ) : null}
       </section>
     </article>

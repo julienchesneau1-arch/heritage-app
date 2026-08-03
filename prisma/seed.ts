@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { normalizeName, daysBetween } from '../src/lib/normalize';
+import { searchTextOf } from '../src/services/story.service';
 
 const prisma = new PrismaClient();
 
@@ -298,6 +299,15 @@ Au deuxième, la caisse de vaisselle est tombée sur l'autoroute. On s'est arrê
       extractedEntities: [],
     },
   });
+
+  // searchText : normalisé à partir du titre et du contenu, pour que la
+  // recherche trouve « demenagement » quand on a écrit « déménagement ».
+  for (const story of await prisma.story.findMany({ where: { familyId: family.id } })) {
+    await prisma.story.update({
+      where: { id: story.id },
+      data: { searchText: searchTextOf(story.title, story.content) },
+    });
+  }
 
   console.log(`Famille Martin créée.`);
   console.log(`Lien familial : /f/${family.id}`);

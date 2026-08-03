@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
-import { formatDateFr } from '@/lib/normalize';
+import { formatDateFr, normalizeName } from '@/lib/normalize';
 import { STRUCTURE_TYPES } from '@/lib/structure-types';
 
 export const dynamic = 'force-dynamic';
@@ -31,14 +31,9 @@ export default async function StoriesPage({
       familyId: context.family.id,
       ...(includeArchived ? {} : { archived: false }),
       ...(type ? { structureType: type } : {}),
-      ...(search
-        ? {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { content: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
+      // Recherche sur le texte normalisé : « demenagement » trouve
+      // « déménagement », et personne ne tape les accents sur un téléphone.
+      ...(search ? { searchText: { contains: normalizeName(search) } } : {}),
     },
     orderBy: { createdAt: 'desc' },
     include: {

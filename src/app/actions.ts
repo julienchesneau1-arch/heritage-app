@@ -3,8 +3,16 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { loadContext, MEMBER_COOKIE } from '@/lib/context';
-import { cookieOptions, signFamilyToken } from '@/lib/session';
+import { canDelete, loadContext } from '@/lib/context';
+import {
+  familyCookieOptions,
+  memberCookieOptions,
+  signFamilyToken,
+  signMemberCookie,
+} from '@/lib/session';
+import { familyService } from '@/services/family.service';
+import { importService } from '@/services/import.service';
+import { createFamilySchema, memberSchema, updateStorySchema } from '@/lib/validation';
 import { prisma } from '@/lib/prisma';
 import { conservateur } from '@/services/conservateur.service';
 import { storyService } from '@/services/story.service';
@@ -30,22 +38,19 @@ async function requireContext() {
   return context;
 }
 
+/**
+ * Se déclarer membre depuis le lien familial. Identité DÉCLARÉE : elle
+ * suffit pour lire, écrire et poser des questions, jamais pour supprimer.
+ * Le cookie est signé — sans quoi il suffirait de le réécrire à la main
+ * pour se hisser au niveau vérifié.
+ */
 export async function chooseMember(formData: FormData) {
   const context = await requireContext();
   const memberId = String(formData.get('memberId') ?? '');
   if (!context.members.some((m) => m.id === memberId)) return;
 
-  cookies().set({
-    name: MEMBER_COOKIE,
-    value: memberId,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 365,
-  });
-  // Le cookie familial est posé en même temps : l'URL reste le secret partagé.
-  cookies().set({ ...cookieOptions(), value: signFamilyToken(context.family.id) });
+  cookies().set({ ...memberCookieOptions(), value: signMemberCookie(memberId, 'declared') });
+  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(context.family.id) });
 
   revalidatePath('/', 'layout');
   redirect('/');
@@ -134,6 +139,7 @@ export async function archiveStory(formData: FormData) {
 
 export async function releaseQuarantine(formData: FormData) {
   const context = await requireContext();
+  if (!context.member) return;
   const storyId = String(formData.get('storyId') ?? '');
   const story = await prisma.story.findFirst({
     where: { id: storyId, familyId: context.family.id },
@@ -141,7 +147,8 @@ export async function releaseQuarantine(formData: FormData) {
   });
   if (!story) return;
 
-  await conservateur.releaseFromQuarantine(storyId);
+  // Chacun lève sa propre sourdine, jamais celle d'un autre.
+  await conservateur.releaseFromQuarantine(storyId, context.member.id);
   revalidatePath(`/recits/${storyId}`);
   revalidatePath('/transmission');
 }
@@ -335,4 +342,187 @@ function parseEntityNames(raw: string): Array<{ name: string; type: 'PERSON' | '
       return { name: name!, type: resolved as 'PERSON' | 'PLACE' | 'OBJECT' };
     })
     .filter((entity) => entity.name.length > 0);
+}
+
+// ─── Fondation : créer une famille, gérer ses membres ───
+
+/**
+ * Création d'une famille avec son premier membre. Sans cela, l'application
+ * n'a qu'un seul utilisateur : celui du seed.
+ */
+export async function createFamily(formData: FormData) {
+  const parsed = createFamilySchema.safeParse({
+    familyName: String(formData.get('familyName') ?? '').trim(),
+    name: String(formData.get('name') ?? '').trim(),
+    generation: Number(formData.get('generation') ?? 1),
+    birthDate: String(formData.get('birthDate') ?? '') || undefined,
+    role: String(formData.get('role') ?? '') || undefined,
+  });
+  if (!parsed.success) redirect('/commencer?erreur=1');
+
+  const { familyName, ...member } = parsed.data;
+  const family = await familyService.createFamily(familyName, member);
+  const first = family.members[0]!;
+
+  // Le fondateur repart avec une identité vérifiée : c'est lui qui
+  // distribuera les liens des autres.
+  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(family.id) });
+  cookies().set({ ...memberCookieOptions(), value: signMemberCookie(first.id, 'verified') });
+
+  revalidatePath('/', 'layout');
+  redirect('/famille?bienvenue=1');
+}
+
+export async function addMember(formData: FormData) {
+  const context = await requireContext();
+  const parsed = memberSchema.safeParse(readMember(formData));
+  if (!parsed.success) redirect('/famille?erreur=1');
+
+  await familyService.addMember(context.family.id, parsed.data);
+  revalidatePath('/famille');
+  revalidatePath('/', 'layout');
+}
+
+export async function updateMember(formData: FormData) {
+  const context = await requireContext();
+  const memberId = String(formData.get('memberId') ?? '');
+  const parsed = memberSchema.safeParse(readMember(formData));
+  if (!parsed.success) redirect('/famille?erreur=1');
+
+  await familyService.updateMember(context.family.id, memberId, parsed.data);
+  revalidatePath('/famille');
+  revalidatePath('/', 'layout');
+}
+
+export async function removeMember(formData: FormData) {
+  const context = await requireContext();
+  const memberId = String(formData.get('memberId') ?? '');
+  // §2.1 règle 1 : soft-delete. Les récits restent.
+  await familyService.removeMember(context.family.id, memberId);
+  revalidatePath('/famille');
+  revalidatePath('/', 'layout');
+}
+
+export async function revokeMemberLink(formData: FormData) {
+  const context = await requireContext();
+  await familyService.revokeMemberLink(context.family.id, String(formData.get('memberId') ?? ''));
+  revalidatePath('/famille');
+}
+
+function readMember(formData: FormData) {
+  return {
+    name: String(formData.get('name') ?? '').trim(),
+    generation: Number(formData.get('generation') ?? 1),
+    birthDate: String(formData.get('birthDate') ?? '') || undefined,
+    deathDate: String(formData.get('deathDate') ?? '') || undefined,
+    role: String(formData.get('role') ?? '') || undefined,
+  };
+}
+
+// ─── Corriger un récit ───
+
+/**
+ * Une faute de frappe dans un récit dicté ne doit pas coûter une chaîne de
+ * transmission. Avant, le seul recours était de supprimer et retaper — or
+ * la suppression efface les Passages attachés, c'est-à-dire précisément ce
+ * que le produit mesure.
+ *
+ * Corriger est réservé à celui qui a saisi ou à celui qui a raconté :
+ * personne d'autre n'a autorité sur ces mots.
+ */
+export async function updateStory(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const storyId = String(formData.get('storyId') ?? '');
+  const story = await prisma.story.findFirst({
+    where: { id: storyId, familyId: context.family.id },
+    select: { id: true, authorId: true, narratorId: true },
+  });
+  if (!story) redirect('/recits');
+
+  if (story.authorId !== context.member.id && story.narratorId !== context.member.id) {
+    redirect(`/recits/${storyId}?modif=interdit`);
+  }
+
+  const rawStructure = String(formData.get('structureType') ?? '');
+  const rawTone = String(formData.get('tone') ?? 'factuel');
+  const rawEventDate = String(formData.get('eventDate') ?? '');
+
+  const parsed = updateStorySchema.safeParse({
+    title: String(formData.get('title') ?? '').trim(),
+    content: String(formData.get('content') ?? '').trim(),
+    structureType: (STRUCTURE_TYPES as readonly string[]).includes(rawStructure) ? rawStructure : undefined,
+    tone: (TONES as readonly string[]).includes(rawTone) ? rawTone : 'factuel',
+    eventDate: rawEventDate || undefined,
+  });
+  if (!parsed.success) redirect(`/recits/${storyId}/modifier?erreur=1`);
+
+  await storyService.updateStory(context.family.id, storyId, parsed.data);
+  revalidatePath(`/recits/${storyId}`);
+  revalidatePath('/recits');
+  redirect(`/recits/${storyId}`);
+}
+
+/**
+ * Suppression — identité VÉRIFIÉE exigée, et l'auteur seul.
+ * Le droit à l'oubli reste absolu (Constitution, §6) ; il ne s'exerce
+ * simplement pas sous une identité que l'on s'est attribuée soi-même.
+ */
+export async function deleteStory(formData: FormData) {
+  const context = await requireContext();
+  if (!canDelete(context)) redirect(`/recits/${String(formData.get('storyId') ?? '')}?suppr=identite`);
+
+  const storyId = String(formData.get('storyId') ?? '');
+  const story = await prisma.story.findFirst({
+    where: { id: storyId, familyId: context.family.id },
+    select: { id: true, authorId: true },
+  });
+  if (!story) redirect('/recits');
+  if (story.authorId !== context.member!.id) redirect(`/recits/${storyId}?suppr=auteur`);
+
+  await prisma.$transaction([
+    prisma.passage.deleteMany({ where: { OR: [{ parentStoryId: storyId }, { childStoryId: storyId }] } }),
+    prisma.conversation.deleteMany({ where: { storyId } }),
+    prisma.visibilityLog.deleteMany({ where: { storyId } }),
+    prisma.archive.updateMany({ where: { storyId }, data: { storyId: null } }),
+    prisma.story.delete({ where: { id: storyId } }),
+  ]);
+
+  revalidatePath('/recits');
+  revalidatePath('/transmission');
+  redirect('/recits');
+}
+
+/**
+ * Restauration d'une sauvegarde. Crée toujours une NOUVELLE famille :
+ * fusionner deux mémoires qui se recouvrent en partie coûterait des récits,
+ * et personne ne saurait lesquels.
+ */
+export async function restoreBackup(formData: FormData) {
+  const file = formData.get('backup');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/restaurer?erreur=${encodeURIComponent('Aucun fichier choisi.')}`);
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    redirect(`/restaurer?erreur=${encodeURIComponent('Fichier trop lourd (max 50 Mo).')}`);
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch {
+    redirect(`/restaurer?erreur=${encodeURIComponent('Ce fichier n’est pas du JSON valide.')}`);
+  }
+
+  const result = await importService.importFamily(payload);
+  if ('error' in result) redirect(`/restaurer?erreur=${encodeURIComponent(result.error)}`);
+
+  const summary = Object.entries(result.counts)
+    .map(([label, count]) => `${count} ${label}`)
+    .join(', ');
+
+  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(result.familyId) });
+  revalidatePath('/', 'layout');
+  redirect(`/qui?restaure=${encodeURIComponent(`${result.familyName} : ${summary}.`)}`);
 }

@@ -34,6 +34,41 @@ export const createStorySchema = z.object({
 
 export type CreateStoryInput = z.infer<typeof createStorySchema>;
 
+/** Correction d'un récit : le contenu, jamais l'auteur ni les passages. */
+export const updateStorySchema = z.object({
+  title: z.string().min(1).max(160),
+  content: z.string().min(1).max(MAX_CONTENT_LENGTH),
+  structureType: z.enum(STRUCTURE_TYPES).optional(),
+  tone: z.enum(TONES).default('factuel'),
+  eventDate: z.coerce.date().optional(),
+});
+
+export type UpdateStoryInput = z.infer<typeof updateStorySchema>;
+
+/** Un membre : au moins un nom et une génération. Les dates nourrissent le Trigger Model. */
+export const memberSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    generation: z.coerce.number().int().min(1).max(10),
+    birthDate: z.coerce.date().optional(),
+    deathDate: z.coerce.date().optional(),
+    role: z.string().max(280).optional(),
+  })
+  .refine((m) => !m.birthDate || !m.deathDate || m.deathDate >= m.birthDate, {
+    message: 'La date de décès ne peut précéder la naissance.',
+    path: ['deathDate'],
+  });
+
+/** Une famille se crée avec son premier membre : une mémoire a besoin de quelqu'un qui la porte. */
+export const createFamilySchema = z
+  .object({
+    familyName: z.string().min(1).max(120),
+    name: z.string().min(1).max(120),
+    generation: z.coerce.number().int().min(1).max(10),
+    birthDate: z.coerce.date().optional(),
+    role: z.string().max(280).optional(),
+  });
+
 export const listStoriesSchema = z.object({
   search: z.string().max(120).optional(),
   structureType: z.enum(STRUCTURE_TYPES).optional(),

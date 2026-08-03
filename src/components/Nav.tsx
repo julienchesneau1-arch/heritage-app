@@ -33,9 +33,14 @@ export function Nav({
           Héritage
         </Link>
         {member ? (
-          <Link href="/qui" className="justification underline">
-            {member.name}
-          </Link>
+          <span className="flex items-center gap-3">
+            <Link href="/famille" className="justification underline">
+              Famille
+            </Link>
+            <Link href="/qui" className="justification underline">
+              {member.name}
+            </Link>
+          </span>
         ) : familyName ? (
           <Link href="/qui" className="justification underline">
             Qui êtes-vous ?
