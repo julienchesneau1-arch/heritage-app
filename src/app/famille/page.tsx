@@ -32,9 +32,11 @@ export default async function FamilyPage({
     members.map(async (member) => ({
       id: member.id,
       path: await familyService.personalLink(context.family.id, member.id),
+      calendar: await familyService.calendarLink(context.family.id, member.id),
     })),
   );
   const linkById = new Map(links.map((link) => [link.id, link.path]));
+  const calendarById = new Map(links.map((link) => [link.id, link.calendar]));
 
   return (
     <div className="space-y-10">
@@ -146,6 +148,9 @@ export default async function FamilyPage({
               <p className="justification break-all">
                 Lien personnel : {linkById.get(member.id) ?? '—'}
               </p>
+              <p className="justification break-all">
+                Calendrier : {calendarById.get(member.id) ?? '—'}
+              </p>
 
               <div className="flex flex-wrap items-center gap-4">
                 <form action={revokeMemberLink}>
@@ -168,6 +173,29 @@ export default async function FamilyPage({
         <p className="justification">
           Révoquer un lien n’affecte que ce membre : les autres restent connectés. Retirer quelqu’un ne
           supprime aucun récit — l’auteur devient « Auteur anonymisé ».
+        </p>
+      </section>
+
+      <section className="space-y-3 border-t border-rule pt-6">
+        <h2 className="section-label">Le calendrier de la famille</h2>
+        <p className="leading-relaxed">
+          Les dates de la famille — naissances, disparitions, traditions, événements racontés —
+          peuvent être suivies depuis l’agenda que vous utilisez déjà. Chacun ajoute son adresse de
+          calendrier ci-dessus, une fois. Elle se met à jour toute seule.
+        </p>
+        <p className="justification">
+          N’y figurent que des dates saisies par la famille. Rien n’en est déduit, et la date de
+          création d’un récit n’y entre pas : l’application ne se fabrique pas d’occasions.
+        </p>
+        {/* Ce que l'on donne à Google en s'abonnant doit être dit avant, pas
+            découvert après. Une app de mémoire intime qui exporte vers un
+            tiers sans le dire trahirait sa promesse en silence. */}
+        <p className="justification">
+          À savoir avant de vous abonner : votre agenda copie ce calendrier sur ses propres serveurs.
+          Les noms de la famille et les titres des récits y seront donc lisibles par le fournisseur de
+          cet agenda — Google, Apple ou un autre. <strong>Le texte des récits n’y figure jamais.</strong>{' '}
+          L’adresse tient lieu de mot de passe : ne la publiez pas. « Révoquer ce lien » coupe aussi
+          le calendrier.
         </p>
       </section>
 

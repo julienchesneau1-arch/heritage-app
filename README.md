@@ -190,6 +190,16 @@ Une question du Passeur a le droit de tomber à côté : c'est une question, la 
 
 Le même défaut avait une conséquence plus concrète : le seul filtre de plausibilité était « pas décédé ». Sur la famille de démonstration, l'application demandait à Lucas (né en 2019) son souvenir d'un déménagement de 1971, et à Emma son point de vue sur un événement daté du jour de sa naissance. `couldRememberFirsthand()` écarte qui n'était pas né, qui était déjà mort, et qui avait moins de cinq ans. Une date de naissance inconnue, en revanche, ne disqualifie personne.
 
+### Le calendrier : l'occasion sans la notification
+
+Rien ne faisait ouvrir l'app un mardi de mars. La Constitution interdit notifications, séries et badges — à raison — et le produit se retrouvait en *pull* intégral : le Trigger Model calculait de vraies occasions datées et les tirait dans une page que personne n'avait ouverte.
+
+La ligne retenue : **une date ne sort de l'application que si elle existe sans elle.** Une série est fabriquée par le produit ; le 8 novembre 2014 existe que l'app existe ou non. Chacun abonne son agenda à un flux `.ics` — zéro infrastructure, zéro fournisseur d'e-mail, zéro coût. Y entrent les naissances des vivants, les décès, les traditions et les dates d'événements racontés. **Pas la date de création d'un récit** : celle-là, le produit se l'est fabriquée.
+
+Le flux publie une récurrence annuelle et l'année de référence plutôt qu'un « il y a 10 ans » que l'agenda mettrait en cache et qui serait faux l'an prochain. Aucune alarme : l'app ne décide pas d'interrompre. Et l'adresse porte le jeton personnel du membre, si bien que « Révoquer ce lien » coupe aussi son calendrier.
+
+Un agenda recopie ce flux chez son fournisseur : les noms et les titres y sortent, le texte des récits jamais. C'est écrit au-dessus du lien, avant l'abonnement.
+
 ### Une liste bornée qui dit qu'elle l'est
 
 « Récits » chargeait le corpus entier, sans limite : cinq mille récits dans une page. Elle est paginée par 50 — et elle l'annonce (« Récits 51 à 63 sur 63 »), faute de quoi elle retomberait dans le défaut que le graphe avait déjà corrigé.
@@ -222,6 +232,6 @@ Sprints 0 à 6 de la roadmap (§10) : schéma et seed, CRUD des récits, graphe 
 
 Sprint 7, fait : Service Worker (réseau d'abord, cache en secours, page hors-ligne), lien d'évitement clavier, page courante annoncée.
 
-Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, justifications du Passeur ramenées à ce qu'elles vérifient, liste des récits paginée et explicite sur ce qu'elle masque, intégration continue.
+Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, justifications du Passeur ramenées à ce qu'elles vérifient, liste des récits paginée et explicite sur ce qu'elle masque, calendrier familial iCalendar, intégration continue.
 
 Ouvert : transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil. Le pilote S3 est écrit mais n'a pas pu être testé contre un vrai bucket depuis cet environnement.

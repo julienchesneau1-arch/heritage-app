@@ -77,6 +77,19 @@ export class FamilyService {
     if (!member) return null;
     return `/f/${familyId}/m/${member.id}/${signMemberToken(member.id, member.tokenVersion)}`;
   }
+
+  /**
+   * Le flux iCalendar de ce membre. Il porte le même jeton que son lien
+   * personnel : le révoquer coupe les deux d'un coup.
+   */
+  async calendarLink(familyId: string, memberId: string): Promise<string | null> {
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, familyId, isDeleted: false },
+      select: { id: true, tokenVersion: true },
+    });
+    if (!member) return null;
+    return `/api/calendrier/${member.id}/${signMemberToken(member.id, member.tokenVersion)}/heritage.ics`;
+  }
 }
 
 function normalize(member: NewMember) {

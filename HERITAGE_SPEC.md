@@ -443,6 +443,26 @@ C'est la page vers laquelle renvoient toutes les vues bornées (graphe, veillée
 
 **La recherche survit à la navigation.** Tourner la page ou basculer les archives conservait l'un et perdait l'autre : tous les liens de la page reconstruisent la requête complète (`q`, `type`, `archivees`), et le formulaire GET reporte le filtre d'archives dans un champ caché.
 
+### 5.3 ter Le calendrier familial — extension hors spec v1.0, assumée
+
+Le Trigger Model (§3.1) calcule de vraies occasions datées et les affiche dans une page que personne n'a ouverte. Le signal est juste ; il ne rencontre personne. Une mémoire familiale en *pull* intégral s'ouvre à Noël, puis plus jamais — c'est le risque produit que les §3 et §5 laissaient entier.
+
+**La ligne constitutionnelle.** L'amendement proposé tient en une phrase :
+
+> Une date ne sort de l'application que si elle existe sans elle.
+
+Une série de connexions est fabriquée par le produit : sans le produit, elle n'existe pas. Le 8 novembre 2014, jour de la mort de Robert, existe que cette application existe ou non. Le test opératoire : *un humain qui ne connaîtrait que le calendrier déclaré de la famille aurait-il pu écrire cette ligne ?*
+
+Entrent donc : `Member.birthDate` (des vivants), `Member.deathDate`, `Tradition.monthDay`, `Story.eventDate`. **N'entre pas : `Story.createdAt`** — « il y a trois ans, ce récit a été raconté » est une occasion que le produit se fabrique à lui-même. L'exclusion est testée.
+
+**Une règle annuelle, pas des occurrences calculées.** Un agenda met le flux en cache : une ligne « il y a 10 ans » gravée aujourd'hui devient fausse l'an prochain sans que personne ne s'en aperçoive — exactement le défaut que le produit passe son temps à corriger. On publie `RRULE:FREQ=YEARLY` et l'année de référence (« Robert Martin (1931–2014) ») ; l'arithmétique reste au lecteur.
+
+**Ni alarme, ni occupation.** Aucun `VALARM` : l'application ne décide pas d'interrompre quelqu'un. `TRANSP:TRANSPARENT` : ces journées ne rendent personne indisponible.
+
+**Révocation.** Le flux porte le jeton personnel du membre (`tokenVersion`) : « Révoquer ce lien » sur la page Famille coupe aussi son calendrier, et le sien seul. Deux mécanismes de révocation seraient deux occasions d'en oublier un.
+
+**Ce qui est dit avant l'abonnement.** Un agenda recopie le flux sur les serveurs de son fournisseur. Les noms et les titres y sortent — le texte des récits, jamais. L'interface l'écrit en toutes lettres au-dessus du lien : une application de mémoire intime qui exporte vers un tiers sans le dire trahirait sa promesse en silence.
+
 ### 5.4 La veillée — extension hors spec v1.0, assumée
 
 Trois récits, un par écran, en gros caractères, faits pour être lus à voix haute quand la famille est réunie. Puis un dernier écran : « Quelqu'un se souvient-il d'autre chose ? C'est le moment de le dire à voix haute — pas de l'écrire. »
