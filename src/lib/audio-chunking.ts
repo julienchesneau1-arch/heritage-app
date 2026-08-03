@@ -191,6 +191,47 @@ export function sliceSamples(
   return output.subarray(0, cursor);
 }
 
+/**
+ * Recale un horodatage du temps COMPRIMÉ vers le temps RÉEL.
+ *
+ * Le modèle reçoit l'audio débarrassé de ses silences : ses horodatages
+ * comptent donc dans un temps où les blancs n'existent pas. Les afficher
+ * tels quels enverrait la famille écouter au mauvais endroit — et ruinerait
+ * le seul mécanisme qui rende la transcription vérifiable : la confrontation
+ * du texte à l'enregistrement.
+ *
+ * Sur un récit à 43 % de parole, un passage réellement situé à 2 min 30
+ * s'afficherait vers 1 min 04. On remonte donc chaque horodatage à sa
+ * position dans le fichier que la famille écoute réellement.
+ */
+export function mapCompressedToOriginal(compressedSeconds: number, segments: SpeechSegment[]): number {
+  if (segments.length === 0) return compressedSeconds;
+
+  let elapsed = 0;
+  for (const segment of segments) {
+    const duration = segment.end - segment.start;
+    if (compressedSeconds <= elapsed + duration) {
+      return segment.start + (compressedSeconds - elapsed);
+    }
+    elapsed += duration;
+  }
+
+  // Au-delà de la parole retenue : on retombe sur la fin du dernier passage.
+  return segments[segments.length - 1]!.end;
+}
+
+/** Recale un lot d'horodatages, en préservant l'ordre et la durée relative. */
+export function mapChunkTimes<T extends { start: number; end: number }>(
+  chunks: T[],
+  segments: SpeechSegment[],
+): T[] {
+  return chunks.map((chunk) => ({
+    ...chunk,
+    start: mapCompressedToOriginal(chunk.start, segments),
+    end: mapCompressedToOriginal(chunk.end, segments),
+  }));
+}
+
 function percentile(values: number[], ratio: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * ratio)));

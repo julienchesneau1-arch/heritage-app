@@ -57,9 +57,23 @@ export async function POST(
   }
 
   if (data.role === 'second') {
+    // Les artefacts sont retirés des DEUX versions, sinon une invention
+    // présente dans les deux apparaîtrait comme une divergence : on
+    // enverrait la famille écouter un passage dont on sait déjà qu'il n'a
+    // jamais été prononcé.
+    const secondReviewed = reviewSegments(
+      data.chunks.length > 0
+        ? data.chunks.map((chunk) => ({ start: chunk.start, end: chunk.end, text: chunk.text }))
+        : [{ start: 0, end: 0, text: data.text }],
+    );
+
     await prisma.transcriptionDraft.update({
       where: { id: draft.id },
-      data: { secondText: data.text.trim(), secondSource: 'local', secondModel: data.model },
+      data: {
+        secondText: draftTextFrom(secondReviewed) || data.text.trim(),
+        secondSource: 'local',
+        secondModel: data.model,
+      },
     });
     return apiOk({ ok: true, role: 'second' });
   }

@@ -63,7 +63,12 @@ export default async function DraftsPage({ searchParams }: { searchParams: { err
                   <p className="justification">
                     {draft.suspectCount > 0
                       ? `${draft.suspectCount} passage${draft.suspectCount > 1 ? 's' : ''} à vérifier en priorité.`
-                      : 'Aucun passage signalé — la relecture reste nécessaire.'}
+                      : draft.source === 'local'
+                        ? // Le moteur local ne rend aucun indicateur de confiance.
+                          // Écrire « aucun passage signalé » laisserait croire à
+                          // une assurance qui n'existe pas.
+                          'Ce moteur ne dit rien de sa propre confiance : tout est à vérifier.'
+                        : 'Aucun passage signalé par le modèle — la relecture reste nécessaire.'}
                   </p>
                   <Link href={`/brouillons/${draft.id}`} className="btn-primary">
                     Écouter et relire

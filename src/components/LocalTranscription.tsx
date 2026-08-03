@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import {
   detectSpeechSegments,
+  mapChunkTimes,
   planChunks,
   sliceSamples,
   speechRatio,
@@ -111,14 +112,26 @@ export function LocalTranscription({
         });
       });
 
-      // 4. Dépôt du texte. L'audio, lui, n'a jamais quitté l'appareil.
+      // 4. Recalage des horodatages sur le temps RÉEL de l'enregistrement.
+      //    Le modèle a travaillé sur l'audio sans les silences : ses repères
+      //    comptent dans un temps où les blancs n'existent pas. Sans ce
+      //    recalage, la famille irait écouter au mauvais endroit.
+      const recalé = mapChunkTimes(text.chunks, segments);
+
+      // 5. Dépôt du texte. L'audio, lui, n'a jamais quitté l'appareil.
       setMessage('Enregistrement du brouillon…');
       const saved = await fetch(`/api/family/${familyId}/transcriptions/${draftId}/local`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, model: LOCAL_MODELS[model].id, text: text.text, chunks: text.chunks }),
+        body: JSON.stringify({ role, model: LOCAL_MODELS[model].id, text: text.text, chunks: recalé }),
       });
       if (!saved.ok) throw new Error('Le brouillon n’a pas pu être enregistré.');
+
+      // Le modèle occupe plusieurs centaines de mégaoctets : on rend la
+      // mémoire dès que le travail est fait. Sur un téléphone, la garder
+      // suffirait à faire tomber l'onglet.
+      worker.terminate();
+      workerRef.current = null;
 
       setState('done');
       setMessage('Terminé. Il reste à écouter et relire.');

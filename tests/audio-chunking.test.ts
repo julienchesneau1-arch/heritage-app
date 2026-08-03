@@ -3,6 +3,8 @@ import {
   DEFAULT_VAD,
   detectSpeechSegments,
   frameEnergies,
+  mapChunkTimes,
+  mapCompressedToOriginal,
   planChunks,
   sliceSamples,
   speechRatio,
@@ -181,5 +183,73 @@ describe('Réglages par défaut', () => {
     // fragmenterait chaque phrase.
     expect(DEFAULT_VAD.minSilenceMs).toBeGreaterThanOrEqual(500);
     expect(DEFAULT_VAD.paddingMs).toBeGreaterThanOrEqual(150);
+  });
+});
+
+describe('Recalage des horodatages — le défaut qui cassait la vérification', () => {
+  /**
+   * Le modèle reçoit l'audio sans les silences : ses horodatages comptent
+   * dans un temps où les blancs n'existent pas. Les afficher tels quels
+   * envoyait la famille écouter au mauvais endroit — ruinant le seul
+   * mécanisme qui rende la transcription vérifiable.
+   */
+  const segments = [
+    { start: 10, end: 20 }, // 10 s de parole après 10 s de silence
+    { start: 50, end: 60 }, // 10 s de parole après 30 s de silence
+  ];
+
+  it('le début du premier passage retrouve sa place réelle', () => {
+    expect(mapCompressedToOriginal(0, segments)).toBe(10);
+  });
+
+  it('un instant au milieu du premier passage est décalé du silence initial', () => {
+    expect(mapCompressedToOriginal(5, segments)).toBe(15);
+  });
+
+  it('le second passage saute par-dessus le silence intermédiaire', () => {
+    // 10 s comprimées = fin du premier passage = début du second.
+    expect(mapCompressedToOriginal(10, segments)).toBe(20);
+    expect(mapCompressedToOriginal(12, segments)).toBe(52);
+  });
+
+  it('un horodatage au-delà de la parole retenue reste dans les bornes', () => {
+    expect(mapCompressedToOriginal(999, segments)).toBe(60);
+  });
+
+  it('sans découpe, l’horodatage est inchangé', () => {
+    expect(mapCompressedToOriginal(42, [])).toBe(42);
+  });
+
+  it('recale un lot en préservant l’ordre', () => {
+    const recalé = mapChunkTimes(
+      [
+        { start: 0, end: 5, text: 'Le poirier a été planté en 1958.' },
+        { start: 12, end: 18, text: 'Il donne trop de fruits.' },
+      ],
+      segments,
+    );
+
+    expect(recalé[0]!.start).toBe(10);
+    expect(recalé[1]!.start).toBe(52);
+    expect(recalé[0]!.text).toBe('Le poirier a été planté en 1958.');
+    for (let i = 1; i < recalé.length; i += 1) {
+      expect(recalé[i]!.start).toBeGreaterThanOrEqual(recalé[i - 1]!.start);
+    }
+  });
+
+  it('sur un récit réel, l’écart corrigé se chiffre en minutes', () => {
+    // 43 % de parole : sans recalage, un passage réellement à 2 min 30
+    // s'afficherait vers 1 min 04. La famille chercherait au mauvais endroit.
+    const parts: Array<{ seconds: number; speech: boolean }> = [];
+    for (let i = 0; i < 12; i += 1) {
+      parts.push({ seconds: 6, speech: true });
+      parts.push({ seconds: 9, speech: false });
+    }
+    const samples = build(parts);
+    const detected = detectSpeechSegments(samples, SAMPLE_RATE);
+
+    const brut = 64; // ce que le modèle rendrait
+    const réel = mapCompressedToOriginal(brut, detected);
+    expect(réel).toBeGreaterThan(brut + 60);
   });
 });

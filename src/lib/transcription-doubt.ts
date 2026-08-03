@@ -156,6 +156,24 @@ export function countSuspect(segments: ReviewedSegment[]): number {
   return segments.filter((segment) => segment.suspect).length;
 }
 
+/**
+ * Le moteur a-t-il fourni des indicateurs de doute ?
+ *
+ * Distinction vitale, et que la version précédente confondait : « le modèle
+ * s'est dit sûr » et « le modèle n'a rien dit de sa confiance » ne sont pas
+ * la même chose. Afficher « aucun passage signalé » dans le second cas
+ * laisserait croire à une assurance qui n'existe pas — le mensonge le plus
+ * dangereux que puisse commettre un produit dont la promesse est la justesse.
+ *
+ * Le moteur local ne rend que des horodatages : aucune log-probabilité,
+ * aucun ratio de compression. Tout y est donc à vérifier.
+ */
+export function hasConfidenceSignals(segments: ReviewedSegment[]): boolean {
+  return segments.some((segment) =>
+    segment.reasons.some((reason) => reason !== 'ARTEFACT_CONNU' && reason !== 'REPETITION_VOISINE'),
+  );
+}
+
 /** mm:ss, pour se repérer dans l'enregistrement. */
 export function formatTimecode(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));

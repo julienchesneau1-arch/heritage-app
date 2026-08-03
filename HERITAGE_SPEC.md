@@ -251,6 +251,7 @@ La charte du §3.4 l'avait déjà inscrit — « transcrire audio → vérifié 
 | L'audio est l'original | L'enregistrement est conservé et rattaché au récit. Le texte n'en est qu'une copie contestable. |
 | Une transcription n'est pas un récit | `TranscriptionDraft`, modèle séparé. Tant qu'elle n'est pas validée, elle ne compte dans aucune métrique et n'apparaît ni dans la veillée ni chez le Passeur. |
 | Le doute est visible | Chaque segment porte les indicateurs du modèle lui-même, avec les seuils de l'implémentation de référence de Whisper : `avg_logprob < -1.0`, `compression_ratio > 2.4`, `no_speech_prob > 0.6`. |
+| L'absence d'indicateur est dite | « Le modèle s'est déclaré sûr » et « le modèle n'a rien dit de sa confiance » ne sont **pas** la même chose. Le moteur local ne rend que des horodatages : l'écran annonce alors que rien ne peut être signalé et que tout est à vérifier, au lieu d'un « aucun passage signalé » qui laisserait croire à une assurance inexistante. |
 | Les inventions connues sont retirées | Artefacts de sous-titrage (« Sous-titres réalisés par… », « Merci d'avoir regardé… ») supprimés et listés explicitement à l'écran. |
 | Le doute n'est jamais supprimé | Un passage douteux mais possiblement réel est **conservé et signalé**. Supprimer serait décider à la place de la famille. |
 | La provenance est affichée | « Transcrit automatiquement (whisper-1), vérifié par Claire le 3 août. » |
@@ -282,6 +283,8 @@ Whisper invente **sur le vide**. Ne pas lui donner de vide supprime l'occasion. 
 Une détection d'activité vocale (énergie par fenêtre de 20 ms, seuil **relatif** au niveau de l'enregistrement — un seuil absolu déclarerait muette une aïeule qui parle doucement) isole les passages parlés et ne transmet qu'eux. Sur un récit réel de trois minutes ponctué de longues pauses : **43 % de parole, 102 secondes de silence jamais soumises au modèle**.
 
 Le découpage sert aussi la durée : un enregistrement d'une heure devient une suite de morceaux bornés. Les frontières sont choisies **dans les silences** — jamais au milieu d'une phrase, car une coupe en pleine parole produit deux moitiés de mot que le modèle complète, c'est-à-dire invente.
+
+**Recalage des horodatages.** Le modèle reçoit l'audio débarrassé de ses silences : ses repères comptent dans un temps où les blancs n'existent pas. Affichés tels quels, ils envoient la famille écouter au mauvais endroit — sur un récit à 43 % de parole, un passage réellement situé à 02:20 s'affichait à 01:04, soit **77 secondes d'écart**. Chaque horodatage est donc remonté à sa position dans le fichier réellement écouté. Sans ce recalage, la confrontation texte ↔ audio ne vaut rien, et avec elle tout l'édifice de vérification.
 
 ### 3.5.3 Consensus — le levier de précision le plus fort
 

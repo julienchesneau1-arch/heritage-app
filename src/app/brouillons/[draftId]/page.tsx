@@ -6,6 +6,7 @@ import { discardTranscription, validateTranscription } from '@/app/actions';
 import {
   DOUBT_LABELS,
   formatTimecode,
+  hasConfidenceSignals,
   type DoubtReason,
   type ReviewedSegment,
 } from '@/lib/transcription-doubt';
@@ -87,6 +88,8 @@ export default async function DraftPage({
     draft.secondText && draft.rawText
       ? compareTranscriptions(draft.rawText, draft.secondText)
       : null;
+
+  const confiance = hasConfidenceSignals(segments);
 
   return (
     <div className="space-y-8">
@@ -173,6 +176,17 @@ export default async function DraftPage({
         <h2 className="section-label">
           Ce que la machine a entendu {suspects.length > 0 ? `· ${suspects.length} à vérifier` : ''}
         </h2>
+
+        {/* « Le modèle s'est dit sûr » et « le modèle n'a rien dit de sa
+            confiance » ne sont pas la même chose. Les confondre laisserait
+            croire à une assurance qui n'existe pas. */}
+        {segments.length > 0 && !confiance ? (
+          <p className="justification">
+            Ce moteur ne fournit aucun indicateur de confiance : aucun passage n’est signalé parce
+            qu’aucun ne peut l’être. Tout le texte est à confronter à l’enregistrement.
+          </p>
+        ) : null}
+
         {segments.length === 0 ? (
           <p className="justification">
             Le modèle n’a pas renvoyé de découpage : tout le texte est à vérifier.

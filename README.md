@@ -166,6 +166,10 @@ L'audio ne sort pas de l'appareil. La bibliothèque et les poids, eux, viennent 
 
 **Les silences sont retirés avant transcription.** C'est la seule mitigation qui agisse *avant* la génération : Whisper invente sur le vide, donc on ne lui donne pas de vide. Sur un récit de trois minutes avec de longues pauses, mesuré : 43 % de parole, **102 secondes de silence jamais soumises au modèle**. Le découpage coupe dans les silences, jamais au milieu d'une phrase.
 
+**Les horodatages sont recalés.** Le modèle travaille sur l'audio sans les silences ; ses repères comptent donc dans un temps comprimé. Affichés bruts, ils envoyaient la famille écouter au mauvais endroit — jusqu'à 77 secondes d'écart sur un récit de trois minutes. Sans ce recalage, la confrontation texte ↔ audio ne vaut rien.
+
+**L'absence d'indicateur est dite comme telle.** « Le modèle s'est déclaré sûr » et « le modèle n'a rien dit de sa confiance » ne sont pas la même chose. Le moteur local ne rend que des horodatages : l'écran l'annonce, au lieu d'afficher « aucun passage signalé » qui laisserait croire à une assurance inexistante.
+
 **Le consensus est le levier le plus fort.** Deux modèles indépendants n'inventent pratiquement jamais la même chose. Un second avis — gratuit lui aussi — souligne les passages où les deux ne s'accordent pas : ce sont ceux-là, et ceux-là seuls, qu'il faut réécouter. Les deux versions ne sont jamais fusionnées automatiquement : le résultat serait un texte que personne n'a prononcé.
 
 Clé API (optionnelle, pour un second avis ou un appareil trop faible) : https://platform.openai.com/api-keys.

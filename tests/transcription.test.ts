@@ -3,6 +3,7 @@ import {
   countSuspect,
   draftTextFrom,
   DOUBT_THRESHOLDS,
+  hasConfidenceSignals,
   isKnownArtifact,
   reviewSegments,
   formatTimecode,
@@ -219,5 +220,46 @@ describe('Repères de lecture', () => {
     expect(formatTimecode(0)).toBe('00:00');
     expect(formatTimecode(75)).toBe('01:15');
     expect(formatTimecode(-4)).toBe('00:00');
+  });
+});
+
+describe('« Sûr de lui » et « n’a rien dit » ne sont pas la même chose', () => {
+  /**
+   * Le défaut corrigé : un brouillon local n'a AUCUN indicateur de confiance
+   * (le navigateur ne rend que des horodatages). Afficher « aucun passage
+   * signalé » y laissait croire à une assurance inexistante — le mensonge le
+   * plus dangereux pour un produit dont la promesse est la justesse.
+   */
+  it('reconnaît qu’un moteur s’est prononcé sur sa confiance', () => {
+    const segments = reviewSegments([
+      { start: 0, end: 3, text: 'Il réparait les vélos.', avgLogprob: -0.2, noSpeechProb: 0.01 },
+      { start: 3, end: 6, text: 'Un passage douteux.', avgLogprob: -1.8 },
+    ]);
+    expect(hasConfidenceSignals(segments)).toBe(true);
+  });
+
+  it('reconnaît qu’un moteur n’a rien dit, même quand tout semble propre', () => {
+    // Sortie typique du moteur local : du texte, des horodatages, rien d'autre.
+    const segments = reviewSegments([
+      { start: 0, end: 3, text: 'Il réparait les vélos.' },
+      { start: 3, end: 6, text: 'Il refusait sans dire pourquoi.' },
+    ]);
+    expect(segments.every((segment) => !segment.suspect)).toBe(true);
+    // Aucun segment suspect, mais aucune confiance mesurée non plus.
+    expect(hasConfidenceSignals(segments)).toBe(false);
+  });
+
+  it('un artefact détecté ne vaut pas indicateur de confiance', () => {
+    // Repérer une phrase interdite ne dit rien de la fiabilité du reste.
+    const segments = reviewSegments([
+      { start: 0, end: 3, text: 'Il réparait les vélos.' },
+      { start: 3, end: 5, text: 'Sous-titres réalisés par la communauté d’Amara.org' },
+    ]);
+    expect(segments[1]!.artifact).toBe(true);
+    expect(hasConfidenceSignals(segments)).toBe(false);
+  });
+
+  it('ne prétend rien sur une transcription vide', () => {
+    expect(hasConfidenceSignals([])).toBe(false);
   });
 });
