@@ -1,0 +1,241 @@
+// Héritage — schéma de données.
+// Source de vérité : HERITAGE_SPEC.md §2. Aucune table ne peut être ajoutée
+// sans mise à jour de ce document.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── FAMILLE ───
+model Family {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members        Member[]
+  stories        Story[]
+  archives       Archive[]
+  traditions     Tradition[]
+  conversations  Conversation[]
+  entities       Entity[]
+  passages       Passage[]
+  visibilityLogs VisibilityLog[]
+
+  @@map("families")
+}
+
+// ─── MEMBRE (utilisateur au sens familial) ───
+model Member {
+  id         String    @id @default(cuid())
+  familyId   String    @map("family_id")
+  name       String
+  birthDate  DateTime? @map("birth_date")
+  deathDate  DateTime? @map("death_date")
+  generation Int
+  role       String?
+  email      String?
+  avatarUrl  String?   @map("avatar_url")
+
+  // §2.1 règle 1 : la suppression d'un membre est un soft-delete.
+  // Les histoires restent, l'auteur devient "Auteur anonymisé".
+  isDeleted Boolean @default(false) @map("is_deleted")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  storiesAuthored  Story[]        @relation("Author")
+  entities         Entity[]
+  questionsAsked   Conversation[] @relation("Questioner")
+  answersGiven     Conversation[] @relation("Responder")
+  archivesUploaded Archive[]
+
+  @@index([familyId])
+  @@map("members")
+}
+
+// ─── RÉCIT (le cœur du produit) ───
+model Story {
+  id       String @id @default(cuid())
+  familyId String @map("family_id")
+  authorId String @map("author_id")
+  title    String
+  content  String // texte brut, max 5000 caractères (contrainte applicative, cf. lib/validation.ts)
+
+  // Grammaire narrative : structure imposée par le système, jamais inventée par le LLM.
+  // Valeurs autorisées : cf. src/lib/structure-types.ts (33 types, annexe B).
+  structureType String @map("structure_type")
+
+  tone   String // intime, factuel, epique
+  length String // micro (<300c), standard (<1500c), long (<5000c)
+
+  // Conservateur
+  views            Int       @default(0)
+  lastViewedAt     DateTime? @map("last_viewed_at")
+  quarantined      Boolean   @default(false)
+  quarantineReason String?   @map("quarantine_reason")
+  archived         Boolean   @default(false)
+
+  // Métadonnées temporelles
+  createdAt DateTime  @default(now()) @map("created_at")
+  eventDate DateTime? @map("event_date") // date de l'événement raconté, pas de la création
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  author Member @relation("Author", fields: [authorId], references: [id])
+
+  linkedEntities Entity[]       @relation("StoryEntities")
+  archives       Archive[]
+  conversations  Conversation[]
+
+  // Passages (chaînes de transmission)
+  parentPassages Passage[] @relation("ParentStory")
+  childPassages  Passage[] @relation("ChildStory")
+
+  visibilityLogs VisibilityLog[]
+
+  @@index([familyId, createdAt])
+  @@map("stories")
+}
+
+// ─── ENTITÉ (nœud du graphe : personne, lieu, objet, date, concept) ───
+model Entity {
+  id             String  @id @default(cuid())
+  familyId       String  @map("family_id")
+  type           String // PERSON, PLACE, OBJECT, DATE, CONCEPT
+  name           String
+  normalizedName String  @map("normalized_name") // lowercase, sans accent, sans ponctuation
+  description    String?
+
+  // Pour les personnes : lien optionnel vers Member
+  memberId String? @map("member_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  family  Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  member  Member? @relation(fields: [memberId], references: [id])
+  stories Story[] @relation("StoryEntities")
+
+  @@unique([familyId, normalizedName, type])
+  @@map("entities")
+}
+
+// ─── ARCHIVE (photo, document, audio, vidéo) ───
+model Archive {
+  id         String  @id @default(cuid())
+  familyId   String  @map("family_id")
+  uploaderId String  @map("uploader_id")
+  storyId    String? @map("story_id")
+
+  type       String // PHOTO, DOCUMENT, AUDIO, VIDEO
+  title      String
+  storageKey String @map("storage_key")
+  mimeType   String @map("mime_type")
+  sizeBytes  Int    @map("size_bytes")
+
+  // Métadonnées extraites (par LLM ou manuel)
+  extractedText     String?  @map("extracted_text")
+  extractedEntities String[] @map("extracted_entities")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  uploader Member @relation(fields: [uploaderId], references: [id])
+  story    Story? @relation(fields: [storyId], references: [id])
+
+  @@index([familyId])
+  @@map("archives")
+}
+
+// ─── TRADITION (rituel cyclique) ───
+model Tradition {
+  id          String  @id @default(cuid())
+  familyId    String  @map("family_id")
+  name        String
+  description String
+  periodicity String // annual, monthly, weekly
+  monthDay    String? @map("month_day") // "10-15" pour annual
+  weekDay     Int?    @map("week_day") // 0-6 pour weekly
+
+  lastActivatedAt DateTime? @map("last_activated_at")
+  activationCount Int       @default(0) @map("activation_count")
+  isAsleep        Boolean   @default(false) @map("is_asleep")
+  sleepReason     String?   @map("sleep_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@map("traditions")
+}
+
+// ─── CONVERSATION (Q&A autour d'un récit) ───
+model Conversation {
+  id           String  @id @default(cuid())
+  familyId     String  @map("family_id")
+  storyId      String  @map("story_id")
+  questionerId String  @map("questioner_id")
+  responderId  String? @map("responder_id")
+
+  questionText String  @map("question_text")
+  responseText String? @map("response_text")
+
+  status             String  @default("pending") // pending, answered, converted
+  convertedToStoryId String? @map("converted_to_story_id")
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  answeredAt DateTime? @map("answered_at")
+
+  family     Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  story      Story   @relation(fields: [storyId], references: [id])
+  questioner Member  @relation("Questioner", fields: [questionerId], references: [id])
+  responder  Member? @relation("Responder", fields: [responderId], references: [id])
+
+  @@index([familyId, status])
+  @@map("conversations")
+}
+
+// ─── PASSAGE (lien de transmission entre histoires) ───
+model Passage {
+  id            String @id @default(cuid())
+  familyId      String @map("family_id")
+  parentStoryId String @map("parent_story_id")
+  childStoryId  String @map("child_story_id")
+
+  triggerType String @map("trigger_type") // question, tradition, temporal, passeur, manual
+
+  latencyDays Int      @map("latency_days")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  family      Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  parentStory Story  @relation("ParentStory", fields: [parentStoryId], references: [id])
+  childStory  Story  @relation("ChildStory", fields: [childStoryId], references: [id])
+
+  @@unique([parentStoryId, childStoryId])
+  @@index([familyId])
+  @@map("passages")
+}
+
+// ─── VISIBILITY LOG (audit Conservateur) ───
+model VisibilityLog {
+  id       String @id @default(cuid())
+  familyId String @map("family_id")
+  storyId  String @map("story_id")
+  memberId String @map("member_id")
+
+  shownAt   DateTime @default(now()) @map("shown_at")
+  context   String // home, passeur, search, tradition, graph
+  dismissed Boolean  @default(false)
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  story  Story  @relation(fields: [storyId], references: [id])
+
+  @@index([familyId, shownAt])
+  @@map("visibility_logs")
+}

@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    /* §6.4 : 16px minimum sur mobile. */
+    font-size: 16px;
+  }
+
+  body {
+    @apply bg-paper text-ink font-serif antialiased;
+  }
+
+  /* Contraste vérifié : ink #1c1917 sur paper #faf8f4 ≈ 15.6:1,
+     muted #6b6864 sur paper ≈ 5.3:1, accent #7c4a2d sur paper ≈ 7.2:1.
+     Tous au-dessus du seuil 4.5:1 (§6.4). */
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+}
+
+@layer components {
+  /* §6.4 : cible tactile 44x44 minimum. */
+  .tap {
+    @apply inline-flex min-h-[44px] min-w-[44px] items-center justify-center;
+  }
+
+  .btn {
+    @apply tap rounded-sm border border-rule px-4 text-sm font-sans text-ink transition-colors hover:bg-rule/40;
+  }
+
+  .btn-primary {
+    @apply tap rounded-sm bg-accent px-4 text-sm font-sans text-paper transition-opacity hover:opacity-90;
+  }
+
+  .justification {
+    @apply font-sans text-xs leading-relaxed text-muted;
+  }
+
+  .section-label {
+    @apply font-sans text-[0.68rem] uppercase tracking-[0.18em] text-muted;
+  }
+}

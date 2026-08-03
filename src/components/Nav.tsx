@@ -1,0 +1,52 @@
+import Link from 'next/link';
+
+const PAGES = [
+  { href: '/', label: 'Aujourd’hui' },
+  { href: '/recits', label: 'Récits' },
+  { href: '/archives', label: 'Archives' },
+  { href: '/traditions', label: 'Traditions' },
+  { href: '/graphe', label: 'Graphe' },
+  { href: '/transmission', label: 'Transmission' },
+];
+
+/**
+ * Navigation. Aucun badge, aucun compteur, aucune pastille rouge (§6.1).
+ * « Raconter » est le seul appel à l'action permanent (§5.1).
+ */
+export function Nav({
+  familyName,
+  member,
+}: {
+  familyName: string | null;
+  member: { id: string; name: string } | null;
+}) {
+  return (
+    <header className="border-b border-rule pt-6">
+      <div className="flex items-baseline justify-between gap-4">
+        <Link href="/" className="text-2xl tracking-tight">
+          Héritage
+        </Link>
+        {member ? (
+          <Link href="/qui" className="justification underline">
+            {member.name}
+          </Link>
+        ) : familyName ? (
+          <Link href="/qui" className="justification underline">
+            Qui êtes-vous ?
+          </Link>
+        ) : null}
+      </div>
+
+      <nav aria-label="Sections" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2">
+        {PAGES.map((page) => (
+          <Link key={page.href} href={page.href} className="py-2 font-sans text-sm text-muted hover:text-ink">
+            {page.label}
+          </Link>
+        ))}
+        <Link href="/recits/nouveau" className="py-2 font-sans text-sm text-accent hover:underline">
+          Raconter
+        </Link>
+      </nav>
+    </header>
+  );
+}
