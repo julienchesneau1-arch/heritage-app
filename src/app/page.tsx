@@ -42,15 +42,33 @@ export default async function TodayPage() {
           {/* §6.2 : la justification est toujours visible. */}
           <p className="justification">{question.justification}</p>
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Link
-              href={`/recits/nouveau?parent=${question.storyId}&trigger=passeur`}
-              className="btn-primary"
-            >
-              Raconter la suite
-            </Link>
-            <Link href={`/recits/${question.storyId}`} className="btn">
-              Lire l’histoire
-            </Link>
+            {/* Une question posée par quelqu'un appelle une réponse, pas un
+                nouveau récit : l'action première change avec la règle. */}
+            {question.ruleId === 'UNANSWERED_QUESTION' ? (
+              <>
+                <Link href={`/recits/${question.storyId}#conversations`} className="btn-primary">
+                  Répondre
+                </Link>
+                <Link
+                  href={`/recits/nouveau?parent=${question.storyId}&trigger=question`}
+                  className="btn"
+                >
+                  En faire un récit
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href={`/recits/nouveau?parent=${question.storyId}&trigger=passeur`}
+                  className="btn-primary"
+                >
+                  Raconter la suite
+                </Link>
+                <Link href={`/recits/${question.storyId}`} className="btn">
+                  Lire l’histoire
+                </Link>
+              </>
+            )}
             <form action={ignorePasseur}>
               <input type="hidden" name="storyId" value={question.storyId} />
               <input type="hidden" name="ruleId" value={question.ruleId} />

@@ -95,7 +95,7 @@ export default async function StoryPage({ params }: { params: { storyId: string 
         </section>
       ) : null}
 
-      <section className="space-y-4 border-t border-rule pt-6">
+      <section id="conversations" className="space-y-4 border-t border-rule pt-6">
         <h2 className="section-label">Conversations</h2>
 
         {story.conversations.length === 0 ? (

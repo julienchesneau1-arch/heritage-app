@@ -130,6 +130,8 @@ Trois points de la spec d'origine ne pouvaient pas être implémentés tels quel
 | Quarantaine | 3 rejets explicites **du même membre** | Retiré des suggestions. Réversible à tout moment. |
 | Distorsion | — | Écart entre qui écrit et qui est lu. Mesuré, affiché, **jamais corrigé**. |
 
+**Déduplication des impressions.** Une lecture n'est journalisée qu'une fois par membre et par récit sur 30 minutes. Ce n'est pas une optimisation : le budget de visibilité se calcule sur ces journaux, donc sans déduplication un membre qui rafraîchit sa page pousse le récit au-delà des 15 % et l'exclut des suggestions. L'algorithme sanctionnerait une histoire pour un appui sur F5.
+
 **Règles de gouvernance** :
 - Le Conservateur ne force jamais une histoire dans le flux passif.
 - Il documente les biais (`distortionScore`) sans les corriger artificiellement.
@@ -149,12 +151,17 @@ Trois points de la spec d'origine ne pouvaient pas être implémentés tels quel
 
 | ID | Poids | Confiance | Vide visé |
 |---|---|---|---|
+| `UNANSWERED_QUESTION` | 1.0 | 0.95 | Un membre a posé une question, personne n'a répondu |
 | `TENSION_UNRESOLVED` | 1.0 | 0.8 | Un fait est dit, sa raison ne l'est pas |
 | `MISSING_VIEWPOINT` | 0.9 | 0.7 | Un membre lié n'a pas donné sa version |
 | `RARE_PATRIMONY` | 0.8 | 0.6 | Récit ancien, peu lu |
 | `TEMPORAL_LINK` | 0.7 | 0.5 | Deux ans ou plus se sont écoulés |
 
 Sélection par `confiance × poids`. Une paire (récit, règle) déjà jouée ne revient pas avant 14 jours pour ce membre. Les récits sur-exposés sont écartés.
+
+**`UNANSWERED_QUESTION` — ajout hors spec v1.0, assumé.** Sans elle, une question posée par un membre n'était visible qu'en rouvrant le récit exact sur lequel elle portait : autant dire qu'elle se perdait, et avec elle le chemin le plus direct vers un nouveau récit. C'est aussi le seul vide informationnel que le produit n'a pas déduit d'un texte — quelqu'un l'a formulé. Elle passe donc devant les règles inférées, et ne renvoie jamais à un membre sa propre question. La réponse attendue est « Répondre », pas « Raconter la suite ».
+
+**Coût.** Une règle ne parcourt jamais le corpus : elle déclare une requête bornée (`where` + `take`) qui décrit ce qu'elle cherche. La formulation par le LLM intervient **après** la sélection, sur la seule question retenue — l'appeler pour chaque candidat reviendrait à payer cinquante appels pour en afficher un.
 
 **Note d'implémentation** : le test de `TENSION_UNRESOLVED` proposé dans la spec v1.0 cherchait les mots `ne`, `pas`, `mais`, `toujours`. Ce test est vrai sur presque tout texte français : il aurait fait de chaque récit une tension, donc d'aucun. Il a été remplacé par des marqueurs de tension explicites (« il refusait », « on n'a jamais su », « sans expliquer »).
 
@@ -167,7 +174,7 @@ Sélection par `confiance × poids`. Une paire (récit, règle) déjà jouée ne
 | Reformuler une phrase | oui | L'utilisateur lit et valide |
 | Classer par thème | oui | Règle système (33 types prédéfinis) |
 | Résumer un texte long | oui | L'utilisateur compare |
-| Extraire une entité | oui | Parsing strict + base d'entités |
+| Extraire une entité | oui | Parsing strict + grammaire des types |
 | Transcrire un audio | oui | L'utilisateur écoute et corrige |
 | Formuler une question Passeur | oui | Règle Passeur + vérification post-génération |
 | Fusionner 2 histoires | **non** | Décision métier |
@@ -176,6 +183,10 @@ Sélection par `confiance × poids`. Une paire (récit, règle) déjà jouée ne
 | Générer une histoire fictive | **non** | Hallucination |
 
 Toute sortie traverse deux filtres : la vérification propre à l'opération, puis le filtre constitutionnel. Une sortie qui échoue devient un fallback déterministe. **Sans clé API, le service renvoie directement les fallbacks** : l'application reste entièrement fonctionnelle.
+
+**Extraction d'entités.** Elle ne se déclenche que si la famille n'a nommé aucune entité elle-même. Le LLM comble le silence ; il ne corrige ni ne complète une liste déjà donnée. Un type hors grammaire ne crée aucun nœud.
+
+**Rattachement aux membres.** Dans un récit on écrit « Robert », pas « Robert Martin ». Le rattachement accepte donc l'inclusion sur mots entiers, et refuse dès que deux membres répondent : un prénom ambigu vaut mieux non rattaché que rattaché au mauvais.
 
 ---
 
@@ -301,6 +312,8 @@ Titre, auteur, date, texte intégral, entités liées, chaînes de transmission 
 - Taille de police minimum 16px sur mobile.
 - Cibles tactiles minimum 44×44px.
 - Libellés associés à chaque champ, `aria-label` sur le graphe, focus visible.
+- Lien d'évitement vers le contenu, révélé au focus clavier.
+- Page courante marquée `aria-current="page"` **et** soulignée : la couleur seule ne dirait rien à qui ne la perçoit pas.
 
 ---
 
@@ -375,7 +388,8 @@ Objectif V1 : > 20 %.
 | 4 | Conservateur, VisibilityLog, quarantaine, distorsion | fait |
 | 5 | LLM Operator, filtre constitutionnel | fait |
 | 6 | Traditions, conversations, export, métriques | fait |
-| 7 | Service Worker, upload binaire, Whisper, audit axe-core | ouvert |
+| 7 | Service Worker, hors-ligne, lien d'évitement, page courante annoncée | fait |
+| 7 | Upload binaire des archives, transcription Whisper, audit axe-core | ouvert |
 
 ---
 
@@ -419,8 +433,10 @@ lettre-non-envoyee
 - [x] Pas de données personnelles sensibles en base
 - [x] Variables d'environnement documentées (`.env.example`)
 - [x] README d'installation < 10 minutes
+- [x] Service Worker (réseau d'abord, cache en secours, page hors-ligne)
+- [x] Lien d'évitement clavier, page courante annoncée (`aria-current`)
 - [ ] Accessibilité : audit axe-core automatisé
-- [ ] Service Worker (offline)
+- [ ] Upload binaire des archives (l'API n'enregistre que les métadonnées)
 
 ---
 

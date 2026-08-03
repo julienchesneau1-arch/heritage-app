@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Nav } from '@/components/Nav';
+import { ServiceWorker } from '@/components/ServiceWorker';
 import { loadContext } from '@/lib/context';
 
 export const metadata: Metadata = {
@@ -22,9 +23,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="fr">
       <body className="min-h-screen">
+        {/* Lien d'évitement : la navigation compte sept liens, on doit pouvoir
+            les sauter au clavier. Visible seulement une fois focalisé. */}
+        <a
+          href="#contenu"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10 focus:rounded-sm focus:bg-ink focus:px-4 focus:py-3 focus:text-paper"
+        >
+          Aller au contenu
+        </a>
         <div className="mx-auto flex min-h-screen max-w-reading flex-col px-5">
           <Nav familyName={context?.family.name ?? null} member={context?.member ?? null} />
-          <main className="flex-1 py-8">{children}</main>
+          <main id="contenu" className="flex-1 py-8">
+            {children}
+          </main>
           <footer className="border-t border-rule py-6">
             {/* §6.3 : « Exporter » est visible dans le pied de chaque page. */}
             {context ? (
@@ -34,6 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             ) : null}
           </footer>
         </div>
+        <ServiceWorker />
       </body>
     </html>
   );

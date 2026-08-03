@@ -20,6 +20,7 @@ export const DISMISSAL_QUARANTINE_THRESHOLD = 3;
 
 const OVEREXPOSED_TTL_SECONDS = 30 * 86_400;
 const DISMISSAL_TTL_SECONDS = 90 * 86_400;
+const VIEW_DEDUPE_SECONDS = 30 * 60;
 
 export interface ConservateurReport {
   totalStories: number;
@@ -54,18 +55,31 @@ export class ConservateurService {
     });
   }
 
-  /** Une lecture effective : compteur + date de dernière vue. */
+  /**
+   * Une lecture effective : compteur + date de dernière vue.
+   *
+   * Dédupliquée par membre et par récit sur 30 minutes. Ce n'est pas une
+   * optimisation : le budget de visibilité se calcule sur ces journaux, donc
+   * sans déduplication, un membre qui rafraîchit sa page pousse le récit
+   * au-delà des 15 % et le fait sortir des suggestions. L'algorithme
+   * sanctionnerait une histoire pour un appui sur F5.
+   */
   async registerView(params: {
     familyId: string;
     storyId: string;
     memberId: string;
     context: VisibilityContext;
-  }): Promise<void> {
+  }): Promise<boolean> {
+    const key = viewKey(params.storyId, params.memberId);
+    if (await this.store.get(key)) return false;
+    await this.store.setex(key, VIEW_DEDUPE_SECONDS, 'true');
+
     await this.logVisibility(params);
     await this.prisma.story.update({
       where: { id: params.storyId },
       data: { views: { increment: 1 }, lastViewedAt: new Date() },
     });
+    return true;
   }
 
   /**
@@ -234,6 +248,10 @@ function monthsAgo(from: Date, months: number): Date {
 
 function overexposedKey(storyId: string) {
   return `conservateur:overexposed:${storyId}`;
+}
+
+function viewKey(storyId: string, memberId: string) {
+  return `view:${storyId}:${memberId}`;
 }
 
 function dismissalKey(storyId: string, memberId: string) {

@@ -76,7 +76,7 @@ src/
 |---|---|---|
 | `TriggerModelService` | Détecter quand le présent active le passé | Lire une donnée non déclarée dans l'app (GPS, contacts, calendrier) ; envoyer une notification |
 | `ConservateurService` | Empêcher qu'une histoire devienne inaccessible par effet d'algorithme | Modifier l'ordre d'affichage ; booster un récit oublié ; corriger un biais qu'il a mesuré |
-| `PasseurService` | Augmenter la probabilité qu'une histoire en engendre une autre | Poser plus d'une question par session ; poser une question sans justification |
+| `PasseurService` | Augmenter la probabilité qu'une histoire en engendre une autre | Poser plus d'une question par session ; poser une question sans justification ; parcourir tout le corpus |
 | `LLMOperatorService` | Exécuter des opérations informationnelles vérifiables | Décider ; inventer un fait ; inférer une émotion |
 
 Chaque service est indépendant. Ils communiquent par la base, jamais entre eux — sauf le Passeur, qui consulte le Conservateur pour écarter les récits sur-exposés.
@@ -91,6 +91,12 @@ Chaque service est indépendant. Ils communiquent par la base, jamais entre eux 
 - **Amendement 3 — la famille possède ses données.** `GET /api/family/:id/export` renvoie tout, sans traitement, sans filtre : archivés, quarantaine et journaux de visibilité compris.
 - **Amendement 5 — pas d'imposition algorithmique.** L'ordre d'affichage est chronologique partout. Le Conservateur ne peut qu'exclure des suggestions et documenter.
 - **Parcimonie.** Elle est appliquée dans les services, pas dans le CSS : `TriggerModelService` renvoie au plus un signal, `PasseurService` au plus une question par heure et par membre.
+
+### Coût du Passeur
+
+Chaque règle déclare une requête bornée (`where` + `take`) plutôt que de filtrer tout le corpus en mémoire, et la reformulation par le LLM n'intervient qu'**après** la sélection, sur la seule question affichée. Un test vérifie qu'une session ne produit qu'un appel au modèle, quel que soit le nombre de candidats.
+
+Une lecture n'est journalisée qu'une fois par membre et par récit sur 30 minutes : le budget de visibilité se calcule sur ces journaux, donc sans déduplication un rafraîchissement de page suffirait à faire sortir un récit des suggestions.
 
 ### Isolation des familles
 
@@ -112,6 +118,8 @@ Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient
 
 ## État d'avancement
 
-Sprints 0 à 6 de la roadmap (§10) sont implémentés : schéma et seed, CRUD des récits, graphe et entités, Trigger Model et Passeur, Conservateur, opérateur LLM, traditions, conversations, export et page métriques.
+Sprints 0 à 6 de la roadmap (§10) : schéma et seed, CRUD des récits, graphe et entités, Trigger Model et Passeur, Conservateur, opérateur LLM (classification, extraction d'entités, formulation), traditions, conversations, export et page métriques.
 
-Restent ouverts, côté sprint 7 : le Service Worker (le manifeste PWA est en place, pas le cache offline), l'upload binaire réel des archives (l'API enregistre les métadonnées d'un fichier déjà déposé sur le stockage objet), la transcription Whisper, et l'audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main dans le CSS et les composants.
+Sprint 7, fait : Service Worker (réseau d'abord, cache en secours, page hors-ligne), lien d'évitement clavier, page courante annoncée.
+
+Sprint 7, ouvert : upload binaire réel des archives — l'API enregistre aujourd'hui les métadonnées d'un fichier déjà déposé sur le stockage objet ; transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil.

@@ -1,4 +1,4 @@
-import type { Entity, Member, PrismaClient, Story } from '@prisma/client';
+import type { Conversation, Entity, Member, Prisma, PrismaClient, Story } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
 import { store as defaultStore, type KeyValueStore } from '@/lib/redis';
 import { constitutionEmotionFilter } from '@/lib/constitution';
@@ -16,6 +16,13 @@ import { ConservateurService, conservateur as defaultConservateur } from './cons
  *  2. La question doit être justifiable en une phrase.
  *  3. La question ne doit jamais inférer une émotion.
  *  4. La question doit pointer vers un vide informationnel.
+ *
+ * ── Coût ──
+ * Une règle ne parcourt jamais tout le corpus : elle déclare une requête
+ * bornée qui décrit ce qu'elle cherche. Et la formulation par le LLM
+ * n'intervient qu'APRÈS la sélection, sur la seule question retenue :
+ * poser la question au modèle pour chaque candidat reviendrait à payer
+ * cinquante appels pour en afficher un.
  */
 
 export interface PasseurQuestion {
@@ -26,19 +33,35 @@ export interface PasseurQuestion {
   confidence: number; // 0-1
 }
 
-export type StoryWithEntities = Story & { linkedEntities: Entity[] };
+export type StoryWithEntities = Story & {
+  linkedEntities: Entity[];
+  conversations: Conversation[];
+};
 
 export interface PasseurContext {
   members: Member[];
-  llm: LLMOperatorService;
+  /** Le membre à qui l'on s'adresse. Une question ne lui est jamais renvoyée. */
+  memberId: string;
   now: Date;
 }
 
 interface PasseurRule {
   id: string;
   weight: number;
-  test(story: StoryWithEntities, context: PasseurContext): Promise<boolean>;
-  generate(story: StoryWithEntities, context: PasseurContext): Promise<PasseurQuestion | null>;
+  /** Requête bornée : ce que la règle cherche, exprimé en SQL plutôt qu'en boucle. */
+  where(context: PasseurContext): Prisma.StoryWhereInput;
+  /** Nombre maximum de récits examinés par cette règle. */
+  take: number;
+  /** Filtre fin, en mémoire, sur le petit lot renvoyé. Synchrone et bon marché. */
+  match(story: StoryWithEntities, context: PasseurContext): boolean;
+  /** Formulation déterministe. C'est elle qui fait foi si le LLM est absent. */
+  draft(story: StoryWithEntities, context: PasseurContext): PasseurQuestion | null;
+  /** Reformulation par le LLM. Appelée uniquement sur la question retenue. */
+  enrich?(
+    question: PasseurQuestion,
+    story: StoryWithEntities,
+    llm: LLMOperatorService,
+  ): Promise<PasseurQuestion>;
 }
 
 /**
@@ -58,36 +81,79 @@ const TENSION_MARKERS = [
   /\bmais elle (n'|ne )/i,
 ];
 
+const YEAR_MS = 86_400_000 * 365.25;
+
 export const PASSEUR_RULES: PasseurRule[] = [
+  {
+    /**
+     * Un membre de la famille a posé une question, et personne n'a répondu.
+     *
+     * C'est le vide informationnel le plus pur du produit : il n'a pas été
+     * déduit d'un texte, il a été formulé par quelqu'un. Sans cette règle,
+     * une question posée n'est visible qu'en rouvrant le récit exact sur
+     * lequel elle porte — autant dire qu'elle se perd.
+     */
+    id: 'UNANSWERED_QUESTION',
+    weight: 1.0,
+    take: 10,
+    where: () => ({ conversations: { some: { status: 'pending' } } }),
+    match(story, context) {
+      return story.conversations.some(
+        (conversation) =>
+          conversation.status === 'pending' && conversation.questionerId !== context.memberId,
+      );
+    },
+    draft(story, context) {
+      const pending = story.conversations.find(
+        (conversation) =>
+          conversation.status === 'pending' && conversation.questionerId !== context.memberId,
+      );
+      if (!pending) return null;
+
+      const asker = context.members.find((member) => member.id === pending.questionerId);
+      return {
+        text: `« ${pending.questionText} »`,
+        justification: `${asker?.name ?? 'Un membre de la famille'} a posé cette question sur « ${story.title} ». Elle est restée sans réponse.`,
+        storyId: story.id,
+        ruleId: 'UNANSWERED_QUESTION',
+        confidence: 0.95,
+      };
+    },
+  },
   {
     id: 'TENSION_UNRESOLVED',
     weight: 1.0,
-    async test(story) {
+    take: 40,
+    // Les marqueurs ne s'expriment pas en SQL : on borne au corpus récent.
+    where: () => ({}),
+    match(story) {
       return TENSION_MARKERS.some((marker) => marker.test(story.content));
     },
-    async generate(story, context) {
-      // Formulation déterministe : c'est elle qui fait foi si le LLM est
-      // absent ou si sa sortie échoue à la vérification.
-      const fallback = `« ${story.title} » raconte un fait sans en donner la raison. Quelqu'un connaît-il le reste ?`;
-      const text = await context.llm.phraseQuestion(story.content, fallback);
-      if (!constitutionEmotionFilter(text)) return null;
+    draft(story) {
       return {
-        text,
+        text: `« ${story.title} » raconte un fait sans en donner la raison. Quelqu'un connaît-il le reste ?`,
         justification: `Cette histoire contient une tension non résolue : « ${story.title} ».`,
         storyId: story.id,
         ruleId: 'TENSION_UNRESOLVED',
         confidence: 0.8,
       };
     },
+    async enrich(question, story, llm) {
+      // Le LLM ne choisit ni l'histoire, ni la règle — seulement les mots.
+      const text = await llm.phraseQuestion(story.content, question.text);
+      return constitutionEmotionFilter(text) ? { ...question, text } : question;
+    },
   },
   {
     id: 'MISSING_VIEWPOINT',
     weight: 0.9,
-    async test(story, context) {
+    take: 40,
+    where: () => ({ linkedEntities: { some: { type: 'PERSON' } } }),
+    match(story, context) {
       const linkedPeople = story.linkedEntities.filter((entity) => entity.type === 'PERSON');
       return linkedPeople.length > 0 && linkedPeople.length < context.members.length;
     },
-    async generate(story, context) {
+    draft(story, context) {
       const linkedMemberIds = new Set(
         story.linkedEntities.map((entity) => entity.memberId).filter((id): id is string => Boolean(id)),
       );
@@ -108,12 +174,16 @@ export const PASSEUR_RULES: PasseurRule[] = [
   {
     id: 'RARE_PATRIMONY',
     weight: 0.8,
-    async test(story, context) {
-      const reference = story.lastViewedAt ?? story.createdAt;
-      const daysSince = (context.now.getTime() - reference.getTime()) / 86_400_000;
-      return daysSince > 365 && story.views < 5;
-    },
-    async generate(story) {
+    take: 10,
+    where: (context) => ({
+      views: { lt: 5 },
+      OR: [
+        { lastViewedAt: { lt: new Date(context.now.getTime() - YEAR_MS) } },
+        { lastViewedAt: null, createdAt: { lt: new Date(context.now.getTime() - YEAR_MS) } },
+      ],
+    }),
+    match: () => true,
+    draft(story) {
       return {
         text: `« ${story.title} » fait partie des récits les moins relus de la famille.`,
         justification: story.lastViewedAt
@@ -128,11 +198,11 @@ export const PASSEUR_RULES: PasseurRule[] = [
   {
     id: 'TEMPORAL_LINK',
     weight: 0.7,
-    async test(story, context) {
-      return yearsSince(story.createdAt, context.now) >= 2;
-    },
-    async generate(story, context) {
-      const years = yearsSince(story.createdAt, context.now);
+    take: 10,
+    where: (context) => ({ createdAt: { lt: new Date(context.now.getTime() - 2 * YEAR_MS) } }),
+    match: () => true,
+    draft(story, context) {
+      const years = Math.floor((context.now.getTime() - story.createdAt.getTime()) / YEAR_MS);
       return {
         text: `« ${story.title} » a été raconté il y a ${years} ans. Qu'est-ce qui a changé depuis ?`,
         justification: `Le temps a passé depuis la création de cette histoire (${years} ans).`,
@@ -163,44 +233,73 @@ export class PasseurService {
     // Parcimonie : une question par session.
     if (await this.store.get(sessionKey(familyId, memberId))) return null;
 
-    const [stories, members] = await Promise.all([
-      this.prisma.story.findMany({
-        where: { familyId, archived: false, quarantined: false },
-        include: { linkedEntities: true },
-      }),
-      this.prisma.member.findMany({ where: { familyId, isDeleted: false } }),
-    ]);
+    const members = await this.prisma.member.findMany({ where: { familyId, isDeleted: false } });
+    const context: PasseurContext = { members, memberId, now };
 
-    const context: PasseurContext = { members, llm: this.llm, now };
-    const candidates: PasseurQuestion[] = [];
+    // Une requête bornée par règle, en parallèle — jamais un scan du corpus.
+    const perRule = await Promise.all(
+      PASSEUR_RULES.map(async (rule) => ({
+        rule,
+        stories: (await this.prisma.story.findMany({
+          where: { familyId, archived: false, quarantined: false, ...rule.where(context) },
+          include: {
+            linkedEntities: true,
+            // Bornées elles aussi : une question en attente suffit à décrire le vide.
+            conversations: { where: { status: 'pending' }, orderBy: { createdAt: 'asc' }, take: 3 },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: rule.take,
+        })) as StoryWithEntities[],
+      })),
+    );
 
-    for (const story of stories) {
-      // Le Conservateur retire les sur-exposées des suggestions.
-      if (await this.conservateur.isOverexposed(story.id)) continue;
-
-      for (const rule of PASSEUR_RULES) {
-        if (!(await rule.test(story, context))) continue;
-        if (await this.wasAskedRecently(familyId, memberId, story.id, rule.id)) continue;
-
-        const question = await rule.generate(story, context);
-        // Règle 3 : filtre constitutionnel, y compris sur les formulations internes.
-        if (question && constitutionEmotionFilter(question.text)) candidates.push(question);
+    const drafts: PasseurQuestion[] = [];
+    for (const { rule, stories } of perRule) {
+      for (const story of stories) {
+        if (!rule.match(story, context)) continue;
+        const question = rule.draft(story, context);
+        // Règle 3 : le filtre constitutionnel s'applique aussi aux formulations internes.
+        if (question && constitutionEmotionFilter(question.text)) drafts.push(question);
       }
     }
 
-    if (candidates.length === 0) return null;
+    drafts.sort((a, b) => score(b) - score(a));
 
-    candidates.sort((a, b) => score(b) - score(a));
-    const selected = candidates[0]!;
+    // On descend le classement jusqu'au premier candidat recevable. Les
+    // vérifications coûteuses (store) ne portent que sur les meilleurs, pas
+    // sur les cinquante autres.
+    for (const candidate of drafts) {
+      if (await this.wasAskedRecently(familyId, memberId, candidate.storyId, candidate.ruleId)) continue;
+      // Le Conservateur retire les sur-exposées des suggestions.
+      if (await this.conservateur.isOverexposed(candidate.storyId)) continue;
 
-    await this.store.setex(sessionKey(familyId, memberId), SESSION_TTL_SECONDS, selected.ruleId);
-    await this.store.setex(
-      askedKey(familyId, memberId, selected.storyId, selected.ruleId),
-      RECENT_QUESTION_TTL_SECONDS,
-      'true',
-    );
+      const selected = await this.enrichSelected(candidate, perRule);
 
-    return selected;
+      await this.store.setex(sessionKey(familyId, memberId), SESSION_TTL_SECONDS, selected.ruleId);
+      await this.store.setex(
+        askedKey(familyId, memberId, selected.storyId, selected.ruleId),
+        RECENT_QUESTION_TTL_SECONDS,
+        'true',
+      );
+
+      return selected;
+    }
+
+    return null;
+  }
+
+  /** Un seul appel LLM par session, sur la seule question qui sera affichée. */
+  private async enrichSelected(
+    question: PasseurQuestion,
+    perRule: Array<{ rule: PasseurRule; stories: StoryWithEntities[] }>,
+  ): Promise<PasseurQuestion> {
+    const entry = perRule.find(({ rule }) => rule.id === question.ruleId);
+    if (!entry?.rule.enrich || !this.llm.isAvailable) return question;
+
+    const story = entry.stories.find((candidate) => candidate.id === question.storyId);
+    if (!story) return question;
+
+    return entry.rule.enrich(question, story, this.llm);
   }
 
   /** Une question ignorée ne revient pas avant deux semaines. */
@@ -216,10 +315,6 @@ export class PasseurService {
 function score(question: PasseurQuestion): number {
   const rule = PASSEUR_RULES.find((r) => r.id === question.ruleId);
   return question.confidence * (rule?.weight ?? 0);
-}
-
-function yearsSince(date: Date, now: Date): number {
-  return Math.floor((now.getTime() - date.getTime()) / (86_400_000 * 365.25));
 }
 
 function sessionKey(familyId: string, memberId: string) {

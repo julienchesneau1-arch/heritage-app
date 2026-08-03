@@ -1,7 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
 import { normalizeName, daysBetween } from '@/lib/normalize';
-import { DEFAULT_STRUCTURE_TYPE, lengthFromContent, type PassageTriggerType } from '@/lib/structure-types';
+import {
+  DEFAULT_STRUCTURE_TYPE,
+  ENTITY_TYPES,
+  lengthFromContent,
+  type PassageTriggerType,
+} from '@/lib/structure-types';
 import { LLMOperatorService, llmOperator } from './llm-operator.service';
 import type { CreateStoryInput } from '@/lib/validation';
 
@@ -23,7 +28,13 @@ export class StoryService {
       input.structureType ??
       (this.llm.isAvailable ? await this.llm.classifyStructure(input.content) : DEFAULT_STRUCTURE_TYPE);
 
-    const entities = await this.resolveEntities(familyId, input.entityNames ?? []);
+    // Les entités saisies par la famille font foi. Le LLM ne complète que
+    // le silence : il ne corrige ni ne complète une liste déjà donnée.
+    const declared = input.entityNames ?? [];
+    const extracted =
+      declared.length === 0 && this.llm.isAvailable ? await this.llm.extractEntities(input.content) : [];
+
+    const entities = await this.resolveEntities(familyId, declared.length > 0 ? declared : extracted);
 
     const story = await this.prisma.story.create({
       data: {
@@ -98,15 +109,18 @@ export class StoryService {
     familyId: string,
     names: Array<{ name: string; type: string }>,
   ) {
+    const members = names.some((entry) => entry.type === 'PERSON')
+      ? await this.prisma.member.findMany({ where: { familyId, isDeleted: false } })
+      : [];
+
     const resolved = [];
     for (const { name, type } of names) {
       const normalized = normalizeName(name);
-      if (!normalized) continue;
+      // Un type hors grammaire ne crée pas de nœud : le LLM classe dans la
+      // liste du système, il ne l'étend pas.
+      if (!normalized || !(ENTITY_TYPES as readonly string[]).includes(type)) continue;
 
-      const member =
-        type === 'PERSON'
-          ? await this.prisma.member.findFirst({ where: { familyId, name, isDeleted: false } })
-          : null;
+      const member = type === 'PERSON' ? matchMember(normalized, members) : null;
 
       resolved.push(
         await this.prisma.entity.upsert({
@@ -118,6 +132,29 @@ export class StoryService {
     }
     return resolved;
   }
+}
+
+/**
+ * Dans un récit on écrit « Robert », pas « Robert Martin ». Une égalité
+ * stricte ne rattacherait donc presque jamais l'entité au membre, et le
+ * graphe familial resterait vide de ses personnes.
+ *
+ * On accepte l'inclusion sur mots entiers — « robert » ⊂ « robert martin » —
+ * et on refuse dès que deux membres répondent : un prénom ambigu vaut mieux
+ * non rattaché que rattaché au mauvais.
+ */
+function matchMember<T extends { id: string; name: string }>(normalized: string, members: T[]): T | null {
+  const exact = members.filter((member) => normalizeName(member.name) === normalized);
+  if (exact.length === 1) return exact[0]!;
+  if (exact.length > 1) return null;
+
+  const words = new Set(normalized.split(' '));
+  const partial = members.filter((member) => {
+    const memberWords = normalizeName(member.name).split(' ');
+    return [...words].every((word) => memberWords.includes(word));
+  });
+
+  return partial.length === 1 ? partial[0]! : null;
 }
 
 export const storyService = new StoryService();
