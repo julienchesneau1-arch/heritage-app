@@ -9,6 +9,8 @@ import {
   type DoubtReason,
   type ReviewedSegment,
 } from '@/lib/transcription-doubt';
+import { compareTranscriptions, consensusSummary } from '@/lib/transcription-consensus';
+import { LocalTranscription } from '@/components/LocalTranscription';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +56,19 @@ export default async function DraftPage({
               ? `La transcription a échoué : ${draft.error}`
               : 'Ce brouillon a déjà été traité.'}
         </p>
+
+        {draft.status !== 'validated' ? (
+          <section className="space-y-2 border-t border-rule pt-6">
+            <h2 className="section-label">Transcrire sans rien envoyer, sans rien payer</h2>
+            <LocalTranscription
+              familyId={context.family.id}
+              draftId={draft.id}
+              audioUrl={`/api/family/${context.family.id}/archives/${draft.archive.id}/file`}
+              role="first"
+            />
+          </section>
+        ) : null}
+
         <Link href="/brouillons" className="btn">
           Retour
         </Link>
@@ -64,6 +79,14 @@ export default async function DraftPage({
   const segments = (draft.segments ?? []) as unknown as ReviewedSegment[];
   const suspects = segments.filter((segment) => segment.suspect);
   const removed = segments.filter((segment) => segment.artifact);
+
+  // Deux modèles indépendants n'inventent pratiquement jamais la même chose :
+  // le désaccord désigne les passages à réécouter, bien mieux que n'importe
+  // quel indicateur de confiance.
+  const consensus =
+    draft.secondText && draft.rawText
+      ? compareTranscriptions(draft.rawText, draft.secondText)
+      : null;
 
   return (
     <div className="space-y-8">
@@ -104,6 +127,47 @@ export default async function DraftPage({
           </ul>
         </section>
       ) : null}
+
+      {consensus ? (
+        <section className="space-y-3 border-t border-rule pt-6">
+          <h2 className="section-label">Deux transcriptions comparées</h2>
+          <p className="leading-relaxed">{consensusSummary(consensus)}</p>
+          <p className="leading-relaxed">
+            {consensus.tokens.map((token, index) =>
+              token.kind === 'agreed' ? (
+                <span key={index}>{token.a} </span>
+              ) : (
+                <mark
+                  key={index}
+                  className="bg-transparent underline decoration-accent decoration-2 underline-offset-4"
+                  title={`Autre version : ${token.b ?? '(rien)'}`}
+                >
+                  {token.a ?? `[${token.b} ?]`}{' '}
+                </mark>
+              ),
+            )}
+          </p>
+          <p className="justification">
+            Souligné : les deux transcriptions ne disent pas la même chose. Ce sont ces passages-là
+            qu’il faut réécouter — le reste est confirmé par deux modèles indépendants.
+          </p>
+        </section>
+      ) : (
+        <section className="space-y-2 border-t border-rule pt-6">
+          <h2 className="section-label">Second avis</h2>
+          <p className="justification">
+            Une deuxième transcription, faite par un autre modèle sur cet appareil, désigne les
+            passages où les deux ne s’accordent pas. C’est le meilleur repère dont on dispose — et il
+            ne coûte rien.
+          </p>
+          <LocalTranscription
+            familyId={context.family.id}
+            draftId={draft.id}
+            audioUrl={`/api/family/${context.family.id}/archives/${draft.archive.id}/file`}
+            role="second"
+          />
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="section-label">

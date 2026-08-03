@@ -259,9 +259,48 @@ La charte du §3.4 l'avait déjà inscrit — « transcrire audio → vérifié 
 
 **Réglages :** `temperature: 0`, `language: 'fr'` forcé, et **aucun `prompt`** — un prompt oriente la sortie vers ce qu'il contient, précisément le biais qu'on refuse. Un test vérifie chacun de ces réglages.
 
-**Coût et échelle.** La transcription ne tourne jamais dans le cycle d'une requête : dix minutes d'audio dépassent le délai d'une fonction serverless. `POST /api/transcriptions/process`, protégée par un secret, dépile la file ; à appeler par une tâche planifiée. Le brouillon apparaît ensuite dans « À mettre au propre » — aucune notification, conformément au §12.
+### 3.5.1 Coût nul et durée illimitée — transcription locale
 
-À 0,006 $ la minute, cent familles au rythme réel du produit coûtent une trentaine de dollars par mois. L'auto-hébergement (`whisper.cpp`) ne devient rentable qu'au-delà de ~700 heures d'audio mensuelles, hors d'atteinte ici ; il reste l'option juste pour une famille qui refuse que la voix quitte la maison.
+**Le coût était la vraie barrière d'accès.** Facturer à la minute revient à demander à une famille de peser si un souvenir vaut son prix, et à écourter les récits longs — c'est-à-dire les plus précieux. La transcription tourne donc, par défaut, **dans le navigateur de la famille** (`transformers.js`, WebGPU sinon WASM).
+
+| | Local | API |
+|---|---|---|
+| 1 min | 0 $ | 0,006 $ |
+| 60 min | 0 $ | 0,36 $ |
+| 180 min | 0 $ | 1,08 $ |
+
+La durée n'est plus un paramètre économique. Elle n'est plus qu'un temps d'attente sur l'appareil.
+
+**L'audio ne sort pas.** C'est l'engagement, et il est tenu. En revanche la bibliothèque et les poids du modèle sont téléchargés depuis un CDN, une fois, puis mis en cache. Une famille qui veut un appareil totalement isolé doit héberger ces fichiers elle-même. La distinction est réelle et doit être dite comme telle.
+
+**Contrepartie assumée** : le modèle local est plus petit, donc moins juste que celui de l'API. C'est compensé par les deux mécanismes ci-dessous, et par la relecture humaine qui reste obligatoire dans tous les cas.
+
+### 3.5.2 Retrait des silences — la mitigation en amont
+
+Whisper invente **sur le vide**. Ne pas lui donner de vide supprime l'occasion. C'est la seule mitigation qui agisse avant la génération plutôt qu'après.
+
+Une détection d'activité vocale (énergie par fenêtre de 20 ms, seuil **relatif** au niveau de l'enregistrement — un seuil absolu déclarerait muette une aïeule qui parle doucement) isole les passages parlés et ne transmet qu'eux. Sur un récit réel de trois minutes ponctué de longues pauses : **43 % de parole, 102 secondes de silence jamais soumises au modèle**.
+
+Le découpage sert aussi la durée : un enregistrement d'une heure devient une suite de morceaux bornés. Les frontières sont choisies **dans les silences** — jamais au milieu d'une phrase, car une coupe en pleine parole produit deux moitiés de mot que le modèle complète, c'est-à-dire invente.
+
+### 3.5.3 Consensus — le levier de précision le plus fort
+
+Deux modèles indépendants n'inventent pratiquement jamais la **même** chose : une hallucination est le produit d'un chemin de décodage particulier, pas d'une propriété du son.
+
+D'où une règle plus forte que n'importe quel indicateur de confiance :
+
+- Là où deux transcriptions coïncident mot pour mot, le texte est très probablement ce qui a été dit.
+- Là où elles divergent, il faut écouter. Sans exception.
+
+Cela transforme la relecture : au lieu de vérifier trois minutes de texte, on vérifie les quatre endroits de désaccord. Un second avis local coûte lui aussi zéro.
+
+L'alignement se fait par plus longue sous-séquence commune — un alignement mot à mot déraillerait dès la première insertion et déclarerait divergent tout ce qui suit. La ponctuation, la casse et les accents ne comptent pas comme des désaccords : les signaler noierait les vrais écarts. Deux divergences séparées par un seul mot commun sont fusionnées : « quatre heures douze » contre « seize heures trente » est **un** passage à réécouter, pas deux.
+
+**Ce qui n'est jamais fait : fusionner automatiquement les deux versions.** Le résultat serait un texte que personne n'a prononcé ni validé. La version principale reste la référence ; le second avis ne fait que désigner où regarder.
+
+**Coût et échelle.** La transcription par API ne tourne jamais dans le cycle d'une requête : dix minutes d'audio dépassent le délai d'une fonction serverless. `POST /api/transcriptions/process`, protégée par un secret, dépile la file ; à appeler par une tâche planifiée. Le brouillon apparaît ensuite dans « À mettre au propre » — aucune notification, conformément au §12.
+
+L'API reste disponible comme second avis ou comme recours pour un appareil trop faible. Mais elle n'est plus le chemin par défaut : le défaut est gratuit.
 
 ---
 

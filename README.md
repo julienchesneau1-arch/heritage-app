@@ -152,7 +152,23 @@ Le produit ne promet donc pas l'exactitude. Il organise la vérification :
 
 `whisper-1` (pas `gpt-4o-transcribe`, qui lisse et n'expose pas le doute), `temperature: 0`, langue forcée, **aucun prompt**. Des tests fixent chacun de ces réglages.
 
-Clé : https://platform.openai.com/api-keys. Sans elle, tout le reste fonctionne — l'enregistrement audio marche seul.
+### Coût nul, durée illimitée
+
+Le coût était la vraie barrière : facturer à la minute revient à demander à une famille si un souvenir vaut son prix, et à écourter les récits longs — les plus précieux. Par défaut, **la transcription tourne dans le navigateur** (`transformers.js`, WebGPU sinon WASM).
+
+| | Local | API |
+|---|---|---|
+| 1 min | 0 $ | 0,006 $ |
+| 60 min | 0 $ | 0,36 $ |
+| 180 min | 0 $ | 1,08 $ |
+
+L'audio ne sort pas de l'appareil. La bibliothèque et les poids, eux, viennent d'un CDN — une fois, puis en cache. Pour un appareil totalement isolé, il faut les héberger soi-même.
+
+**Les silences sont retirés avant transcription.** C'est la seule mitigation qui agisse *avant* la génération : Whisper invente sur le vide, donc on ne lui donne pas de vide. Sur un récit de trois minutes avec de longues pauses, mesuré : 43 % de parole, **102 secondes de silence jamais soumises au modèle**. Le découpage coupe dans les silences, jamais au milieu d'une phrase.
+
+**Le consensus est le levier le plus fort.** Deux modèles indépendants n'inventent pratiquement jamais la même chose. Un second avis — gratuit lui aussi — souligne les passages où les deux ne s'accordent pas : ce sont ceux-là, et ceux-là seuls, qu'il faut réécouter. Les deux versions ne sont jamais fusionnées automatiquement : le résultat serait un texte que personne n'a prononcé.
+
+Clé API (optionnelle, pour un second avis ou un appareil trop faible) : https://platform.openai.com/api-keys.
 
 ### Isolation des familles
 

@@ -285,8 +285,19 @@ model TranscriptionDraft {
 
   model           String?
   durationSeconds Float?  @map("duration_seconds")
-  suspectCount    Int     @default(0) @map("suspect_count")
-  error           String?
+
+  // D'où vient la transcription : 'local' (navigateur, coût nul) ou 'api'.
+  source String @default("api")
+
+  // Second avis. Deux modèles indépendants n'inventent pratiquement jamais
+  // la même chose : là où ils coïncident le texte est très probablement
+  // juste, là où ils divergent il faut écouter. C'est le levier de précision
+  // le plus fort dont on dispose.
+  secondText   String? @map("second_text")
+  secondSource String? @map("second_source")
+  secondModel  String? @map("second_model")
+  suspectCount Int     @default(0) @map("suspect_count")
+  error        String?
 
   createdAt   DateTime  @default(now()) @map("created_at")
   processedAt DateTime? @map("processed_at")
