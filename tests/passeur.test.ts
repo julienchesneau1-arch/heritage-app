@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { PasseurService, PASSEUR_RULES } from '@/services/passeur.service';
+import {
+  PasseurService,
+  PASSEUR_RULES,
+  couldRememberFirsthand,
+  tensionFragment,
+} from '@/services/passeur.service';
 import { ConservateurService } from '@/services/conservateur.service';
 import { LLMOperatorService } from '@/services/llm-operator.service';
 import { createMemoryStore, type KeyValueStore } from '@/lib/redis';
@@ -64,10 +69,17 @@ function matchesWhere(story: Record<string, unknown>, where: Record<string, unkn
   });
 }
 
+const MEMBERS = [
+  { id: 'mem_1', name: 'Emma', birthDate: new Date(1998, 2, 4), deathDate: null },
+  { id: 'mem_2', name: 'Claire', birthDate: new Date(1971, 0, 9), deathDate: null },
+  { id: 'mem_3', name: 'Philippe', birthDate: new Date(1968, 10, 30), deathDate: null },
+];
+
 function buildService(
   stories: Array<Record<string, unknown>>,
   store: KeyValueStore = createMemoryStore(),
   llm = new LLMOperatorService(undefined),
+  members: Array<Record<string, unknown>> = MEMBERS,
 ) {
   const prisma = {
     story: {
@@ -75,11 +87,7 @@ function buildService(
         stories.filter((story) => matchesWhere(story, where)).slice(0, take ?? undefined),
     },
     member: {
-      findMany: async () => [
-        { id: 'mem_1', name: 'Emma', deathDate: null },
-        { id: 'mem_2', name: 'Claire', deathDate: null },
-        { id: 'mem_3', name: 'Philippe', deathDate: null },
-      ],
+      findMany: async () => members,
     },
     visibilityLog: { groupBy: async () => [] },
     // Rien n'est mis en sourdine par ce membre dans ces scénarios.
@@ -257,6 +265,15 @@ describe('PasseurService — Constitution', () => {
     }
   });
 
+  it('aucune justification produite par les règles n’affirme plus que ce qu’elle vérifie', async () => {
+    const context = { members: MEMBERS, memberId: 'mem_1', now: NOW };
+    for (const rule of PASSEUR_RULES) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const question = rule.draft(TENSION_STORY as any, context as any);
+      if (question) expect(constitutionEmotionFilter(question.justification)).toBe(true);
+    }
+  });
+
   it('la règle TENSION ne se déclenche pas sur des mots-outils banals', () => {
     // Un test naïf sur « ne », « pas », « mais » ferait de chaque récit une tension.
     const rule = PASSEUR_RULES.find((r) => r.id === 'TENSION_UNRESOLVED')!;
@@ -266,5 +283,215 @@ describe('PasseurService — Constitution', () => {
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(rule.match(banal as any, {} as any)).toBe(false);
+  });
+});
+
+/**
+ * Trois affirmations du Passeur ne reposaient sur rien de vérifié.
+ * Ce bloc les tient : une question peut être infondée — elle ne peut pas
+ * être présentée comme un constat.
+ */
+describe('Le Passeur n’affirme que ce qu’il a vérifié', () => {
+  describe('MISSING_VIEWPOINT — ne demande pas son avis à qui n’était pas né', () => {
+    const rule = PASSEUR_RULES.find((r) => r.id === 'MISSING_VIEWPOINT')!;
+
+    const demenagement = {
+      ...TENSION_STORY,
+      id: 's_demenagement',
+      title: 'Le déménagement de Bordeaux',
+      content: 'On est partis en novembre. Le camion était trop petit.',
+      eventDate: new Date(1971, 10, 3),
+      authorId: 'mem_2',
+      linkedEntities: [{ id: 'e1', type: 'PERSON', memberId: 'mem_2' }],
+    };
+
+    function draftFor(members: Array<Record<string, unknown>>) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return rule.draft(demenagement as any, { members, memberId: 'mem_2', now: NOW } as any);
+    }
+
+    it('écarte un membre né après l’événement raconté', () => {
+      // Lucas, né en 2019, n'a pas de point de vue sur 1971.
+      expect(
+        draftFor([{ id: 'mem_9', name: 'Lucas', birthDate: new Date(2019, 3, 2), deathDate: null }]),
+      ).toBeNull();
+    });
+
+    it('écarte un membre trop jeune au moment de l’événement pour s’en souvenir', () => {
+      // Cas relevé sur les données réelles : Emma, née le jour même de
+      // l'événement, était invitée à donner sa version de sa naissance.
+      expect(draftFor([{ id: 'mem_5', name: 'Emma', birthDate: new Date(1971, 10, 3), deathDate: null }]))
+        .toBeNull();
+      expect(draftFor([{ id: 'mem_6', name: 'Nino', birthDate: new Date(1969, 5, 1), deathDate: null }]))
+        .toBeNull();
+    });
+
+    it('écarte un membre mort avant l’événement raconté', () => {
+      expect(
+        draftFor([
+          {
+            id: 'mem_8',
+            name: 'Robert',
+            birthDate: new Date(1901, 0, 1),
+            deathDate: new Date(1965, 5, 12),
+          },
+        ]),
+      ).toBeNull();
+    });
+
+    it('retient un membre qui aurait pu y être', () => {
+      const question = draftFor([
+        { id: 'mem_3', name: 'Philippe', birthDate: new Date(1960, 10, 30), deathDate: null },
+      ]);
+      expect(question?.text).toContain('Philippe');
+    });
+
+    it('ne disqualifie pas un membre dont on ignore la date de naissance', () => {
+      // Ne pas savoir n'est pas savoir que non : le doute laisse la question ouverte.
+      const question = draftFor([
+        { id: 'mem_7', name: 'Jeanne', birthDate: null, deathDate: null },
+      ]);
+      expect(question?.text).toContain('Jeanne');
+    });
+
+    it('ne prétend plus que le membre choisi est lié au récit', () => {
+      // L'ancienne justification disait « lié à cette histoire » alors que la
+      // règle sélectionne exactement l'inverse.
+      const question = draftFor([
+        { id: 'mem_3', name: 'Philippe', birthDate: new Date(1960, 10, 30), deathDate: null },
+      ]);
+      expect(question!.justification).not.toContain('lié');
+      expect(question!.justification).toContain("n'apparaît pas");
+    });
+
+    it('formule une invitation, pas un constat sur ce qu’il aurait vécu', () => {
+      const question = draftFor([
+        { id: 'mem_3', name: 'Philippe', birthDate: new Date(1960, 10, 30), deathDate: null },
+      ]);
+      expect(question!.text).toContain('peut-être');
+    });
+  });
+
+  describe('couldRememberFirsthand', () => {
+    const reference = new Date(1971, 10, 3);
+
+    it('exclut une naissance postérieure', () => {
+      expect(couldRememberFirsthand({ birthDate: new Date(2019, 0, 1), deathDate: null }, reference)).toBe(
+        false,
+      );
+    });
+
+    it('exclut un enfant trop jeune à la date de l’événement', () => {
+      expect(couldRememberFirsthand({ birthDate: new Date(1969, 0, 1), deathDate: null }, reference)).toBe(
+        false,
+      );
+    });
+
+    it('exclut un décès antérieur', () => {
+      expect(
+        couldRememberFirsthand({ birthDate: new Date(1901, 0, 1), deathDate: new Date(1965, 0, 1) }, reference),
+      ).toBe(false);
+    });
+
+    it('accepte un vivant né avant', () => {
+      expect(couldRememberFirsthand({ birthDate: new Date(1950, 0, 1), deathDate: null }, reference)).toBe(
+        true,
+      );
+    });
+
+    it('accepte quand les deux dates sont inconnues', () => {
+      expect(couldRememberFirsthand({ birthDate: null, deathDate: null }, reference)).toBe(true);
+    });
+  });
+
+  describe('TENSION_UNRESOLVED — cite au lieu de décréter', () => {
+    const rule = PASSEUR_RULES.find((r) => r.id === 'TENSION_UNRESOLVED')!;
+
+    it('cite le passage qui a déclenché la règle', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const question = rule.draft(TENSION_STORY as any, {} as any);
+      // La citation est extraite du récit, mot pour mot : la famille peut
+      // vérifier elle-même si le Passeur a lu quelque chose de réel.
+      expect(question!.justification).toContain('Il refusait');
+      expect(TENSION_STORY.content).toContain('Il refusait');
+    });
+
+    it('ne décrète plus une « tension non résolue »', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const question = rule.draft(TENSION_STORY as any, {} as any);
+      expect(question!.justification.toLowerCase()).not.toContain('tension');
+    });
+
+    it('ne produit rien plutôt qu’une citation vide', () => {
+      const sansMarqueur = { ...TENSION_STORY, content: 'On mangeait des poires en octobre.' };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect(rule.draft(sansMarqueur as any, {} as any)).toBeNull();
+    });
+  });
+
+  describe('tensionFragment', () => {
+    it('rend la phrase entière, pas trois mots arrachés', () => {
+      // Le marqueur est « refusait » ; la citation va d'un point à l'autre.
+      expect(tensionFragment('Il partait tôt. Il refusait de dire où. On mangeait sans lui.')).toBe(
+        'Il refusait de dire où',
+      );
+    });
+
+    it('cite un fragment présent tel quel dans le récit', () => {
+      const contenu = 'On a déménagé en mars. Personne ne sait qui a gardé la clé du grenier.';
+      const fragment = tensionFragment(contenu)!;
+      expect(contenu).toContain(fragment);
+    });
+
+    it('abrège une phrase trop longue sans la couper au milieu du néant', () => {
+      const long = `Il refusait ${'de répondre '.repeat(20)}.`;
+      const fragment = tensionFragment(long)!;
+      expect(fragment.length).toBeLessThanOrEqual(90);
+      expect(fragment.endsWith('…')).toBe(true);
+    });
+
+    it('ne rend rien quand aucun marqueur n’est présent', () => {
+      expect(tensionFragment('Le poirier donne trop de fruits à la mi-octobre.')).toBeNull();
+    });
+  });
+
+  describe('RARE_PATRIMONY — des faits, pas un comparatif invérifié', () => {
+    const rule = PASSEUR_RULES.find((r) => r.id === 'RARE_PATRIMONY')!;
+
+    it('ne prétend plus que le récit est parmi les moins relus de la famille', () => {
+      // La règle n'examine que ce récit : elle ne peut rien dire des autres.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const question = rule.draft({ ...TENSION_STORY, views: 2 } as any, {} as any);
+      expect(question!.text).not.toContain('les moins');
+      expect(question!.justification).not.toContain('les moins');
+    });
+
+    it('donne le compte de lectures et la date de la dernière', () => {
+      const question = rule.draft(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { ...TENSION_STORY, views: 3, lastViewedAt: new Date(2024, 0, 15) } as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        {} as any,
+      );
+      expect(question!.justification).toContain('3 lectures');
+      expect(question!.justification).toContain('2024-01-15');
+    });
+
+    it('distingue « jamais rouvert » de « pas rouvert depuis un an »', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const jamais = rule.draft({ ...TENSION_STORY, views: 0, lastViewedAt: null } as any, {} as any);
+      expect(jamais!.text).toContain('jamais été rouvert');
+      expect(jamais!.justification).toContain('Aucune lecture enregistrée');
+    });
+
+    it('accorde le singulier sur une seule lecture', () => {
+      const question = rule.draft(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { ...TENSION_STORY, views: 1, lastViewedAt: new Date(2024, 0, 15) } as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        {} as any,
+      );
+      expect(question!.justification).toContain('1 lecture enregistrée,');
+    });
   });
 });

@@ -180,6 +180,22 @@ La page Transmission affichait des zéros là où rien n'avait pu être mesuré 
 
 Un récit jamais relu n'est plus compté comme « oublié depuis douze mois » s'il a été écrit la semaine dernière — c'était factuellement faux, et cela remplissait la veillée de nouveautés présentées comme du patrimoine en péril.
 
+### Le Passeur peut poser une question douteuse, pas la justifier à tort
+
+Une question du Passeur a le droit de tomber à côté : c'est une question, la famille répond ou passe. Sa **justification**, elle, est une affirmation, et trois d'entre elles portaient sur ce que la règle n'avait pas vérifié.
+
+- `MISSING_VIEWPOINT` disait « un membre **lié à cette histoire** n'a pas donné son point de vue » alors qu'elle sélectionne précisément quelqu'un qui n'y est **pas** rattaché : elle affirmait le contraire de son propre critère.
+- `TENSION_UNRESOLVED` décrétait une « tension non résolue » là où elle avait repéré une tournure. Elle **cite** maintenant le passage déclencheur, mot pour mot, pour que la famille juge elle-même.
+- `RARE_PATRIMONY` annonçait un récit « parmi les moins relus » sans jamais avoir regardé les autres. Elle donne le nombre de lectures et la date de la dernière.
+
+Le même défaut avait une conséquence plus concrète : le seul filtre de plausibilité était « pas décédé ». Sur la famille de démonstration, l'application demandait à Lucas (né en 2019) son souvenir d'un déménagement de 1971, et à Emma son point de vue sur un événement daté du jour de sa naissance. `couldRememberFirsthand()` écarte qui n'était pas né, qui était déjà mort, et qui avait moins de cinq ans. Une date de naissance inconnue, en revanche, ne disqualifie personne.
+
+### Une liste bornée qui dit qu'elle l'est
+
+« Récits » chargeait le corpus entier, sans limite : cinq mille récits dans une page. Elle est paginée par 50 — et elle l'annonce (« Récits 51 à 63 sur 63 »), faute de quoi elle retomberait dans le défaut que le graphe avait déjà corrigé.
+
+Tant que les archives sont masquées, « Aucun récit ne correspond » pouvait s'afficher alors que la recherche trouvait douze récits archivés. Trois situations disent maintenant trois phrases différentes, et le lien d'inclusion porte le compte de ce qu'il cache.
+
 ### Isolation des familles
 
 Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient le cookie signé ; une requête portant sur une autre famille reçoit `403`.
@@ -206,6 +222,6 @@ Sprints 0 à 6 de la roadmap (§10) : schéma et seed, CRUD des récits, graphe 
 
 Sprint 7, fait : Service Worker (réseau d'abord, cache en secours, page hors-ligne), lien d'évitement clavier, page courante annoncée.
 
-Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, intégration continue.
+Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, justifications du Passeur ramenées à ce qu'elles vérifient, liste des récits paginée et explicite sur ce qu'elle masque, intégration continue.
 
 Ouvert : transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil. Le pilote S3 est écrit mais n'a pas pu être testé contre un vrai bucket depuis cet environnement.

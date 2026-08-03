@@ -203,7 +203,7 @@ Le type MIME déclaré doit figurer dans une liste fermée (JPEG, PNG, WebP, HEI
 |---|---|---|---|
 | `UNANSWERED_QUESTION` | 1.0 | 0.95 | Un membre a posé une question, personne n'a répondu |
 | `TENSION_UNRESOLVED` | 1.0 | 0.8 | Un fait est dit, sa raison ne l'est pas |
-| `MISSING_VIEWPOINT` | 0.9 | 0.7 | Un membre lié n'a pas donné sa version |
+| `MISSING_VIEWPOINT` | 0.9 | 0.7 | Un membre qui n'apparaît pas dans le récit n'en a pas donné sa version |
 | `RARE_PATRIMONY` | 0.8 | 0.6 | Récit ancien, peu lu |
 | `TEMPORAL_LINK` | 0.7 | 0.5 | Deux ans ou plus se sont écoulés |
 
@@ -214,6 +214,18 @@ Sélection par `confiance × poids`. Une paire (récit, règle) déjà jouée ne
 **Coût.** Une règle ne parcourt jamais le corpus : elle déclare une requête bornée (`where` + `take`) qui décrit ce qu'elle cherche. La formulation par le LLM intervient **après** la sélection, sur la seule question retenue — l'appeler pour chaque candidat reviendrait à payer cinquante appels pour en afficher un.
 
 **Note d'implémentation** : le test de `TENSION_UNRESOLVED` proposé dans la spec v1.0 cherchait les mots `ne`, `pas`, `mais`, `toujours`. Ce test est vrai sur presque tout texte français : il aurait fait de chaque récit une tension, donc d'aucun. Il a été remplacé par des marqueurs de tension explicites (« il refusait », « on n'a jamais su », « sans expliquer »).
+
+**Ce que chaque règle a le droit d'affirmer.** Une question du Passeur peut être infondée — c'est une question. Sa **justification**, elle, est une affirmation faite à la famille, et elle ne peut porter que sur ce que la règle a réellement vérifié. Trois justifications ne respectaient pas cette limite et ont été corrigées :
+
+| Règle | Ce qu'elle affirmait | Ce qu'elle vérifie réellement |
+|---|---|---|
+| `MISSING_VIEWPOINT` | « un membre **lié à cette histoire** n'a pas donné son point de vue » | l'inverse exact de son critère : elle sélectionne quelqu'un qui n'y est **pas** rattaché |
+| `TENSION_UNRESOLVED` | « ce récit contient une **tension non résolue** » | la présence d'une tournure lexicale, pas une tension |
+| `RARE_PATRIMONY` | « fait partie des récits **les moins relus** » | ce récit seul — jamais les autres, donc jamais un comparatif |
+
+Désormais : `MISSING_VIEWPOINT` dit que le membre n'apparaît pas dans le récit ; `TENSION_UNRESOLVED` **cite** le passage qui l'a déclenchée, mot pour mot, pour que la famille juge elle-même ; `RARE_PATRIMONY` donne le nombre de lectures et la date de la dernière, et distingue « jamais rouvert » de « pas rouvert depuis un an ».
+
+**Plausibilité de `MISSING_VIEWPOINT`.** La règle ne proposait qu'un filtre « pas décédé ». Sur les données réelles, elle demandait à Lucas (né en 2019) son souvenir d'un déménagement de 1971, et à Emma son point de vue sur un événement daté du jour de sa naissance. `couldRememberFirsthand()` écarte donc qui n'était pas né, qui était déjà mort, et qui avait moins de cinq ans au moment de l'événement (`Story.eventDate`, à défaut `createdAt`). Une date de naissance **inconnue** ne disqualifie personne : ne pas savoir n'est pas savoir que non.
 
 ### 3.4 LLMOperatorService — `src/services/llm-operator.service.ts`
 
@@ -419,6 +431,17 @@ L'interdit est conservé, la forme change : le graphe est **centré**. On entre 
 
 - Cercles colorés : bleu (personne), marron (lieu), orange (objet), rouge (récit).
 - Lignes grises = liens déclarés, jamais déduits.
+
+### 5.3 bis « Récits » — la seule vue exhaustive
+
+C'est la page vers laquelle renvoient toutes les vues bornées (graphe, veillée, « Aujourd'hui »). Elle porte donc deux obligations contradictoires en apparence :
+
+- **Ne jamais tout charger.** La requête était sans `take` : une famille de cinq mille récits en rendait cinq mille dans une seule page. Elle est désormais paginée par 50, du plus récent au plus ancien (l'ordre chronologique de l'amendement 5 est conservé).
+- **Ne jamais laisser croire qu'elle s'arrête là.** Une liste paginée muette sur sa pagination retombe dans le défaut du graphe. Elle annonce donc « Récits 51 à 63 sur 63 ».
+
+**Ce que le filtre écarte est compté.** Tant que les archives sont masquées, « Aucun récit ne correspond » pouvait s'afficher alors que douze récits archivés correspondaient parfaitement à la recherche. Trois situations distinctes disent maintenant trois phrases distinctes : aucun récit du tout, aucune correspondance, ou aucune correspondance **active** — avec le nombre d'archivés qui, eux, correspondent. Le lien d'inclusion porte ce compte.
+
+**La recherche survit à la navigation.** Tourner la page ou basculer les archives conservait l'un et perdait l'autre : tous les liens de la page reconstruisent la requête complète (`q`, `type`, `archivees`), et le formulaire GET reporte le filtre d'archives dans un champ caché.
 
 ### 5.4 La veillée — extension hors spec v1.0, assumée
 

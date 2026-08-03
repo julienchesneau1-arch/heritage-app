@@ -130,9 +130,16 @@ export const PASSEUR_RULES: PasseurRule[] = [
       return TENSION_MARKERS.some((marker) => marker.test(story.content));
     },
     draft(story) {
+      // On ne détecte pas une « tension non résolue » : on repère une
+      // tournure. Décréter la tension serait présenter une inférence comme
+      // un constat. Citer le passage rend la justification vérifiable —
+      // la famille peut juger elle-même si le Passeur a raison.
+      const fragment = tensionFragment(story.content);
+      if (!fragment) return null;
+
       return {
         text: `« ${story.title} » raconte un fait sans en donner la raison. Quelqu'un connaît-il le reste ?`,
-        justification: `Cette histoire contient une tension non résolue : « ${story.title} ».`,
+        justification: `Ce récit dit : « ${fragment} » — sans dire pourquoi.`,
         storyId: story.id,
         ruleId: 'TENSION_UNRESOLVED',
         confidence: 0.8,
@@ -157,14 +164,30 @@ export const PASSEUR_RULES: PasseurRule[] = [
       const linkedMemberIds = new Set(
         story.linkedEntities.map((entity) => entity.memberId).filter((id): id is string => Boolean(id)),
       );
+
+      // La date de l'événement raconté, à défaut celle du récit.
+      const reference = story.eventDate ?? story.createdAt;
+
       const missing = context.members.find(
-        (member) => !linkedMemberIds.has(member.id) && member.id !== story.authorId && !member.deathDate,
+        (member) =>
+          !linkedMemberIds.has(member.id) &&
+          member.id !== story.authorId &&
+          !member.deathDate &&
+          // Sans ce filtre, l'application demandait à un enfant de sept ans
+          // son point de vue sur un déménagement de 1971. Absurde, et blessant
+          // quand le récit touche à un deuil.
+          couldRememberFirsthand(member, reference),
       );
       if (!missing) return null;
 
       return {
-        text: `${missing.name} n'a pas encore raconté cette histoire de son point de vue.`,
-        justification: `Un membre de la famille lié à cette histoire n'a pas encore partagé son point de vue.`,
+        // Ce n'est pas un constat sur ce que ce membre a vécu — on n'en sait
+        // rien. C'est une invitation, et elle est formulée comme telle.
+        text: `${missing.name} en garde peut-être un autre souvenir. Le sien n'a pas été noté.`,
+        // L'ancienne justification disait « un membre lié à cette histoire »
+        // alors que la règle choisit précisément quelqu'un qui n'y est PAS
+        // rattaché : elle affirmait le contraire de son propre critère.
+        justification: `${missing.name} n'apparaît pas dans ce récit, et n'en a pas donné sa version.`,
         storyId: story.id,
         ruleId: 'MISSING_VIEWPOINT',
         confidence: 0.7,
@@ -184,10 +207,16 @@ export const PASSEUR_RULES: PasseurRule[] = [
     }),
     match: () => true,
     draft(story) {
+      // « fait partie des récits les moins relus » est un comparatif que la
+      // règle ne vérifie pas : elle teste ce récit seul, jamais les autres.
+      // Si tout le corpus est peu lu, celui-ci n'a rien de singulier. On
+      // s'en tient donc à ce qui est mesuré.
       return {
-        text: `« ${story.title} » fait partie des récits les moins relus de la famille.`,
+        text: story.lastViewedAt
+          ? `« ${story.title} » n'a pas été rouvert depuis plus d'un an.`
+          : `« ${story.title} » n'a jamais été rouvert depuis qu'il a été écrit.`,
         justification: story.lastViewedAt
-          ? `Dernière lecture enregistrée : ${story.lastViewedAt.toISOString().split('T')[0]}.`
+          ? `${story.views} lecture${story.views > 1 ? 's' : ''} enregistrée${story.views > 1 ? 's' : ''}, la dernière le ${story.lastViewedAt.toISOString().split('T')[0]}.`
           : `Aucune lecture enregistrée depuis la création de ce récit.`,
         storyId: story.id,
         ruleId: 'RARE_PATRIMONY',
@@ -319,6 +348,51 @@ export class PasseurService {
   private async wasAskedRecently(familyId: string, memberId: string, storyId: string, ruleId: string) {
     return (await this.store.get(askedKey(familyId, memberId, storyId, ruleId))) === 'true';
   }
+}
+
+/**
+ * Âge en deçà duquel on n'invite pas quelqu'un à raconter son souvenir d'un
+ * événement. Ce n'est pas une théorie sur la mémoire : c'est une borne de
+ * bon sens. Sur les données réelles, sans elle, l'application proposait à
+ * Emma — née le jour même — de donner sa version de sa propre naissance.
+ */
+const MEMORY_AGE_YEARS = 5;
+
+/**
+ * Cette personne peut-elle avoir un souvenir de première main de ce récit ?
+ *
+ * On ne conclut jamais qu'elle en a un — seulement qu'elle n'est pas exclue.
+ * Une date de naissance inconnue ne disqualifie personne : on ne sait pas,
+ * et on ne prétend pas savoir.
+ */
+export function couldRememberFirsthand(
+  member: { birthDate: Date | null; deathDate: Date | null },
+  reference: Date,
+): boolean {
+  if (member.birthDate && member.birthDate.getTime() > reference.getTime() - MEMORY_AGE_YEARS * YEAR_MS)
+    return false;
+  if (member.deathDate && member.deathDate < reference) return false;
+  return true;
+}
+
+/** Le bout de phrase qui a déclenché la règle, rendu citable. */
+export function tensionFragment(content: string, maxLength = 90): string | null {
+  for (const marker of TENSION_MARKERS) {
+    const found = content.match(marker);
+    if (!found || found.index === undefined) continue;
+
+    // On étend jusqu'aux frontières de phrase, pour citer quelque chose de
+    // lisible plutôt que trois mots arrachés à leur contexte.
+    const before = content.lastIndexOf('.', found.index) + 1;
+    const afterDot = content.indexOf('.', found.index + found[0].length);
+    const after = afterDot === -1 ? content.length : afterDot;
+
+    const sentence = content.slice(before, after).replace(/\s+/g, ' ').trim();
+    if (!sentence) continue;
+
+    return sentence.length > maxLength ? `${sentence.slice(0, maxLength - 1).trimEnd()}…` : sentence;
+  }
+  return null;
 }
 
 function score(question: PasseurQuestion): number {
