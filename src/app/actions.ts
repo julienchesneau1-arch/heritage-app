@@ -12,6 +12,7 @@ import {
 } from '@/lib/session';
 import { familyService } from '@/services/family.service';
 import { importService } from '@/services/import.service';
+import { transcriptionService } from '@/services/transcription.service';
 import { createFamilySchema, memberSchema, updateStorySchema } from '@/lib/validation';
 import { prisma } from '@/lib/prisma';
 import { conservateur } from '@/services/conservateur.service';
@@ -525,4 +526,101 @@ export async function restoreBackup(formData: FormData) {
   cookies().set({ ...familyCookieOptions(), value: signFamilyToken(result.familyId) });
   revalidatePath('/', 'layout');
   redirect(`/qui?restaure=${encodeURIComponent(`${result.familyName} : ${summary}.`)}`);
+}
+
+// ─── Transcription : l'audio est l'original, le texte un brouillon ───
+
+/**
+ * Met un enregistrement en file de transcription. Rien n'est transcrit ici :
+ * le traitement se fait en tâche de fond, et le brouillon apparaît ensuite
+ * dans « À mettre au propre ». Aucune notification — §12.
+ */
+export async function requestTranscription(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const archiveId = String(formData.get('archiveId') ?? '');
+  const result = await transcriptionService.requestDraft({
+    familyId: context.family.id,
+    archiveId,
+    memberId: context.member.id,
+  });
+
+  revalidatePath('/brouillons');
+  if ('error' in result && result.error) {
+    redirect(`/brouillons?erreur=${encodeURIComponent(result.error)}`);
+  }
+  redirect(`/brouillons/${result.draft!.id}`);
+}
+
+export async function retryTranscription(formData: FormData) {
+  const context = await requireContext();
+  await transcriptionService.retry(context.family.id, String(formData.get('draftId') ?? ''));
+  revalidatePath('/brouillons');
+}
+
+/**
+ * Validation d'un brouillon : c'est ICI, et seulement ici, qu'un texte
+ * transcrit entre dans la mémoire de la famille. Tant qu'un humain n'a pas
+ * écouté et relu, rien n'existe.
+ *
+ * Le narrateur est celui dont on entend la voix ; l'auteur, celui qui a
+ * validé. Le texte brut du modèle est conservé pour pouvoir comparer plus
+ * tard ce qui a été proposé et ce qui a été retenu.
+ */
+export async function validateTranscription(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const draftId = String(formData.get('draftId') ?? '');
+  const draft = await prisma.transcriptionDraft.findFirst({
+    where: { id: draftId, familyId: context.family.id, status: 'ready' },
+  });
+  if (!draft) redirect('/brouillons');
+
+  const rawNarrator = String(formData.get('narratorId') ?? '');
+  const narratorId =
+    rawNarrator && rawNarrator !== context.member.id && context.members.some((m) => m.id === rawNarrator)
+      ? rawNarrator
+      : undefined;
+
+  const parsed = createStorySchema.safeParse({
+    authorId: context.member.id,
+    narratorId,
+    title: String(formData.get('title') ?? '').trim(),
+    content: String(formData.get('content') ?? '').trim(),
+    tone: 'factuel',
+  });
+  if (!parsed.success) redirect(`/brouillons/${draftId}?erreur=1`);
+
+  const story = await storyService.createStory(context.family.id, parsed.data);
+
+  await prisma.$transaction([
+    // L'enregistrement reste attaché au récit : l'audio est la référence.
+    prisma.archive.update({ where: { id: draft.archiveId }, data: { storyId: story.id } }),
+    prisma.transcriptionDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: 'validated',
+        storyId: story.id,
+        validatedById: context.member.id,
+        validatedAt: new Date(),
+      },
+    }),
+  ]);
+
+  revalidatePath('/brouillons');
+  revalidatePath('/recits');
+  redirect(`/recits/${story.id}`);
+}
+
+/** Écarter un brouillon. L'enregistrement, lui, reste : c'est l'original. */
+export async function discardTranscription(formData: FormData) {
+  const context = await requireContext();
+  await prisma.transcriptionDraft.updateMany({
+    where: { id: String(formData.get('draftId') ?? ''), familyId: context.family.id },
+    data: { status: 'discarded' },
+  });
+  revalidatePath('/brouillons');
+  redirect('/brouillons');
 }

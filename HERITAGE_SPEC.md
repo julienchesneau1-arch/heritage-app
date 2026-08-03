@@ -238,6 +238,31 @@ Toute sortie traverse deux filtres : la vérification propre à l'opération, pu
 
 **Rattachement aux membres.** Dans un récit on écrit « Robert », pas « Robert Martin ». Le rattachement accepte donc l'inclusion sur mots entiers, et refuse dès que deux membres répondent : un prénom ambigu vaut mieux non rattaché que rattaché au mauvais.
 
+### 3.5 Transcription — opération vérifiée par l'humain
+
+**Aucune garantie d'exactitude n'est possible, et le produit ne prétend pas en offrir.** Whisper est un modèle génératif : il ne reconnaît pas des mots, il prédit la suite la plus probable. Sur un silence, une respiration ou une hésitation, il ne rend pas du vide — il rend ce qui vient statistiquement ensuite. Il invente donc des phrases entières, grammaticalement parfaites et jamais prononcées, et il le fait davantage sur les voix âgées et hésitantes : le profil exact de ceux pour qui cette fonction existe.
+
+La charte du §3.4 l'avait déjà inscrit — « transcrire audio → vérifié par : l'utilisateur écoute et corrige ». Pour toutes les autres opérations LLM, la vérification est mécanisable. Pour celle-ci, elle est humaine, et rien ne la remplace.
+
+**L'architecture porte donc la justesse, pas le modèle.**
+
+| Principe | Mise en œuvre |
+|---|---|
+| L'audio est l'original | L'enregistrement est conservé et rattaché au récit. Le texte n'en est qu'une copie contestable. |
+| Une transcription n'est pas un récit | `TranscriptionDraft`, modèle séparé. Tant qu'elle n'est pas validée, elle ne compte dans aucune métrique et n'apparaît ni dans la veillée ni chez le Passeur. |
+| Le doute est visible | Chaque segment porte les indicateurs du modèle lui-même, avec les seuils de l'implémentation de référence de Whisper : `avg_logprob < -1.0`, `compression_ratio > 2.4`, `no_speech_prob > 0.6`. |
+| Les inventions connues sont retirées | Artefacts de sous-titrage (« Sous-titres réalisés par… », « Merci d'avoir regardé… ») supprimés et listés explicitement à l'écran. |
+| Le doute n'est jamais supprimé | Un passage douteux mais possiblement réel est **conservé et signalé**. Supprimer serait décider à la place de la famille. |
+| La provenance est affichée | « Transcrit automatiquement (whisper-1), vérifié par Claire le 3 août. » |
+
+**Choix du modèle : `whisper-1`, pas `gpt-4o-transcribe`.** Le second rend un texte plus lisse, donc plus reformulé — or la façon dont quelqu'un construit ses phrases fait partie de ce qui se transmet. Surtout, `whisper-1` en `verbose_json` est le seul à exposer les indicateurs de doute par segment. Sans eux, la relecture humaine se ferait à l'aveugle sur tout le texte.
+
+**Réglages :** `temperature: 0`, `language: 'fr'` forcé, et **aucun `prompt`** — un prompt oriente la sortie vers ce qu'il contient, précisément le biais qu'on refuse. Un test vérifie chacun de ces réglages.
+
+**Coût et échelle.** La transcription ne tourne jamais dans le cycle d'une requête : dix minutes d'audio dépassent le délai d'une fonction serverless. `POST /api/transcriptions/process`, protégée par un secret, dépile la file ; à appeler par une tâche planifiée. Le brouillon apparaît ensuite dans « À mettre au propre » — aucune notification, conformément au §12.
+
+À 0,006 $ la minute, cent familles au rythme réel du produit coûtent une trentaine de dollars par mois. L'auto-hébergement (`whisper.cpp`) ne devient rentable qu'au-delà de ~700 heures d'audio mensuelles, hors d'atteinte ici ; il reste l'option juste pour une famille qui refuse que la voix quitte la maison.
+
 ---
 
 ## 4. API REST
@@ -494,7 +519,8 @@ Objectif V1 : > 20 %.
 | — | La veillée (§5.4), questions en un geste (§5.5) | fait |
 | — | Narrateur ≠ scribe (§2.3), stockage et affichage des archives (§2.4), taille du texte | fait |
 | — | Onboarding (§2.4), correction (§2.5), sourdine par membre (§2.6), recherche (§2.7), pilote S3 (§2.8), identité (§4.1), graphe centré (§5.3), restauration, CI | fait |
-| 7 | Transcription Whisper, audit axe-core automatisé | ouvert |
+| — | Transcription vérifiée par l'humain (§3.5) | fait |
+| 7 | Audit axe-core automatisé | ouvert |
 
 ---
 

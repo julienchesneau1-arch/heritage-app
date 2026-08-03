@@ -5,12 +5,14 @@ import { prisma } from '@/lib/prisma';
 import { formatDateFr } from '@/lib/normalize';
 import { ONE_TAP_QUESTIONS } from '@/lib/questions';
 import { conservateur } from '@/services/conservateur.service';
+import { AudioRecorder } from '@/components/AudioRecorder';
 import {
   answerQuestion,
   archiveStory,
   askQuestion,
   deleteStory,
   releaseQuarantine,
+  requestTranscription,
   uploadArchive,
 } from '@/app/actions';
 
@@ -46,6 +48,9 @@ export default async function StoryPage({
       narrator: { select: { name: true, isDeleted: true } },
       linkedEntities: true,
       archives: { orderBy: { createdAt: 'asc' } },
+      transcriptionDraft: {
+        select: { validatedAt: true, validatedBy: { select: { name: true } }, model: true },
+      },
       conversations: {
         orderBy: { createdAt: 'asc' },
         include: {
@@ -96,6 +101,15 @@ export default async function StoryPage({
             : `Par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`}{' '}
           · {formatDateFr(story.eventDate ?? story.createdAt)} · {story.structureType} · {story.tone}
         </p>
+        {/* Provenance : la famille doit toujours savoir quel texte a été
+            proposé par une machine, et par qui il a été vérifié. */}
+        {story.transcriptionDraft?.validatedAt ? (
+          <p className="justification">
+            Transcrit automatiquement ({story.transcriptionDraft.model}), vérifié par{' '}
+            {story.transcriptionDraft.validatedBy?.name ?? 'un membre'} le{' '}
+            {formatDateFr(story.transcriptionDraft.validatedAt)}.
+          </p>
+        ) : null}
       </header>
 
       <div className="whitespace-pre-wrap text-lg leading-relaxed">{story.content}</div>
@@ -113,12 +127,26 @@ export default async function StoryPage({
                   loading="lazy"
                 />
               ) : archive.type === 'AUDIO' ? (
-                <audio controls preload="none" className="w-full">
-                  <source
-                    src={`/api/family/${context.family.id}/archives/${archive.id}/file`}
-                    type={archive.mimeType}
-                  />
-                </audio>
+                <div className="space-y-2">
+                  <audio controls preload="none" className="w-full">
+                    <source
+                      src={`/api/family/${context.family.id}/archives/${archive.id}/file`}
+                      type={archive.mimeType}
+                    />
+                  </audio>
+                  {context.member ? (
+                    <form action={requestTranscription} className="space-y-1">
+                      <input type="hidden" name="archiveId" value={archive.id} />
+                      <button type="submit" className="justification underline">
+                        Proposer une transcription
+                      </button>
+                      <p className="justification">
+                        Une machine proposera un texte. Il faudra l’écouter et le relire avant qu’il
+                        devienne un récit — elle se trompe, et il lui arrive d’inventer.
+                      </p>
+                    </form>
+                  ) : null}
+                </div>
               ) : (
                 <a
                   href={`/api/family/${context.family.id}/archives/${archive.id}/file`}
@@ -139,6 +167,7 @@ export default async function StoryPage({
           <label htmlFor="file" className="section-label block">
             Ajouter une photo ou un enregistrement
           </label>
+          <AudioRecorder inputId="file" />
           <input
             id="file"
             name="file"

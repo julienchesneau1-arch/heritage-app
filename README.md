@@ -63,6 +63,7 @@ src/
 │   ├── commencer/          Fonder une famille
 │   ├── famille/            Membres, liens personnels, révocation
 │   ├── restaurer/          Recréer une famille depuis un export
+│   ├── brouillons/         Transcriptions à écouter et relire avant validation
 │   ├── veillee/            Trois récits à lire à voix haute, ensemble
 │   ├── recits/             Liste, lecture, création
 │   ├── archives/           Photos, documents, enregistrements
@@ -137,6 +138,22 @@ Le cookie de membre est signé, niveau compris — sinon il suffirait de remplac
 
 `/recits/<id>/modifier` corrige le texte d'un récit. Ce n'est pas du confort : avant, la seule façon de rattraper une faute dans un récit dicté était de supprimer et retaper, et `DELETE` efface les `Passage` attachés. Corriger une virgule coûtait une chaîne de transmission — la seule chose que le produit mesure.
 
+### La transcription ne garantit rien — l'architecture, si
+
+Whisper **invente**. C'est un modèle génératif : sur un silence ou une hésitation, il rend la suite la plus probable, pas le silence. Il produit des phrases entières jamais prononcées, et davantage sur les voix âgées — celles pour qui la fonction existe. Aucun réglage ne supprime ça.
+
+Le produit ne promet donc pas l'exactitude. Il organise la vérification :
+
+- **L'audio est l'original**, conservé et rattaché au récit. Le texte n'en est qu'une copie contestable.
+- **Une transcription n'est pas un récit** : elle attend dans `/brouillons` et ne compte dans aucune métrique tant qu'un membre n'a pas écouté et relu.
+- **Le doute est visible** : chaque segment porte les indicateurs de Whisper lui-même (`avg_logprob`, `compression_ratio`, `no_speech_prob`), avec les seuils de son implémentation de référence.
+- **Les inventions connues sont retirées** et listées à l'écran ; **le doute, lui, est conservé et signalé** — supprimer un passage peut-être réel serait décider à la place de la famille.
+- **La provenance est affichée** sur le récit final.
+
+`whisper-1` (pas `gpt-4o-transcribe`, qui lisse et n'expose pas le doute), `temperature: 0`, langue forcée, **aucun prompt**. Des tests fixent chacun de ces réglages.
+
+Clé : https://platform.openai.com/api-keys. Sans elle, tout le reste fonctionne — l'enregistrement audio marche seul.
+
 ### Isolation des familles
 
 Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient le cookie signé ; une requête portant sur une autre famille reçoit `403`.
@@ -152,6 +169,7 @@ Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient
 | `REDIS_URL` | non | Compteurs partagés entre instances |
 | `OPENAI_API_KEY` | non | Classification, extraction d'entités, formulation des questions |
 | `STORAGE_DIR` | non | Répertoire des archives (défaut `.data/archives`) |
+| `TRANSCRIPTION_WORKER_SECRET` | si transcription | Protège la route qui dépile la file (elle déclenche des appels facturés). |
 | `STORAGE_S3_*` | en production | Bucket S3/R2. Sans lui, sur un hébergement éphémère, les photos disparaissent au redéploiement. |
 
 ---

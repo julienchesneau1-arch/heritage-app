@@ -7,6 +7,7 @@ const PAGES = [
   { href: '/', label: 'Aujourd’hui' },
   { href: '/veillee', label: 'Veillée' },
   { href: '/recits', label: 'Récits' },
+  { href: '/brouillons', label: 'À mettre au propre' },
   { href: '/archives', label: 'Archives' },
   { href: '/traditions', label: 'Traditions' },
   { href: '/graphe', label: 'Graphe' },

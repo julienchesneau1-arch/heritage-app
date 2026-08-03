@@ -62,6 +62,9 @@ model Member {
   archivesUploaded Archive[]
   mutedStories     StoryMute[]
 
+  transcriptionsRequested TranscriptionDraft[] @relation("Requester")
+  transcriptionsValidated TranscriptionDraft[] @relation("Validator")
+
   @@index([familyId])
   @@map("members")
 }
@@ -121,6 +124,9 @@ model Story {
   visibilityLogs VisibilityLog[]
   mutes          StoryMute[]
 
+  // Provenance : ce récit vient-il d'une transcription, et qui l'a vérifiée ?
+  transcriptionDraft TranscriptionDraft?
+
   @@index([familyId, createdAt])
   @@map("stories")
 }
@@ -169,6 +175,8 @@ model Archive {
   family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
   uploader Member @relation(fields: [uploaderId], references: [id])
   story    Story? @relation(fields: [storyId], references: [id])
+
+  transcriptionDraft TranscriptionDraft?
 
   @@index([familyId])
   @@map("archives")
@@ -242,6 +250,58 @@ model Passage {
   @@unique([parentStoryId, childStoryId])
   @@index([familyId])
   @@map("passages")
+}
+
+// ─── BROUILLON DE TRANSCRIPTION ───
+//
+// Whisper est un modèle génératif : il n'entend pas des mots, il prédit la
+// suite la plus probable. Sur un silence, une respiration, une hésitation,
+// il ne rend pas du vide — il rend ce qui vient statistiquement ensuite.
+// Il invente donc, et le fait le plus sur les voix âgées, hésitantes : le
+// profil exact de ceux pour qui cette fonction existe.
+//
+// D'où ce modèle séparé. Une transcription n'est PAS un récit. Elle attend
+// dans un brouillon jusqu'à ce qu'un membre ait écouté et validé. Tant
+// qu'elle n'est pas validée, elle ne compte dans aucune métrique, n'apparaît
+// ni dans la veillée ni chez le Passeur, et n'existe pas pour la famille.
+//
+// L'audio reste l'original. Le texte n'en est qu'une copie contestable.
+model TranscriptionDraft {
+  id            String @id @default(cuid())
+  familyId      String @map("family_id")
+  archiveId     String @unique @map("archive_id")
+  requestedById String @map("requested_by_id")
+
+  // pending → ready → validated | discarded ; failed en cas d'erreur
+  status String @default("pending")
+
+  // Texte brut tel que rendu par le modèle, JAMAIS retouché.
+  // Conservé même après validation : il permet de comparer ce que la
+  // machine a proposé à ce que la famille a retenu.
+  rawText String? @map("raw_text")
+
+  // Segments horodatés + indicateurs de doute du modèle lui-même.
+  segments Json?
+
+  model           String?
+  durationSeconds Float?  @map("duration_seconds")
+  suspectCount    Int     @default(0) @map("suspect_count")
+  error           String?
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+
+  validatedById String?   @map("validated_by_id")
+  validatedAt   DateTime? @map("validated_at")
+  storyId       String?   @unique @map("story_id")
+
+  archive     Archive @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+  requestedBy Member  @relation("Requester", fields: [requestedById], references: [id])
+  validatedBy Member? @relation("Validator", fields: [validatedById], references: [id])
+  story       Story?  @relation(fields: [storyId], references: [id])
+
+  @@index([familyId, status])
+  @@map("transcription_drafts")
 }
 
 // ─── MISE EN SOURDINE (quarantaine, par membre) ───
