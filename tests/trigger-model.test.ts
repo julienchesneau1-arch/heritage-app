@@ -11,7 +11,8 @@ function fakePrisma(overrides: Record<string, unknown> = {}) {
   return {
     tradition: { findFirst: async () => null },
     member: { findMany: async () => [] },
-    story: { findMany: async () => [] },
+    // Le filtre jour-mois est fait en SQL : c'est $queryRaw qu'on simule.
+    $queryRaw: async () => [],
     family: { findUnique: async () => ({ id: FAMILY, name: 'Martin' }) },
     ...overrides,
   } as unknown as PrismaClient;
@@ -28,11 +29,7 @@ describe('TriggerModelService — parcimonie', () => {
             { id: 'm2', name: 'Robert', birthDate: null, deathDate: new Date(2014, 9, 15) },
           ],
         },
-        story: {
-          findMany: async () => [
-            { id: 's1', title: 'La tarte', createdAt: new Date(2022, 9, 15) },
-          ],
-        },
+        $queryRaw: async () => [{ id: 's1', title: 'La tarte', createdAt: new Date(2022, 9, 15) }],
       }),
       createMemoryStore(),
     );
@@ -112,5 +109,52 @@ describe('TriggerModelService — droit au silence', () => {
     await service.dismissSignalType(FAMILY, MEMBER, 'TRADITION');
     const signal = await service.generateSignal(FAMILY, MEMBER, TODAY);
     expect(signal?.type).toBe('TRADITION');
+  });
+});
+
+describe('TriggerModelService — coût de l’écran d’accueil', () => {
+  /**
+   * L'anniversaire « il y a X ans » chargeait tous les récits actifs de la
+   * famille, à chaque ouverture de l'écran le plus visité, pour n'en retenir
+   * presque jamais aucun. Le tri par jour-mois appartient à la base.
+   */
+  it('ne charge jamais le corpus pour trouver les récits du jour', async () => {
+    let scanned = false;
+    const service = new TriggerModelService(
+      fakePrisma({
+        story: {
+          findMany: async () => {
+            scanned = true;
+            return [];
+          },
+        },
+      }),
+      createMemoryStore(),
+    );
+
+    await service.generateSignal(FAMILY, MEMBER, TODAY);
+    expect(scanned).toBe(false);
+  });
+
+  it('demande à la base les récits de ce jour-là, et rien d’autre', async () => {
+    const queries: string[] = [];
+    const service = new TriggerModelService(
+      fakePrisma({
+        $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+          queries.push(strings.join('?'));
+          expect(values).toContain(FAMILY);
+          // Octobre, 15, et l'année en cours comme borne haute.
+          expect(values).toContain(10);
+          expect(values).toContain(15);
+          expect(values).toContain(2026);
+          return [];
+        },
+      }),
+      createMemoryStore(),
+    );
+
+    await service.generateSignal(FAMILY, MEMBER, TODAY);
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain('LIMIT 3');
   });
 });

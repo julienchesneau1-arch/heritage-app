@@ -91,23 +91,23 @@ export class TriggerModelService {
     }
 
     // 3. « Il y a X ans » — un récit raconté ce jour-là, une année antérieure.
-    const stories = await this.prisma.story.findMany({
-      where: { familyId, archived: false, quarantined: false },
-      select: { id: true, title: true, createdAt: true },
-    });
-    for (const story of stories) {
+    //
+    // Cette recherche chargeait TOUS les récits actifs de la famille pour n'en
+    // retenir, en moyenne, aucun : un balayage complet du corpus sur l'écran
+    // le plus ouvert du produit. Le tri par jour-mois se dit très bien en SQL.
+    // On n'en garde que trois : la parcimonie n'en affichera qu'un.
+    const anniversaires = await this.storiesOnThisDay(familyId, now);
+    for (const story of anniversaires) {
       const years = now.getFullYear() - story.createdAt.getFullYear();
-      if (years > 0 && monthDayOf(story.createdAt) === monthDay) {
-        signals.push({
-          type: 'TEMPORAL',
-          priority: 3,
-          payload: {
-            storyId: story.id,
-            message: `Il y a ${years} ${plural(years, 'an', 'ans')}, « ${story.title} » a été raconté.`,
-            justification: `Date de création de l'histoire : ${isoDay(story.createdAt)}.`,
-          },
-        });
-      }
+      signals.push({
+        type: 'TEMPORAL',
+        priority: 3,
+        payload: {
+          storyId: story.id,
+          message: `Il y a ${years} ${plural(years, 'an', 'ans')}, « ${story.title} » a été raconté.`,
+          justification: `Date de création de l'histoire : ${isoDay(story.createdAt)}.`,
+        },
+      });
     }
 
     // Un type de signal fermé 3 fois de suite est muet pendant 30 jours.
@@ -138,6 +138,29 @@ export class TriggerModelService {
   async generateSignal(familyId: string, memberId: string, now = new Date()): Promise<TriggerSignal | null> {
     const [signal] = await this.generateSignals(familyId, memberId, now);
     return signal ?? null;
+  }
+
+  /**
+   * Les récits créés un 15 octobre d'une année passée. Le filtre jour-mois
+   * n'est pas exprimable dans le `where` de Prisma : il passe par du SQL,
+   * borné et paramétré.
+   */
+  private async storiesOnThisDay(
+    familyId: string,
+    now: Date,
+  ): Promise<Array<{ id: string; title: string; createdAt: Date }>> {
+    return this.prisma.$queryRaw<Array<{ id: string; title: string; createdAt: Date }>>`
+      SELECT id, title, created_at AS "createdAt"
+      FROM stories
+      WHERE family_id = ${familyId}
+        AND archived = false
+        AND quarantined = false
+        AND EXTRACT(MONTH FROM created_at) = ${now.getMonth() + 1}
+        AND EXTRACT(DAY   FROM created_at) = ${now.getDate()}
+        AND EXTRACT(YEAR  FROM created_at) < ${now.getFullYear()}
+      ORDER BY created_at ASC
+      LIMIT 3
+    `;
   }
 
   /** L'utilisateur ferme un signal. Trois fermetures = silence de 30 jours. */
