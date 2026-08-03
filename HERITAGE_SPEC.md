@@ -413,6 +413,8 @@ Titre, auteur, date, texte intégral, entités liées, chaînes de transmission 
 
 La disposition en deux anneaux tenait avec six entités ; à cinquante, les étiquettes se chevauchaient et le graphe ne disait plus rien. Le §5.3 interdit le zoom et la physique de particules, et il a raison : ce n'est pas un outil d'exploration, c'est une image à saisir d'un coup d'œil.
 
+**Ce que la vue cache est dit.** Une image bornée qui se tait sur ses bornes affirme une complétude qu'elle n'a pas : huit points laisseraient croire que Robert n'apparaît que dans huit récits alors qu'il y en a quatorze. La page annonce donc « 8 récits affichés sur 14 », et signale les éléments liés écartés.
+
 L'interdit est conservé, la forme change : le graphe est **centré**. On entre par une personne, un lieu ou un objet — l'index propose les plus reliés — puis on voit ses voisins immédiats et on se déplace de proche en proche. Au plus 8 récits et 12 éléments affichés à la fois : le nombre de nœuds est borné par construction, quelle que soit la taille de la mémoire.
 
 - Cercles colorés : bleu (personne), marron (lieu), orange (objet), rouge (récit).
@@ -437,7 +439,7 @@ C'est la lecture littérale de la fiche d'identité : « Pas un réseau social. 
 | Place | Choix | Justification affichée |
 |---|---|---|
 | 1 | Le récit que personne n'a relu | « Personne ne l'a relu depuis le … » |
-| 2 | Celui qui relie le plus d'entités | « C'est le récit qui relie le plus de personnes, de lieux et d'objets (N). » |
+| 2 | Celui qui relie le plus d'entités | « C'est le récit qui relie le plus… (N) » — **uniquement s'il est réellement seul en tête**. Sinon : « Il relie N personnes, lieux ou objets — comme d'autres récits ; celui-ci a été retenu. » |
 | 3 | Le dernier arrivé | « C'est le récit le plus récemment ajouté. » |
 
 Si le corpus ne fournit pas trois récits, la veillée en compte moins. Jamais de remplissage.

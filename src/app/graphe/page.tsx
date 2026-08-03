@@ -54,12 +54,15 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
 
   // ── Sans point d'entrée : l'index des entités les plus reliées ──
   if (!selected) {
-    const entities = await prisma.entity.findMany({
-      where: { familyId: context.family.id },
-      include: { _count: { select: { stories: true } } },
-      orderBy: { stories: { _count: 'desc' } },
-      take: 40,
-    });
+    const [entities, entitiesTotal] = await Promise.all([
+      prisma.entity.findMany({
+        where: { familyId: context.family.id },
+        include: { _count: { select: { stories: true } } },
+        orderBy: [{ stories: { _count: 'desc' } }, { name: 'asc' }],
+        take: 40,
+      }),
+      prisma.entity.count({ where: { familyId: context.family.id } }),
+    ]);
 
     return (
       <div className="space-y-6">
@@ -72,6 +75,9 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
             <p className="justification">
               Le graphe se lit de proche en proche : on part de quelqu’un, ou de quelque chose, et on
               suit les récits qui y mènent.
+              {entitiesTotal > entities.length
+                ? ` ${entities.length} éléments affichés sur ${entitiesTotal} — les plus reliés d’abord.`
+                : ''}
             </p>
             <ul className="divide-y divide-rule border-y border-rule">
               {entities.map((entity) => (
@@ -103,30 +109,38 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
   }
 
   // ── Voisinage immédiat : les récits liés, et ce qu'ils touchent d'autre ──
-  const stories = await prisma.story.findMany({
-    where: {
-      familyId: context.family.id,
-      archived: false,
-      linkedEntities: { some: { id: selected.id } },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: MAX_STORIES,
-    select: {
-      id: true,
-      title: true,
-      linkedEntities: { select: { id: true, name: true, type: true } },
-    },
-  });
+  const linkedToSelected = {
+    familyId: context.family.id,
+    archived: false,
+    linkedEntities: { some: { id: selected.id } },
+  };
 
-  const neighbours = new Map<string, { id: string; name: string; type: string }>();
+  // Un graphe borné qui ne dit pas ce qu'il cache affirme une complétude
+  // qu'il n'a pas : huit points feraient croire que Robert n'apparaît que
+  // dans huit récits. On compte donc ce qui existe, pas seulement ce qu'on
+  // montre.
+  const [stories, storiesTotal] = await Promise.all([
+    prisma.story.findMany({
+      where: linkedToSelected,
+      orderBy: { createdAt: 'desc' },
+      take: MAX_STORIES,
+      select: {
+        id: true,
+        title: true,
+        linkedEntities: { select: { id: true, name: true, type: true } },
+      },
+    }),
+    prisma.story.count({ where: linkedToSelected }),
+  ]);
+
+  const allNeighbours = new Map<string, { id: string; name: string; type: string }>();
   for (const story of stories) {
     for (const entity of story.linkedEntities) {
-      if (entity.id !== selected.id && neighbours.size < MAX_NEIGHBOURS) {
-        neighbours.set(entity.id, entity);
-      }
+      if (entity.id !== selected.id) allNeighbours.set(entity.id, entity);
     }
   }
-  const neighbourList = [...neighbours.values()];
+  const neighbourList = [...allNeighbours.values()].slice(0, MAX_NEIGHBOURS);
+  const neighboursHidden = allNeighbours.size - neighbourList.length;
 
   const storyPositions = new Map(
     stories.map((story, index) => [story.id, pointOnRing(index, stories.length, 130)]),
@@ -153,7 +167,7 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
             className="h-auto w-full max-w-full"
             role="img"
-            aria-label={`${selected.name} : ${stories.length} récits, ${neighbourList.length} éléments liés.`}
+            aria-label={`${selected.name} : ${stories.length} récits affichés sur ${storiesTotal}, ${neighbourList.length} éléments liés.`}
           >
             {stories.map((story) => {
               const position = storyPositions.get(story.id)!;
@@ -244,13 +258,30 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
 
       <p className="justification">
         Bleu : personne · marron : lieu · orange : objet · rouge : récit. Les traits sont des liens
-        déclarés par la famille, jamais déduits. Au plus {MAX_STORIES} récits et {MAX_NEIGHBOURS}{' '}
-        éléments à la fois — au-delà, l’image cesserait de se lire d’un coup d’œil.
+        déclarés par la famille, jamais déduits.
       </p>
+
+      {/* Ce que l'image ne montre pas doit être dit : sans cela, huit points
+          laisseraient croire qu'il n'existe que huit récits. */}
+      {storiesTotal > stories.length || neighboursHidden > 0 ? (
+        <p className="justification">
+          Cette vue est volontairement bornée pour rester lisible d’un coup d’œil.
+          {storiesTotal > stories.length
+            ? ` ${stories.length} récits affichés sur ${storiesTotal} — les plus récents.`
+            : ''}
+          {neighboursHidden > 0
+            ? ` ${neighboursHidden} élément${neighboursHidden > 1 ? 's' : ''} lié${neighboursHidden > 1 ? 's' : ''} n’${neighboursHidden > 1 ? 'apparaissent' : 'apparaît'} pas ici.`
+            : ''}{' '}
+          La liste complète des récits reste accessible depuis « Récits ».
+        </p>
+      ) : null}
 
       {stories.length > 0 ? (
         <section className="space-y-2 border-t border-rule pt-6">
-          <h2 className="section-label">Les récits qui en parlent</h2>
+          <h2 className="section-label">
+            Les récits qui en parlent
+            {storiesTotal > stories.length ? ` · ${stories.length} sur ${storiesTotal}` : ''}
+          </h2>
           <ul className="space-y-1">
             {stories.map((story) => (
               <li key={story.id}>

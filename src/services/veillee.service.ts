@@ -104,16 +104,29 @@ export class VeilleeService {
     }
 
     // 2. Celui qui relie le plus de monde et de choses.
-    const [rassemble] = await this.prisma.story.findMany({
+    //
+    // On en demande DEUX pour savoir si le premier est vraiment le premier.
+    // Quand plusieurs récits relient autant d'éléments, en désigner un « le
+    // plus relié » est une affirmation fausse : le classement n'a pas
+    // départagé, il a simplement rendu le premier venu. On dit alors le
+    // fait — combien d'éléments il relie — sans le superlatif.
+    const candidats = await this.prisma.story.findMany({
       where: { ...base, id: { notIn: [...taken] } },
-      orderBy: { linkedEntities: { _count: 'desc' } },
+      orderBy: [{ linkedEntities: { _count: 'desc' } }, { createdAt: 'asc' }],
       include: { _count: { select: { linkedEntities: true } } },
-      take: 1,
+      take: 2,
     });
+
+    const rassemble = candidats[0];
     if (rassemble && rassemble._count.linkedEntities > 0) {
+      const liens = rassemble._count.linkedEntities;
+      const exAequo = candidats[1]?._count.linkedEntities === liens;
+
       entries.push({
         storyId: rassemble.id,
-        justification: `C'est le récit qui relie le plus de personnes, de lieux et d'objets de la famille (${rassemble._count.linkedEntities}).`,
+        justification: exAequo
+          ? `Il relie ${liens} personnes, lieux ou objets de la famille — comme d'autres récits ; celui-ci a été retenu.`
+          : `C'est le récit qui relie le plus de personnes, de lieux et d'objets de la famille (${liens}).`,
       });
       taken.add(rassemble.id);
     }
@@ -121,7 +134,10 @@ export class VeilleeService {
     // 3. Le dernier arrivé. Une veillée n'est pas qu'un exercice de nostalgie.
     const [dernier] = await this.prisma.story.findMany({
       where: { ...base, id: { notIn: [...taken] } },
-      orderBy: { createdAt: 'desc' },
+      // Clé secondaire : deux récits créés à la même seconde doivent donner
+      // le même choix d'un appareil à l'autre, sinon la veillée cesse d'être
+      // la même pour toute la famille.
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       take: 1,
     });
     if (dernier) {

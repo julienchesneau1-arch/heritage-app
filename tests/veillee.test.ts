@@ -64,7 +64,10 @@ function buildService(corpus = CORPUS, store: KeyValueStore = createMemoryStore(
           );
         }
 
-        const orderBy = args.orderBy as Record<string, unknown> | undefined;
+        const rawOrder = args.orderBy as unknown;
+        const orderBy = (Array.isArray(rawOrder) ? rawOrder[0] : rawOrder) as
+          | Record<string, unknown>
+          | undefined;
         if (orderBy?.linkedEntities) rows = [...rows].sort((a, b) => b.entityCount - a.entityCount);
         else if (orderBy?.createdAt === 'desc')
           rows = [...rows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -197,5 +200,45 @@ describe('Questions en un geste', () => {
 
   it('sont assez peu nombreuses pour tenir sur une ligne de téléphone', () => {
     expect(ONE_TAP_QUESTIONS.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('La veillée n’affirme un superlatif que s’il en est un', () => {
+  /**
+   * « C'est le récit qui relie le plus d'éléments » était affirmé même quand
+   * plusieurs récits en reliaient autant : le classement n'avait pas
+   * départagé, il avait rendu le premier venu. Sur un corpus où presque tous
+   * les récits relient deux entités — le cas courant — la phrase était fausse.
+   */
+  const egaux = [
+    { ...CORPUS[0]!, id: 's_a', entityCount: 2, lastViewedAt: new Date(2026, 6, 1) },
+    { ...CORPUS[1]!, id: 's_b', entityCount: 2 },
+    { ...CORPUS[2]!, id: 's_c', entityCount: 2 },
+  ];
+
+  it('renonce au superlatif quand plusieurs récits relient autant', async () => {
+    const { service } = buildService(egaux);
+    const veillee = await service.compose(FAMILY, NOW);
+    const justifications = veillee.entries.map((entry) => entry.justification);
+
+    expect(justifications.some((j) => j.includes('qui relie le plus'))).toBe(false);
+    expect(justifications.some((j) => j.includes('celui-ci a été retenu'))).toBe(true);
+  });
+
+  it('garde le superlatif quand il y a un vrai premier', async () => {
+    const { service } = buildService([
+      { ...CORPUS[0]!, id: 's_a', entityCount: 5, lastViewedAt: new Date(2026, 6, 1) },
+      { ...CORPUS[1]!, id: 's_b', entityCount: 2 },
+      { ...CORPUS[2]!, id: 's_c', entityCount: 1 },
+    ]);
+    const veillee = await service.compose(FAMILY, NOW);
+    expect(veillee.entries.some((entry) => entry.justification.includes('qui relie le plus'))).toBe(true);
+  });
+
+  it('dit toujours combien d’éléments le récit relie', async () => {
+    const { service } = buildService(egaux);
+    const veillee = await service.compose(FAMILY, NOW);
+    // Le superlatif tombe, le fait reste : la famille sait pourquoi il est là.
+    expect(veillee.entries.some((entry) => /\b2\b/.test(entry.justification))).toBe(true);
   });
 });
