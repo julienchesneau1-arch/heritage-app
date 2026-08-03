@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const PAGES = [
   { href: '/', label: 'Aujourd’hui' },
+  { href: '/veillee', label: 'Veillée' },
   { href: '/recits', label: 'Récits' },
   { href: '/archives', label: 'Archives' },
   { href: '/traditions', label: 'Traditions' },

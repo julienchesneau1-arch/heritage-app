@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
 import { formatDateFr } from '@/lib/normalize';
+import { ONE_TAP_QUESTIONS } from '@/lib/questions';
 import { conservateur } from '@/services/conservateur.service';
 import { answerQuestion, archiveStory, askQuestion, releaseQuarantine } from '@/app/actions';
 
@@ -143,21 +144,37 @@ export default async function StoryPage({ params }: { params: { storyId: string 
         )}
 
         {context.member ? (
-          <form action={askQuestion} className="space-y-2 pt-2">
-            <input type="hidden" name="storyId" value={story.id} />
-            <label htmlFor="question" className="section-label block">
-              Poser une question
-            </label>
-            <textarea
-              id="question"
-              name="questionText"
-              rows={2}
-              className="w-full rounded-sm border border-rule bg-transparent p-2 font-sans text-sm"
-            />
-            <button type="submit" className="btn">
-              Poser
-            </button>
-          </form>
+          <div className="space-y-4 pt-2">
+            <form action={askQuestion} className="space-y-2">
+              <input type="hidden" name="storyId" value={story.id} />
+              <label htmlFor="question" className="section-label block">
+                Poser une question
+              </label>
+              <textarea
+                id="question"
+                name="questionText"
+                rows={2}
+                className="w-full rounded-sm border border-rule bg-transparent p-2 font-sans text-sm"
+              />
+              <button type="submit" className="btn">
+                Poser
+              </button>
+            </form>
+
+            {/* Même action, sans clavier — pour les enfants, et pour tous
+                ceux que la page blanche arrête. */}
+            <form action={askQuestion} className="space-y-2">
+              <input type="hidden" name="storyId" value={story.id} />
+              <p className="justification">Ou, en un geste :</p>
+              <div className="flex flex-wrap gap-2">
+                {ONE_TAP_QUESTIONS.map((question) => (
+                  <button key={question} type="submit" name="questionText" value={question} className="btn">
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </form>
+          </div>
         ) : null}
       </section>
 

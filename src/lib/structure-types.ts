@@ -73,8 +73,24 @@ export type EntityType = (typeof ENTITY_TYPES)[number];
 
 export const ARCHIVE_TYPES = ['PHOTO', 'DOCUMENT', 'AUDIO', 'VIDEO'] as const;
 
-export const TRIGGER_TYPES = ['question', 'tradition', 'temporal', 'passeur', 'manual'] as const;
+// 'veillee' : extension hors spec v1.0 — un récit né pendant une veillée
+// familiale. Distinct de 'tradition', qui désigne un rituel daté.
+export const TRIGGER_TYPES = [
+  'question',
+  'tradition',
+  'temporal',
+  'passeur',
+  'manual',
+  'veillee',
+] as const;
 export type PassageTriggerType = (typeof TRIGGER_TYPES)[number];
 
-export const VISIBILITY_CONTEXTS = ['home', 'passeur', 'search', 'tradition', 'graph'] as const;
+export const VISIBILITY_CONTEXTS = [
+  'home',
+  'passeur',
+  'search',
+  'tradition',
+  'graph',
+  'veillee',
+] as const;
 export type VisibilityContext = (typeof VISIBILITY_CONTEXTS)[number];

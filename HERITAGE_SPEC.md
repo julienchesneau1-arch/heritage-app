@@ -25,8 +25,8 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  CLIENT (Next.js 14, PWA, Tailwind)                         │
 │  ├── App Shell (layout parcimonieux)                        │
-│  ├── 6 Pages : Aujourd'hui, Récits, Archives, Traditions,   │
-│  │             Graphe, Transmission (métriques)             │
+│  ├── 7 Pages : Aujourd'hui, Veillée, Récits, Archives,      │
+│  │             Traditions, Graphe, Transmission             │
 │  ├── Service Worker (cache offline, sync différé)           │
 │  └── Composants : PasseurWidget, StoryCard, GraphCanvas,    │
 │                   TraditionReminder, ExportButton           │
@@ -88,6 +88,9 @@ Trois points de la spec d'origine ne pouvaient pas être implémentés tels quel
 - **`Entity.member`** n'avait pas non plus de back-relation sur `Member` ; elle a été ajoutée (`Member.entities`).
 - **`Member.isDeleted`** est exigé par la règle 1 mais absent du modèle. Il a été ajouté.
 - **Annexe B** annonce « 30 types » et en liste 33, dont `maison-deménagement` (accent fautif). Les 33 sont conservés, l'accent est corrigé en `maison-demenagement`.
+- **`Passage.triggerType`** reçoit une sixième valeur, `veillee` (§5.4), distincte de `tradition` qui désigne un rituel daté. **`VisibilityLog.context`** reçoit de même un contexte `veillee`.
+
+**Sur le nombre de pages.** L'application en compte sept, pas six : la veillée s'ajoute. La parcimonie du §6.1 porte sur le nombre de suggestions par écran, pas sur la taille de la carte — un rite qu'on ne trouve pas est un rite qui n'a pas lieu.
 
 ---
 
@@ -286,6 +289,42 @@ Titre, auteur, date, texte intégral, entités liées, chaînes de transmission 
 - Cliquer sur un nœud filtre les récits liés.
 - Disposition déterministe en deux anneaux. Pas de zoom, pas de physique de particules.
 
+### 5.4 La veillée — extension hors spec v1.0, assumée
+
+Trois récits, un par écran, en gros caractères, faits pour être lus à voix haute quand la famille est réunie. Puis un dernier écran : « Quelqu'un se souvient-il d'autre chose ? C'est le moment de le dire à voix haute — pas de l'écrire. »
+
+**Pourquoi ce n'est pas de la gamification.** L'anti-pattern du §12 vise l'optimisation d'engagement : score, série, badge, flux infini. Ce qui les caractérise, c'est qu'ils jouent *contre* l'individu — un badge dit « tu es en retard », une série dit « ne me lâche pas ». La veillée fait l'inverse :
+
+- Rien ne la déclenche. Elle se demande. Aucune notification, aucun rappel.
+- Elle a une fin. Trois récits, puis l'écran dit de reposer le téléphone. Un flux infini capte l'attention ; celui-ci la rend.
+- Aucun score, aucun classement, aucun badge. On ne gagne pas une veillée.
+
+C'est la lecture littérale de la fiche d'identité : « Pas un réseau social. Pas une bibliothèque. **Un rite.** »
+
+**Pourquoi elle peut montrer les récits oubliés.** L'amendement 5 interdit au Conservateur d'injecter un récit oublié dans le flux passif. Ici la famille demande explicitement qu'on lui montre quelque chose : ce n'est plus une imposition algorithmique, c'est la réponse à une question posée. La veillée donne enfin un usage au rappel patrimonial, qui n'existait jusque-là que comme ligne de métrique.
+
+**Trois places, trois raisons, toutes dites à la famille** (§3, exclusion justifiée) :
+
+| Place | Choix | Justification affichée |
+|---|---|---|
+| 1 | Le récit que personne n'a relu | « Personne ne l'a relu depuis le … » |
+| 2 | Celui qui relie le plus d'entités | « C'est le récit qui relie le plus de personnes, de lieux et d'objets (N). » |
+| 3 | Le dernier arrivé | « C'est le récit le plus récemment ajouté. » |
+
+Si le corpus ne fournit pas trois récits, la veillée en compte moins. Jamais de remplissage.
+
+**Une veillée par soir, la même pour tous.** Le premier qui l'ouvre la fixe ; elle tient jusqu'au lendemain 5 h. Deux téléphones dans la même pièce doivent montrer les mêmes récits — sans quoi il n'y a pas de veillée, seulement deux personnes qui lisent.
+
+Un récit né d'une veillée crée un `Passage` de type `veillee`, ajouté à l'énumération de la §2.
+
+### 5.5 Questions en un geste
+
+Le plus jeune membre de la famille Martin a sept ans. Il ne rédigera pas une question dans un champ de texte — donc, en l'état, il ne participait pas. Or l'enfant qui demande « pourquoi ? » est, dans une famille réelle, le premier moteur de transmission.
+
+Quatre questions préécrites, sous le champ libre, chacune créant la même `Conversation` qu'une question rédigée : « Qui est-ce ? », « C'était quand ? », « C'était où ? », « Et après, qu'est-ce qui s'est passé ? »
+
+Ce ne sont pas des suggestions au sens du §6.1 : rien n'est recommandé, classé ni poussé. C'est une autre façon de saisir la même chose, pour ceux qui n'écrivent pas — les enfants, et tous ceux que la page blanche arrête. Un test vérifie qu'elles franchissent le filtre constitutionnel et le contrôle de langage non coercitif.
+
 ---
 
 ## 6. RÈGLES UI/UX CONSTITUTIONNELLES
@@ -389,6 +428,7 @@ Objectif V1 : > 20 %.
 | 5 | LLM Operator, filtre constitutionnel | fait |
 | 6 | Traditions, conversations, export, métriques | fait |
 | 7 | Service Worker, hors-ligne, lien d'évitement, page courante annoncée | fait |
+| — | La veillée (§5.4), questions en un geste (§5.5) | fait |
 | 7 | Upload binaire des archives, transcription Whisper, audit axe-core | ouvert |
 
 ---

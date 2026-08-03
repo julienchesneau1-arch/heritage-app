@@ -58,6 +58,7 @@ Ouvrir `http://localhost:3000/f/<cet-identifiant>`. Ce lien pose le cookie famil
 src/
 ├── app/                    Pages (App Router) + routes API + actions serveur
 │   ├── page.tsx            « Aujourd'hui »  — au plus 1 Passeur, 1 signal
+│   ├── veillee/            Trois récits à lire à voix haute, ensemble
 │   ├── recits/             Liste, lecture, création
 │   ├── archives/           Photos, documents, enregistrements
 │   ├── traditions/         Rituels cycliques
@@ -97,6 +98,16 @@ Chaque service est indépendant. Ils communiquent par la base, jamais entre eux 
 Chaque règle déclare une requête bornée (`where` + `take`) plutôt que de filtrer tout le corpus en mémoire, et la reformulation par le LLM n'intervient qu'**après** la sélection, sur la seule question affichée. Un test vérifie qu'une session ne produit qu'un appel au modèle, quel que soit le nombre de candidats.
 
 Une lecture n'est journalisée qu'une fois par membre et par récit sur 30 minutes : le budget de visibilité se calcule sur ces journaux, donc sans déduplication un rafraîchissement de page suffirait à faire sortir un récit des suggestions.
+
+### Le jeu sans la gamification
+
+La Constitution interdit le score, le badge, la série et le flux infini (§6.1, §12). Elle n'interdit pas le rite — la fiche d'identité en fait même la définition du produit.
+
+**La veillée** (`/veillee`) est la forme retenue : trois récits en gros caractères, un par écran, faits pour être lus à voix haute quand la famille est réunie ; puis un dernier écran qui invite à répondre de vive voix et à reposer le téléphone. Rien ne la déclenche — elle se demande. Elle a une fin. On ne la gagne pas. Le premier qui l'ouvre la fixe pour toute la famille jusqu'au lendemain matin : deux téléphones dans la même pièce montrent les mêmes récits.
+
+C'est aussi ce qui donne enfin un usage au rappel patrimonial du Conservateur : l'amendement 5 lui interdit d'injecter un récit oublié dans le flux passif, mais la veillée est une demande explicite, pas une imposition.
+
+**Les questions en un geste** règlent l'autre exclusion : le plus jeune membre a sept ans et n'écrira pas dans un champ de texte. Quatre questions préécrites créent la même `Conversation` qu'une question rédigée. Ce n'est pas une suggestion — rien n'est classé ni poussé — c'est une saisie sans clavier.
 
 ### Isolation des familles
 
