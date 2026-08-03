@@ -12,6 +12,8 @@ import { traditionService } from '@/services/tradition.service';
 import { TriggerModelService, type TriggerType } from '@/services/trigger-model.service';
 import { PasseurService } from '@/services/passeur.service';
 import { createStorySchema, createTraditionSchema } from '@/lib/validation';
+import { ACCEPTED_TYPES, buildStorageKey, isAcceptedType, MAX_UPLOAD_BYTES, storage } from '@/lib/storage';
+import { isReadingSize, READING_COOKIE } from '@/lib/reading';
 import { STRUCTURE_TYPES, TONES, VISIBILITY_CONTEXTS } from '@/lib/structure-types';
 
 /**
@@ -47,6 +49,26 @@ export async function chooseMember(formData: FormData) {
 
   revalidatePath('/', 'layout');
   redirect('/');
+}
+
+/**
+ * Confort de lecture. Par appareil : la tablette de la grand-mère et le
+ * téléphone de sa petite-fille n'ont pas les mêmes yeux.
+ */
+export async function setReadingSize(formData: FormData) {
+  const size = String(formData.get('size') ?? '');
+  if (!isReadingSize(size)) return;
+
+  cookies().set({
+    name: READING_COOKIE,
+    value: size,
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365 * 5,
+  });
+  revalidatePath('/', 'layout');
 }
 
 /** §6.3 — « Ne plus me montrer » sur un signal temporel. */
@@ -135,8 +157,15 @@ export async function createStory(formData: FormData) {
   const conversationId = String(formData.get('fromConversationId') ?? '');
   const triggerType = String(formData.get('triggerType') ?? 'manual');
 
+  const rawNarrator = String(formData.get('narratorId') ?? '');
+  const narratorId =
+    rawNarrator && rawNarrator !== context.member.id && context.members.some((m) => m.id === rawNarrator)
+      ? rawNarrator
+      : undefined;
+
   const parsed = createStorySchema.safeParse({
     authorId: context.member.id,
+    narratorId,
     title: String(formData.get('title') ?? '').trim(),
     content: String(formData.get('content') ?? '').trim(),
     structureType: (STRUCTURE_TYPES as readonly string[]).includes(rawStructure) ? rawStructure : undefined,
@@ -243,6 +272,53 @@ export async function traditionAction(formData: FormData) {
 
   revalidatePath('/traditions');
   revalidatePath('/');
+}
+
+/**
+ * Dépôt d'une photo ou d'un enregistrement, depuis la page d'un récit.
+ * Le type d'archive se déduit du type MIME : la famille n'a rien à choisir.
+ */
+export async function uploadArchive(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const file = formData.get('file');
+  const storyId = String(formData.get('storyId') ?? '') || null;
+  const back = storyId ? `/recits/${storyId}` : '/archives';
+
+  if (!(file instanceof File) || file.size === 0) redirect(`${back}?depot=vide`);
+  if (file.size > MAX_UPLOAD_BYTES) redirect(`${back}?depot=lourd`);
+  if (!isAcceptedType(file.type)) redirect(`${back}?depot=type`);
+
+  if (storyId) {
+    const story = await prisma.story.findFirst({
+      where: { id: storyId, familyId: context.family.id },
+      select: { id: true },
+    });
+    if (!story) redirect('/archives');
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const storageKey = buildStorageKey(context.family.id, file.type);
+  await storage.put(storageKey, bytes);
+
+  await prisma.archive.create({
+    data: {
+      familyId: context.family.id,
+      uploaderId: context.member.id,
+      storyId,
+      type: ACCEPTED_TYPES[file.type]!.archiveType,
+      title: (String(formData.get('title') ?? '').trim() || file.name).slice(0, 200),
+      storageKey,
+      mimeType: file.type,
+      sizeBytes: bytes.byteLength,
+      extractedEntities: [],
+    },
+  });
+
+  revalidatePath('/archives');
+  if (storyId) revalidatePath(`/recits/${storyId}`);
+  redirect(back);
 }
 
 function parseEntityNames(raw: string): Array<{ name: string; type: 'PERSON' | 'PLACE' | 'OBJECT' }> {

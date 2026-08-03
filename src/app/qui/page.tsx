@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
-import { chooseMember } from '../actions';
+import { chooseMember, setReadingSize } from '../actions';
+import { currentReadingSize, READING_LABELS, READING_SIZES } from '@/lib/reading';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,8 @@ export const dynamic = 'force-dynamic';
 export default async function WhoPage() {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
+
+  const reading = currentReadingSize();
 
   return (
     <div className="space-y-6">
@@ -36,6 +39,27 @@ export default async function WhoPage() {
           ))}
         </ul>
       </form>
+
+      {/* Une condition d'accès, pas une préférence esthétique : un récit
+          qu'on ne peut pas lire n'est pas transmis. Réglage par appareil. */}
+      <section className="space-y-3 border-t border-rule pt-6">
+        <h2 className="section-label">Taille du texte</h2>
+        <p className="justification">Ce réglage ne vaut que pour cet appareil.</p>
+        <form action={setReadingSize} className="flex flex-wrap gap-2">
+          {READING_SIZES.map((size) => (
+            <button
+              key={size}
+              type="submit"
+              name="size"
+              value={size}
+              aria-pressed={size === reading}
+              className={size === reading ? 'btn-primary' : 'btn'}
+            >
+              {READING_LABELS[size]}
+            </button>
+          ))}
+        </form>
+      </section>
     </div>
   );
 }

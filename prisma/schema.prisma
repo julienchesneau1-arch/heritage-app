@@ -51,6 +51,7 @@ model Member {
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
   storiesAuthored  Story[]        @relation("Author")
+  storiesNarrated  Story[]        @relation("Narrator")
   entities         Entity[]
   questionsAsked   Conversation[] @relation("Questioner")
   answersGiven     Conversation[] @relation("Responder")
@@ -64,7 +65,17 @@ model Member {
 model Story {
   id       String @id @default(cuid())
   familyId String @map("family_id")
+
+  // Qui a SAISI le récit. Presque toujours quelqu'un qui sait taper.
   authorId String @map("author_id")
+
+  // Qui l'a RACONTÉ, quand ce n'est pas la même personne.
+  // Sans ce champ, une aïeule de 92 ans qui ne tape pas disparaît de sa
+  // propre mémoire familiale : tout ce qu'elle transmet est attribué à
+  // celui qui tenait le clavier. Nullable — la plupart des récits sont
+  // saisis par celui qui les raconte.
+  narratorId String? @map("narrator_id")
+
   title    String
   content  String // texte brut, max 5000 caractères (contrainte applicative, cf. lib/validation.ts)
 
@@ -86,8 +97,9 @@ model Story {
   createdAt DateTime  @default(now()) @map("created_at")
   eventDate DateTime? @map("event_date") // date de l'événement raconté, pas de la création
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  author Member @relation("Author", fields: [authorId], references: [id])
+  family   Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  author   Member  @relation("Author", fields: [authorId], references: [id])
+  narrator Member? @relation("Narrator", fields: [narratorId], references: [id])
 
   linkedEntities Entity[]       @relation("StoryEntities")
   archives       Archive[]

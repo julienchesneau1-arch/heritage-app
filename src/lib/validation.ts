@@ -12,7 +12,10 @@ import {
 // §8.2 : validation Zod sur tous les inputs API.
 
 export const createStorySchema = z.object({
+  // Qui a saisi le récit.
   authorId: z.string().cuid(),
+  // Qui l'a raconté, si ce n'est pas la même personne.
+  narratorId: z.string().cuid().optional(),
   title: z.string().min(1).max(160),
   content: z.string().min(1).max(MAX_CONTENT_LENGTH),
   structureType: z.enum(STRUCTURE_TYPES).optional(),

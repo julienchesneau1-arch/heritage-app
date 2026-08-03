@@ -97,9 +97,9 @@ describe('Quarantaine — trois rejets explicites du même membre', () => {
 describe('Métrique de distorsion', () => {
   function serviceWith(stories: string[], viewAuthors: string[]) {
     const prisma = {
-      story: { findMany: async () => stories.map((authorId) => ({ authorId })) },
+      story: { findMany: async () => stories.map((authorId) => ({ authorId, narratorId: null })) },
       visibilityLog: {
-        findMany: async () => viewAuthors.map((authorId) => ({ story: { authorId } })),
+        findMany: async () => viewAuthors.map((authorId) => ({ story: { authorId, narratorId: null } })),
       },
     } as unknown as PrismaClient;
     return new ConservateurService(prisma, createMemoryStore());
@@ -117,6 +117,57 @@ describe('Métrique de distorsion', () => {
 
   it('vaut 0 sur une famille vide, sans planter', async () => {
     const service = serviceWith([], []);
+    expect(await service.calculateDistortion(FAMILY)).toBe(0);
+  });
+});
+
+describe('Distorsion — la voix compte, pas le clavier', () => {
+  /**
+   * Jeanne a 92 ans et ne tape pas : Claire note tout ce qu'elle raconte.
+   * Si la métrique comptait le clavier, Jeanne n'existerait pas dans la
+   * mesure — et c'est précisément son silence qu'il faudrait détecter.
+   */
+  function serviceWith(
+    stories: Array<{ authorId: string; narratorId: string | null }>,
+    views: Array<{ authorId: string; narratorId: string | null }>,
+  ) {
+    const prisma = {
+      story: { findMany: async () => stories },
+      visibilityLog: { findMany: async () => views.map((story) => ({ story })) },
+    } as unknown as PrismaClient;
+    return new ConservateurService(prisma, createMemoryStore());
+  }
+
+  it('attribue le récit au narrateur, pas au scribe', async () => {
+    // Corpus : 1 récit raconté par Jeanne (noté par Claire), 1 par Claire.
+    // Vues : uniquement le récit de Jeanne. La distorsion doit être visible.
+    const service = serviceWith(
+      [
+        { authorId: 'claire', narratorId: 'jeanne' },
+        { authorId: 'claire', narratorId: null },
+      ],
+      [
+        { authorId: 'claire', narratorId: 'jeanne' },
+        { authorId: 'claire', narratorId: 'jeanne' },
+      ],
+    );
+    // Corpus 50/50 entre Jeanne et Claire, vues 100 % Jeanne → 50.
+    expect(await service.calculateDistortion(FAMILY)).toBe(50);
+  });
+
+  it('ne verrait aucune distorsion si elle comptait le clavier', async () => {
+    // Même jeu de données : au clavier, tout est de Claire, donc 0 —
+    // l'ancienne mesure aurait déclaré la mémoire parfaitement fidèle.
+    const service = serviceWith(
+      [
+        { authorId: 'claire', narratorId: null },
+        { authorId: 'claire', narratorId: null },
+      ],
+      [
+        { authorId: 'claire', narratorId: null },
+        { authorId: 'claire', narratorId: null },
+      ],
+    );
     expect(await service.calculateDistortion(FAMILY)).toBe(0);
   });
 });

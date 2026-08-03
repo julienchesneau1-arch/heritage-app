@@ -3,6 +3,7 @@ import './globals.css';
 import { Nav } from '@/components/Nav';
 import { ServiceWorker } from '@/components/ServiceWorker';
 import { loadContext } from '@/lib/context';
+import { currentReadingSize, READING_ROOT_CLASS } from '@/lib/reading';
 
 export const metadata: Metadata = {
   title: 'Héritage',
@@ -19,9 +20,10 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const context = await loadContext();
+  const reading = currentReadingSize();
 
   return (
-    <html lang="fr">
+    <html lang="fr" className={READING_ROOT_CLASS[reading]}>
       <body className="min-h-screen">
         {/* Lien d'évitement : la navigation compte sept liens, on doit pouvoir
             les sauter au clavier. Visible seulement une fois focalisé. */}

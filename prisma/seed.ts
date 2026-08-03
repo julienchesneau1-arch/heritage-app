@@ -148,10 +148,13 @@ Cette année-là, il l'a arrêtée un matin de juin et ne l'a plus jamais remont
   });
 
   // ── Récit 3 : la recette. Adossée à la tradition d'octobre. ──
+  // Jeanne a 92 ans et ne tape pas. C'est Claire qui note — mais la voix
+  // reste celle de Jeanne, et c'est elle que compte la métrique de distorsion.
   const tarte = await prisma.story.create({
     data: {
       familyId: family.id,
-      authorId: jeanne.id,
+      authorId: claire.id,
+      narratorId: jeanne.id,
       title: 'La tarte aux poires d’automne',
       content: `Le poirier a été planté en 1958, derrière la maison. Il donne trop de fruits, tous en même temps, à la mi-octobre.
 

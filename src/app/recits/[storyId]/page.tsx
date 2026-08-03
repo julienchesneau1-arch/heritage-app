@@ -5,12 +5,30 @@ import { prisma } from '@/lib/prisma';
 import { formatDateFr } from '@/lib/normalize';
 import { ONE_TAP_QUESTIONS } from '@/lib/questions';
 import { conservateur } from '@/services/conservateur.service';
-import { answerQuestion, archiveStory, askQuestion, releaseQuarantine } from '@/app/actions';
+import {
+  answerQuestion,
+  archiveStory,
+  askQuestion,
+  releaseQuarantine,
+  uploadArchive,
+} from '@/app/actions';
 
 export const dynamic = 'force-dynamic';
 
 /** Lecture d'un récit — §5.2. */
-export default async function StoryPage({ params }: { params: { storyId: string } }) {
+const DEPOT_MESSAGES: Record<string, string> = {
+  vide: 'Aucun fichier n’a été choisi.',
+  lourd: 'Ce fichier dépasse 25 Mo.',
+  type: 'Ce type de fichier n’est pas accepté.',
+};
+
+export default async function StoryPage({
+  params,
+  searchParams,
+}: {
+  params: { storyId: string };
+  searchParams: { depot?: string };
+}) {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
 
@@ -18,8 +36,9 @@ export default async function StoryPage({ params }: { params: { storyId: string 
     where: { id: params.storyId, familyId: context.family.id },
     include: {
       author: { select: { name: true, isDeleted: true } },
+      narrator: { select: { name: true, isDeleted: true } },
       linkedEntities: true,
-      archives: true,
+      archives: { orderBy: { createdAt: 'asc' } },
       conversations: {
         orderBy: { createdAt: 'asc' },
         include: {
@@ -33,6 +52,8 @@ export default async function StoryPage({ params }: { params: { storyId: string 
   });
 
   if (!story) notFound();
+
+  const depot = searchParams.depot ? DEPOT_MESSAGES[searchParams.depot] : null;
 
   // Lecture effective : elle est journalisée, et elle compte.
   if (context.member) {
@@ -51,13 +72,69 @@ export default async function StoryPage({ params }: { params: { storyId: string 
           ← Récits
         </Link>
         <h1 className="text-2xl leading-tight">{story.title}</h1>
+        {/* La voix d'abord, la plume ensuite. */}
         <p className="justification">
-          Par {story.author.isDeleted ? 'Auteur anonymisé' : story.author.name} ·{' '}
-          {formatDateFr(story.eventDate ?? story.createdAt)} · {story.structureType} · {story.tone}
+          {story.narrator
+            ? `Raconté par ${story.narrator.isDeleted ? 'Membre anonymisé' : story.narrator.name}, noté par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`
+            : `Par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`}{' '}
+          · {formatDateFr(story.eventDate ?? story.createdAt)} · {story.structureType} · {story.tone}
         </p>
       </header>
 
       <div className="whitespace-pre-wrap text-lg leading-relaxed">{story.content}</div>
+
+      {story.archives.length > 0 ? (
+        <section className="space-y-4">
+          {story.archives.map((archive) => (
+            <figure key={archive.id} className="space-y-1">
+              {archive.type === 'PHOTO' ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={`/api/family/${context.family.id}/archives/${archive.id}/file`}
+                  alt={archive.title}
+                  className="w-full rounded-sm border border-rule"
+                  loading="lazy"
+                />
+              ) : archive.type === 'AUDIO' ? (
+                <audio controls preload="none" className="w-full">
+                  <source
+                    src={`/api/family/${context.family.id}/archives/${archive.id}/file`}
+                    type={archive.mimeType}
+                  />
+                </audio>
+              ) : (
+                <a
+                  href={`/api/family/${context.family.id}/archives/${archive.id}/file`}
+                  className="btn"
+                >
+                  Ouvrir « {archive.title} »
+                </a>
+              )}
+              <figcaption className="justification">{archive.title}</figcaption>
+            </figure>
+          ))}
+        </section>
+      ) : null}
+
+      {context.member ? (
+        <form action={uploadArchive} className="space-y-2">
+          <input type="hidden" name="storyId" value={story.id} />
+          <label htmlFor="file" className="section-label block">
+            Ajouter une photo ou un enregistrement
+          </label>
+          <input
+            id="file"
+            name="file"
+            type="file"
+            accept="image/*,audio/*,application/pdf,video/mp4"
+            className="block w-full font-sans text-sm file:mr-3 file:min-h-[44px] file:rounded-sm file:border file:border-rule file:bg-transparent file:px-4 file:font-sans file:text-sm"
+          />
+          <button type="submit" className="btn">
+            Déposer
+          </button>
+          {depot ? <p className="justification">{depot}</p> : null}
+        </form>
+      ) : null}
 
       {story.linkedEntities.length > 0 ? (
         <p className="flex flex-wrap gap-2">

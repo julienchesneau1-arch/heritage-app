@@ -109,6 +109,14 @@ C'est aussi ce qui donne enfin un usage au rappel patrimonial du Conservateur : 
 
 **Les questions en un geste** règlent l'autre exclusion : le plus jeune membre a sept ans et n'écrira pas dans un champ de texte. Quatre questions préécrites créent la même `Conversation` qu'une question rédigée. Ce n'est pas une suggestion — rien n'est classé ni poussé — c'est une saisie sans clavier.
 
+### Faire une place à toute la famille
+
+**Narrateur ≠ scribe.** `authorId` désigne qui a saisi le récit ; `narratorId`, qui l'a raconté. Sans cette distinction, Jeanne (92 ans, ne tape pas) et Lucas (7 ans, ne tape pas non plus) disparaissaient de leur propre mémoire familiale — tout était attribué à celui qui tenait le clavier. La métrique de distorsion compte désormais la voix, pas le clavier : un test montre qu'elle aurait sinon déclaré la mémoire parfaitement fidèle au moment précis où une voix s'éteignait.
+
+**Les photos sont enfin visibles.** Dépôt réel depuis la page d'un récit, affichage dans le récit et dans les archives. Aucun fichier n'est exposé à une URL publique : tout passe par une route authentifiée qui vérifie la famille avant de servir un octet, et répond `Cache-Control: private`. Une photo de famille sur un bucket public est une photo de famille indexable.
+
+**Taille du texte réglable**, par appareil et non par membre : la tablette de la grand-mère et le téléphone de sa petite-fille n'ont pas les mêmes yeux, et c'est souvent le même compte familial qui sert sur les deux.
+
 ### Isolation des familles
 
 Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient le cookie signé ; une requête portant sur une autre famille reçoit `403`.
@@ -123,7 +131,7 @@ Toute requête filtre par `familyId` (§2.1 règle 3). Les routes API vérifient
 | `FAMILY_TOKEN_SECRET` | en production | Signature HMAC du cookie familial |
 | `REDIS_URL` | non | Compteurs partagés entre instances |
 | `OPENAI_API_KEY` | non | Classification, extraction d'entités, formulation des questions |
-| `STORAGE_*` | non | Stockage objet des archives (S3 / R2) |
+| `STORAGE_DIR` | non | Répertoire des archives (défaut `.data/archives`) |
 
 ---
 
@@ -133,4 +141,4 @@ Sprints 0 à 6 de la roadmap (§10) : schéma et seed, CRUD des récits, graphe 
 
 Sprint 7, fait : Service Worker (réseau d'abord, cache en secours, page hors-ligne), lien d'évitement clavier, page courante annoncée.
 
-Sprint 7, ouvert : upload binaire réel des archives — l'API enregistre aujourd'hui les métadonnées d'un fichier déjà déposé sur le stockage objet ; transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil.
+Sprint 7, ouvert : pilote de stockage S3/R2 — le pilote disque est en place et l'interface est prête, mais sur un hébergement au système de fichiers éphémère il faut brancher un bucket ; transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil.

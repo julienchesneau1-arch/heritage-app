@@ -32,12 +32,21 @@ export default async function ArchivesPage() {
 
       {archives.length === 0 ? (
         <p className="justification">
-          Aucune archive. Les fichiers se déposent sur le stockage familial, puis se rattachent à un récit.
+          Aucune archive. Les photos et les enregistrements se déposent depuis la page d’un récit.
         </p>
       ) : (
         <ul className="divide-y divide-rule border-y border-rule">
           {archives.map((archive) => (
-            <li key={archive.id} className="space-y-1 py-4">
+            <li key={archive.id} className="space-y-2 py-4">
+              {archive.type === 'PHOTO' ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={`/api/family/${context.family.id}/archives/${archive.id}/file`}
+                  alt={archive.title}
+                  className="w-full rounded-sm border border-rule"
+                  loading="lazy"
+                />
+              ) : null}
               <p className="text-lg">{archive.title}</p>
               <p className="justification">
                 {TYPE_LABELS[archive.type] ?? archive.type} · déposé par {archive.uploader.name} ·{' '}

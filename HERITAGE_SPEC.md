@@ -65,7 +65,7 @@ Le schéma de référence est `prisma/schema.prisma`. Aucune table ne peut être
 |---|---|
 | `Family` | Le tenant. Tout est cloisonné par famille. |
 | `Member` | Utilisateur au sens familial. Génération, dates de naissance/décès. Soft-delete via `isDeleted`. |
-| `Story` | Le cœur du produit. Texte brut, type narratif imposé, ton, longueur déduite. |
+| `Story` | Le cœur du produit. Texte brut, type narratif imposé, ton, longueur déduite. **Deux personnes** : `authorId` (qui a saisi) et `narratorId` (qui a raconté). |
 | `Entity` | Nœud du graphe : PERSON, PLACE, OBJECT, DATE, CONCEPT. Matching par `normalizedName`. |
 | `Archive` | Photo, document, audio, vidéo. Binaire sur stockage objet, métadonnées en base. |
 | `Tradition` | Rituel cyclique. Peut s'endormir ; le sommeil n'est pas un échec. |
@@ -89,6 +89,25 @@ Trois points de la spec d'origine ne pouvaient pas être implémentés tels quel
 - **`Member.isDeleted`** est exigé par la règle 1 mais absent du modèle. Il a été ajouté.
 - **Annexe B** annonce « 30 types » et en liste 33, dont `maison-deménagement` (accent fautif). Les 33 sont conservés, l'accent est corrigé en `maison-demenagement`.
 - **`Passage.triggerType`** reçoit une sixième valeur, `veillee` (§5.4), distincte de `tradition` qui désigne un rituel daté. **`VisibilityLog.context`** reçoit de même un contexte `veillee`.
+
+### 2.3 Narrateur et scribe — ajout hors spec v1.0, assumé
+
+La spec ne connaît qu'un `authorId`. Or dans une famille de quatre générations, **celui qui raconte n'est presque jamais celui qui tape**. Jeanne a 92 ans : chaque récit qu'elle transmet aurait été attribué à Claire, qui tenait le clavier. Lucas a sept ans : pareil, dans l'autre sens.
+
+Deux conséquences, l'une humaine, l'autre technique :
+
+- Les deux générations extrêmes — celles qui ont le plus à transmettre et le plus à recevoir — **disparaissaient de leur propre mémoire familiale**.
+- La métrique de distorsion (§3.2) mesure l'écart entre qui s'exprime et qui est lu. En comptant le clavier, elle aurait déclaré la mémoire parfaitement fidèle au moment précis où une voix s'éteignait. Un test le démontre sur le jeu de la famille Martin.
+
+`Story.narratorId` est donc ajouté, nullable — la plupart des récits sont saisis par celui qui les raconte. Le formulaire demande « Qui raconte ? » avant le titre. L'affichage dit « Raconté par Jeanne Martin, noté par Claire Martin ». La distorsion compte le narrateur quand il existe, l'auteur sinon.
+
+### 2.4 Stockage des archives
+
+Les fichiers **ne sont jamais exposés à une URL publique**, même longue et imprévisible : une photo de famille sur un bucket public est une photo de famille indexable. Tout passe par `GET /api/family/:id/archives/:archiveId/file`, qui vérifie la famille avant de servir un octet, et répond `Cache-Control: private`.
+
+Le pilote par défaut écrit sur disque (`STORAGE_DIR`, défaut `.data/archives`). Un pilote S3/R2 se branche sur la même interface — poser, lire, retirer des octets — sans toucher au reste.
+
+Le type MIME déclaré doit figurer dans une liste fermée (JPEG, PNG, WebP, HEIC, PDF, MP3, M4A, WAV, WebM, MP4) et c'est lui qui détermine le type d'archive : la famille n'a rien à choisir. SVG est refusé — c'est un vecteur de script. Plafond : 25 Mo. La clé de stockage est cloisonnée par famille et n'est jamais dérivée du nom de fichier fourni.
 
 **Sur le nombre de pages.** L'application en compte sept, pas six : la veillée s'ajoute. La parcimonie du §6.1 porte sur le nombre de suggestions par écran, pas sur la taille de la carte — un rite qu'on ne trouve pas est un rite qui n'a pas lieu.
 
@@ -352,6 +371,7 @@ Ce ne sont pas des suggestions au sens du §6.1 : rien n'est recommandé, class�
 - Cibles tactiles minimum 44×44px.
 - Libellés associés à chaque champ, `aria-label` sur le graphe, focus visible.
 - Lien d'évitement vers le contenu, révélé au focus clavier.
+- **Taille du texte réglable** (normale / grande / très grande), sur la page « Qui êtes-vous ? ». Le réglage est **par appareil**, pas par membre : la tablette de la grand-mère n'a pas les mêmes yeux que le téléphone de sa petite-fille, et c'est souvent le même compte familial qui sert sur les deux. Ce n'est pas une préférence esthétique mais une condition d'accès — un récit qu'on ne peut pas lire n'est pas transmis.
 - Page courante marquée `aria-current="page"` **et** soulignée : la couleur seule ne dirait rien à qui ne la perçoit pas.
 
 ---
@@ -429,6 +449,7 @@ Objectif V1 : > 20 %.
 | 6 | Traditions, conversations, export, métriques | fait |
 | 7 | Service Worker, hors-ligne, lien d'évitement, page courante annoncée | fait |
 | — | La veillée (§5.4), questions en un geste (§5.5) | fait |
+| — | Narrateur ≠ scribe (§2.3), stockage et affichage des archives (§2.4), taille du texte | fait |
 | 7 | Upload binaire des archives, transcription Whisper, audit axe-core | ouvert |
 
 ---
@@ -476,7 +497,8 @@ lettre-non-envoyee
 - [x] Service Worker (réseau d'abord, cache en secours, page hors-ligne)
 - [x] Lien d'évitement clavier, page courante annoncée (`aria-current`)
 - [ ] Accessibilité : audit axe-core automatisé
-- [ ] Upload binaire des archives (l'API n'enregistre que les métadonnées)
+- [x] Upload binaire des archives, servi sous authentification
+- [x] Taille du texte réglable par appareil
 
 ---
 

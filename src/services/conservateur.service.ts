@@ -176,25 +176,30 @@ export class ConservateurService {
   }
 
   /**
-   * Métrique de distorsion : écart entre la distribution des auteurs dans
+   * Métrique de distorsion : écart entre la distribution des voix dans
    * le corpus et leur distribution dans les vues. 0 = fidèle, 100 = maximal.
+   *
+   * On compte le NARRATEUR quand il existe, l'auteur sinon. Compter celui
+   * qui a tenu le clavier ferait disparaître de la mesure ceux qui ne
+   * tapent pas — les plus âgés, les plus jeunes — c'est-à-dire précisément
+   * ceux dont le silence serait le plus grave.
    *
    * Elle est mesurée et affichée. Elle n'est pas corrigée : corriger, ce
    * serait imposer.
    */
   async calculateDistortion(familyId: string): Promise<number> {
     const [stories, views] = await Promise.all([
-      this.prisma.story.findMany({ where: { familyId }, select: { authorId: true } }),
+      this.prisma.story.findMany({ where: { familyId }, select: { authorId: true, narratorId: true } }),
       this.prisma.visibilityLog.findMany({
         where: { familyId },
-        select: { story: { select: { authorId: true } } },
+        select: { story: { select: { authorId: true, narratorId: true } } },
       }),
     ]);
 
     if (stories.length === 0 || views.length === 0) return 0;
 
-    const authorDistribution = countBy(stories.map((s) => s.authorId));
-    const viewDistribution = countBy(views.map((v) => v.story.authorId));
+    const authorDistribution = countBy(stories.map(voiceOf));
+    const viewDistribution = countBy(views.map((view) => voiceOf(view.story)));
 
     let distortion = 0;
     const authors = new Set([...authorDistribution.keys(), ...viewDistribution.keys()]);
@@ -232,6 +237,11 @@ export class ConservateurService {
       distortionScore,
     };
   }
+}
+
+/** La voix d'un récit : celui qui l'a raconté, ou à défaut celui qui l'a saisi. */
+function voiceOf(story: { authorId: string; narratorId: string | null }): string {
+  return story.narratorId ?? story.authorId;
 }
 
 function countBy(values: string[]): Map<string, number> {

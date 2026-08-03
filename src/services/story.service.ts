@@ -40,6 +40,7 @@ export class StoryService {
       data: {
         familyId,
         authorId: input.authorId,
+        narratorId: input.narratorId ?? null,
         title: input.title,
         content: input.content,
         structureType,

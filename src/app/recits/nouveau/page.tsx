@@ -50,6 +50,30 @@ export default async function NewStoryPage({
           <input type="hidden" name="fromConversationId" value={searchParams.conversation} />
         ) : null}
 
+        {/* Dans une famille, celui qui raconte n'est presque jamais celui
+            qui tape. Sans cette question, les plus âgés et les plus jeunes
+            disparaissent de leur propre mémoire familiale. */}
+        <div className="space-y-1">
+          <label htmlFor="narratorId" className="section-label block">
+            Qui raconte ?
+          </label>
+          <select
+            id="narratorId"
+            name="narratorId"
+            defaultValue=""
+            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+          >
+            <option value="">{context.member.name} — je raconte moi-même</option>
+            {context.members
+              .filter((member) => member.id !== context.member!.id)
+              .map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} — je note ce qu’il ou elle raconte
+                </option>
+              ))}
+          </select>
+        </div>
+
         <div className="space-y-1">
           <label htmlFor="title" className="section-label block">
             Titre
