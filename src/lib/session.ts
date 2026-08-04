@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
+import { familySecret } from './secrets';
 
 /**
  * Accès familial — §4.1 amendé.
@@ -25,12 +26,8 @@ const FAMILY_COOKIE = 'family_token';
 const MEMBER_COOKIE = 'member_token';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
-function secret(): string {
-  return process.env.FAMILY_TOKEN_SECRET ?? 'dev-secret-non-securise';
-}
-
 function sign(payload: string): string {
-  return createHmac('sha256', secret()).update(payload).digest('hex');
+  return createHmac('sha256', familySecret()).update(payload).digest('hex');
 }
 
 function verify(payload: string, mac: string): boolean {

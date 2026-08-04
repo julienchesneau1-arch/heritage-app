@@ -1,0 +1,81 @@
+# Héritage — pile complète sur un seul VPS.
+#
+# Tout tient sur une machine : l'application, sa base, son reverse-proxy.
+# C'est le choix le moins cher et, à l'échelle d'une famille — quelques
+# milliers de récits, six lecteurs — le plus simple à tenir. Rien ici
+# n'appelle un service managé facturé au mois.
+#
+# Redis est absent volontairement : il ne sert qu'à partager les compteurs
+# entre plusieurs instances. Avec une seule, le store mémoire suffit et
+# l'application le dit au démarrage.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: heritage
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?renseignez POSTGRES_PASSWORD}
+      POSTGRES_DB: heritage
+    volumes:
+      - db:/var/lib/postgresql/data
+      # Les sauvegardes sortent ici, lisibles depuis l'hôte.
+      - ./sauvegardes:/sauvegardes
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U heritage -d heritage']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # La base n'est jamais exposée à l'extérieur du VPS.
+    expose:
+      - '5432'
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://heritage:${POSTGRES_PASSWORD}@db:5432/heritage?schema=public
+      # Sans elle, l'application refuse de démarrer — et c'est voulu :
+      # cette clé signe tous les accès familiaux.
+      FAMILY_TOKEN_SECRET: ${FAMILY_TOKEN_SECRET:?openssl rand -hex 32}
+      TRANSCRIPTION_WORKER_SECRET: ${TRANSCRIPTION_WORKER_SECRET:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      # Les photos et les enregistrements survivent au redéploiement.
+      - archives:/data
+    expose:
+      - '3000'
+    # Next journalise l'erreur de secret manquant au démarrage mais continue
+    # de servir. Sans cette sonde, un déploiement dont la clé manque serait
+    # déclaré sain et n'échouerait qu'à la première visite d'une famille.
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/sante']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # TLS automatique, sans configuration ni renouvellement à surveiller.
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAINE: ${DOMAINE:?votre nom de domaine}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  db:
+  archives:
+  caddy_data:
+  caddy_config:

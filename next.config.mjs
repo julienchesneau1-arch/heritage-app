@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Sortie autonome : Next embarque ses dépendances utiles dans .next/standalone.
+  // L'image Docker finale n'a plus besoin de node_modules — elle passe de
+  // ~1,2 Go à ~200 Mo, ce qui compte sur un VPS à 8 Go de disque.
+  output: 'standalone',
   reactStrictMode: true,
+  // Exécute src/instrumentation.ts au démarrage du serveur : les secrets de
+  // production sont vérifiés avant la première requête.
+  experimental: { instrumentationHook: true },
   poweredByHeader: false,
   async headers() {
     return [

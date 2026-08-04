@@ -84,3 +84,57 @@ describe('Lien personnel — révocable individuellement', () => {
     expect(verifyMemberToken('mem_2', 1, autre)).toBe(true);
   });
 });
+
+describe('La clé de signature refuse de partir en production sans être changée', () => {
+  /**
+   * Le repli de développement est une constante publiée dans un dépôt
+   * public. Servie en ligne, elle rend forgeable le cookie de n'importe
+   * quelle famille : il suffit de lire le code source. Le produit doit
+   * refuser de démarrer plutôt que d'ouvrir la porte en silence.
+   */
+  const original = { env: process.env.NODE_ENV, secret: process.env.FAMILY_TOKEN_SECRET };
+
+  function withEnv(nodeEnv: string, secret: string | undefined, fn: () => void) {
+    const env = process.env as Record<string, string | undefined>;
+    env.NODE_ENV = nodeEnv;
+    if (secret === undefined) delete env.FAMILY_TOKEN_SECRET;
+    else env.FAMILY_TOKEN_SECRET = secret;
+    try {
+      fn();
+    } finally {
+      env.NODE_ENV = original.env;
+      if (original.secret === undefined) delete env.FAMILY_TOKEN_SECRET;
+      else env.FAMILY_TOKEN_SECRET = original.secret;
+    }
+  }
+
+  it('refuse une clé absente en production', () => {
+    withEnv('production', undefined, () => {
+      expect(() => signFamilyToken('fam_1')).toThrow(/FAMILY_TOKEN_SECRET/);
+    });
+  });
+
+  it('refuse la clé de développement en production', () => {
+    withEnv('production', 'dev-secret-non-securise', () => {
+      expect(() => signFamilyToken('fam_1')).toThrow(/valeur de développement/);
+    });
+  });
+
+  it('refuse une clé trop courte pour un HMAC sérieux', () => {
+    withEnv('production', 'trop-court', () => {
+      expect(() => signFamilyToken('fam_1')).toThrow(/au moins 32/);
+    });
+  });
+
+  it('accepte une clé convenable', () => {
+    withEnv('production', 'a'.repeat(64), () => {
+      expect(() => signFamilyToken('fam_1')).not.toThrow();
+    });
+  });
+
+  it('laisse le développement tranquille', () => {
+    withEnv('development', undefined, () => {
+      expect(() => signFamilyToken('fam_1')).not.toThrow();
+    });
+  });
+});

@@ -1,0 +1,12 @@
+# Certificat Let's Encrypt obtenu et renouvelé tout seul.
+{$DOMAINE} {
+	encode gzip
+
+	# Les en-têtes de sécurité viennent de next.config.mjs ; on n'ajoute
+	# ici que ce que Next ne peut pas poser lui-même.
+	header {
+		-Server
+	}
+
+	reverse_proxy app:3000
+}
