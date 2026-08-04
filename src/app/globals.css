@@ -43,3 +43,98 @@
     @apply font-sans text-[0.68rem] uppercase tracking-[0.18em] text-muted;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   LE LIVRE — Annexe A points 1 et 7.
+
+   Composé pour le papier, pas pour l'écran. Le navigateur fabrique le PDF ;
+   aucun générateur externe, sans quoi la sortie du produit dépendrait d'un
+   service qu'on ne contrôle pas — ce que le point 7 refuse.
+   ───────────────────────────────────────────────────────────────────── */
+
+.livre {
+  max-width: 34rem;
+  margin: 0 auto;
+  font-family: var(--font-serif, Georgia, 'Times New Roman', serif);
+  line-height: 1.7;
+}
+
+.livre .page-titre {
+  padding: 4rem 0 3rem;
+  text-align: center;
+  border-bottom: 1px solid var(--rule, #cfc8bc);
+  margin-bottom: 3rem;
+}
+.livre .page-titre h1 { font-size: 2.4rem; line-height: 1.2; }
+.livre .sous-titre { color: var(--muted, #6b655c); margin-top: 0.6rem; }
+
+.livre .recit { margin: 0 0 2.6rem; }
+.livre .recit h2 { font-size: 1.35rem; line-height: 1.3; margin-bottom: 0.3rem; }
+.livre .corps { margin: 0.9rem 0; text-align: justify; hyphens: auto; }
+
+/* La filiation se lit à l'œil : un récit né d'un autre est en retrait. */
+.livre .recit-ne { margin-left: 1.6rem; padding-left: 1.2rem; border-left: 2px solid var(--rule, #cfc8bc); }
+.livre .filiation,
+.livre .provenance,
+.livre .sans-date,
+.livre .avant-propos { color: var(--muted, #6b655c); font-size: 0.9rem; }
+.livre .filiation { font-style: italic; margin-bottom: 0.2rem; }
+
+.livre .trous { margin-top: 4rem; padding-top: 2rem; border-top: 2px solid var(--rule, #cfc8bc); }
+.livre .trous h2 { font-size: 1.6rem; }
+.livre .trous h3 { font-size: 1.1rem; margin: 2rem 0 0.6rem; }
+.livre .liste-trous { margin-left: 1.2rem; list-style: disc; }
+
+/* Une question sans réponse, et la place pour y répondre à la main. Le
+   livre n'est pas un objet fini. */
+.livre .question { margin: 1.6rem 0 2rem; break-inside: avoid; }
+.livre .question .enonce { font-size: 1.1rem; }
+.livre .lignes { margin-top: 0.8rem; }
+.livre .lignes span {
+  display: block;
+  border-bottom: 1px solid var(--rule, #cfc8bc);
+  height: 1.9rem;
+}
+
+.livre .colophon {
+  margin-top: 3rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--rule, #cfc8bc);
+  color: var(--muted, #6b655c);
+  font-size: 0.85rem;
+}
+
+.rappel-impression {
+  margin-bottom: 2rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--rule, #cfc8bc);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 0.85rem;
+  color: var(--muted, #6b655c);
+}
+
+@media print {
+  /* Le livre est seul sur le papier : ni menu, ni pied de page, ni rappel. */
+  header,
+  footer,
+  nav,
+  .rappel-impression {
+    display: none !important;
+  }
+
+  @page {
+    margin: 20mm 18mm;
+  }
+
+  html, body { background: #fff; }
+  .livre { max-width: none; margin: 0; font-size: 11.5pt; }
+  .livre .page-titre { page-break-after: always; padding-top: 8rem; }
+  .livre .recit-racine { page-break-before: always; }
+  .livre .trous { page-break-before: always; }
+  .livre .recit, .livre .question { page-break-inside: avoid; }
+  .livre h2, .livre h3 { page-break-after: avoid; }
+
+  /* Une adresse imprimée entre parenthèses après chaque lien serait du
+     bruit dans un objet qui ne doit renvoyer à aucun écran. */
+  a[href]::after { content: none !important; }
+}

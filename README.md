@@ -67,7 +67,8 @@ src/
 │   ├── veillee/            Trois récits à lire à voix haute, ensemble
 │   ├── recits/             Liste, lecture, création
 │   ├── fils/               Un fil de discussion, et sa cristallisation en récit
-│   ├── importer/           Reprendre une conversation WhatsApp existante
+│   ├── livre/              Le livre à imprimer — par filiation, avec ses trous
+│   ├── importer/           Reprendre une conversation WhatsApp, Messenger ou SMS
 │   ├── archives/           Photos, documents, enregistrements
 │   ├── traditions/         Rituels cycliques
 │   ├── graphe/             Graphe SVG déterministe (§5.3)
@@ -192,6 +193,25 @@ Une question du Passeur a le droit de tomber à côté : c'est une question, la 
 - `RARE_PATRIMONY` annonçait un récit « parmi les moins relus » sans jamais avoir regardé les autres. Elle donne le nombre de lectures et la date de la dernière.
 
 Le même défaut avait une conséquence plus concrète : le seul filtre de plausibilité était « pas décédé ». Sur la famille de démonstration, l'application demandait à Lucas (né en 2019) son souvenir d'un déménagement de 1971, et à Emma son point de vue sur un événement daté du jour de sa naissance. `couldRememberFirsthand()` écarte qui n'était pas né, qui était déjà mort, et qui avait moins de cinq ans. Une date de naissance inconnue, en revanche, ne disqualifie personne.
+
+### Le livre : la seule pièce qui serve la dispensabilité
+
+L'Annexe A dit deux choses qui ne se rencontrent qu'ici : *« une histoire doit pouvoir engendrer une autre histoire »* (point 1) et *« le succès ultime est que la famille continue de transmettre sans l'app »* (point 7). Tout le reste du produit attire vers l'intérieur.
+
+`/livre` quitte les quatre traits du genre — chronologique, une voix par récit, d'apparence complète, fini :
+
+- **Par filiation.** On lit « ce récit, et ceux qu'il a engendrés ». Aucun autre livre de famille ne peut le montrer, parce qu'aucune autre app ne stocke les passages.
+- **Deux noms.** « Raconté par Jeanne Martin, noté par Claire Martin » — la voix, pas le clavier.
+- **Il dit ce qu'il ne sait pas.** Questions sans réponse, récits sans date d'événement (la date de saisie n'est jamais mise à sa place), membres qu'aucun récit ne mentionne. L'amendement 6 en papier.
+- **Il n'est pas fini.** Les questions sont imprimées avec des lignes pour écrire à la main.
+
+Aucun QR code, aucune adresse : le point 7 dit « sans l'app ». Aucune dépendance non plus — le navigateur fait le PDF. Et rien n'est borné : ailleurs le produit limite ce qu'il montre, ici il est la sortie, et une sortie incomplète ne libère personne.
+
+### Chacun peut retirer ses mots
+
+Annexe A point 6 : *« Oubli = droit : archivage, silence, suppression sont des décisions familiales absolues. »* Ce chemin n'existait pas pour un message — une parole versée dans la mémoire, par un fil ou par un import, ne pouvait plus être reprise par personne. Une parole qu'on ne peut pas retirer n'a pas été donnée, elle a été prise.
+
+Deux personnes ont autorité sur des mots, et seulement elles : celle qui les a écrits et celle qui les a dits. La §2.1 règle 2 disait « uniquement par l'auteur » — écrite avant que `narratorId` existe ; le droit s'étend donc au narrateur, sinon Jeanne ne pourrait pas retirer ses propres mots parce que Claire tenait le clavier. Comme pour un récit, seule une identité **prouvée** détruit (§4.1 amendé). Le dernier message emporte son fil.
 
 ### Le seul chemin qui ne demande pas de produire du neuf
 

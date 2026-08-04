@@ -257,6 +257,41 @@ export async function postMessage(formData: FormData) {
 }
 
 /**
+ * Retirer un message.
+ *
+ * Constitution, Annexe A point 6 : « Oubli = droit : archivage, silence,
+ * suppression sont des décisions familiales ABSOLUES ». Ce chemin
+ * n'existait pas — une parole versée dans la mémoire ne pouvait plus être
+ * reprise par personne, pas même par celui qui l'avait dite. Une parole
+ * qu'on ne peut pas retirer n'a pas été donnée, elle a été prise.
+ *
+ * Comme pour un récit (§4.1 amendé), seule une identité PROUVÉE détruit :
+ * le droit à l'oubli ne s'exerce pas sous une identité qu'on s'est
+ * attribuée soi-même dans une liste.
+ */
+export async function removeMessage(formData: FormData) {
+  const context = await requireContext();
+  const retour = String(formData.get('retour') ?? '/');
+  if (!canDelete(context)) redirect(`${retour}?retrait=identite`);
+
+  const resultat = await threadService.removeMessage(
+    context.family.id,
+    String(formData.get('messageId') ?? ''),
+    context.member!.id,
+  );
+
+  if (resultat.raison === 'autorite') redirect(`${retour}?retrait=autorite`);
+  if (resultat.filSupprime) {
+    revalidatePath('/');
+    revalidatePath('/recits');
+    redirect('/');
+  }
+
+  revalidatePath(retour);
+  redirect(retour);
+}
+
+/**
  * Cristalliser un fil en récit.
  *
  * C'est le texte RELU par un humain qui entre dans la mémoire, jamais celui
@@ -562,10 +597,18 @@ export async function deleteStory(formData: FormData) {
   const storyId = String(formData.get('storyId') ?? '');
   const story = await prisma.story.findFirst({
     where: { id: storyId, familyId: context.family.id },
-    select: { id: true, authorId: true },
+    select: { id: true, authorId: true, narratorId: true },
   });
   if (!story) redirect('/recits');
-  if (story.authorId !== context.member!.id) redirect(`/recits/${storyId}?suppr=auteur`);
+
+  // §2.1 règle 2 dit « uniquement par l'auteur ». Elle a été écrite avant
+  // que `narratorId` existe (§2.3 : « la spec ne connaît qu'un authorId »).
+  // Appliquée telle quelle, elle empêcherait Jeanne de retirer ses propres
+  // mots parce que Claire tenait le clavier — ce qui contredit le point 6
+  // pour la seule personne à qui ces mots appartiennent. Le droit s'étend
+  // donc au narrateur, comme la correction (§2.5).
+  const sienne = story.authorId === context.member!.id || story.narratorId === context.member!.id;
+  if (!sienne) redirect(`/recits/${storyId}?suppr=auteur`);
 
   await prisma.$transaction([
     prisma.passage.deleteMany({ where: { OR: [{ parentStoryId: storyId }, { childStoryId: storyId }] } }),

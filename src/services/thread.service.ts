@@ -207,6 +207,62 @@ export class ThreadService {
     };
   }
 
+  /**
+   * Retirer un message.
+   *
+   * Constitution, Annexe A point 6 : « Oubli = droit : archivage, silence,
+   * suppression sont des décisions familiales ABSOLUES ». Ce chemin
+   * n'existait pas : un message versé dans la mémoire — par un import, par
+   * un fil — ne pouvait plus être repris par personne. Une parole qu'on ne
+   * peut pas retirer n'a pas été donnée, elle a été prise.
+   *
+   * Deux personnes ont autorité sur ces mots, et seulement elles : celle
+   * qui les a écrits, et celle qui les a dits (§2.5). Le reste de la
+   * famille n'en a aucune.
+   *
+   * Le dernier message d'un fil emporte le fil : ouvrir un fil, c'est y
+   * parler, et un fil vide n'existe pas.
+   */
+  async removeMessage(
+    familyId: string,
+    messageId: string,
+    memberId: string,
+  ): Promise<{ retire: boolean; filSupprime: boolean; raison?: 'introuvable' | 'autorite' }> {
+    const message = await this.prisma.message.findFirst({
+      where: { id: messageId, familyId },
+      select: { id: true, threadId: true, authorId: true, narratorId: true },
+    });
+    if (!message) return { retire: false, filSupprime: false, raison: 'introuvable' };
+
+    if (message.authorId !== memberId && message.narratorId !== memberId) {
+      return { retire: false, filSupprime: false, raison: 'autorite' };
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.message.delete({ where: { id: message.id } });
+
+      const restants = await tx.message.count({ where: { threadId: message.threadId } });
+      if (restants === 0) {
+        // Le fil disparaît avec sa dernière parole. Le récit qui s'en est
+        // cristallisé demeure : il a été relu et validé par un humain, il
+        // ne dépend plus de sa source.
+        await tx.thread.delete({ where: { id: message.threadId } });
+        return { retire: true, filSupprime: true };
+      }
+
+      const dernier = await tx.message.findFirst({
+        where: { threadId: message.threadId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+      await tx.thread.update({
+        where: { id: message.threadId },
+        data: { messageCount: restants, lastMessageAt: dernier!.createdAt },
+      });
+      return { retire: true, filSupprime: false };
+    });
+  }
+
   /** Le récit né du fil. Le fil demeure : il est la provenance. */
   async attachCrystallized(threadId: string, storyId: string): Promise<void> {
     await this.prisma.thread.update({

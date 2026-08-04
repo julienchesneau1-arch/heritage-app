@@ -259,6 +259,24 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
               Vérifiez la plage de dates : si l’année paraît fausse, le fichier a été lu en
               mois/jour au lieu de jour/mois. Ne poursuivez pas dans ce cas.
             </p>
+
+            {/* §3.1 amendée. Un groupe est un espace que la famille a créé
+                ensemble : chacun savait qui écoutait. Un échange à deux a été
+                écrit à une seule personne — l'importer ne change pas de
+                support, il change d'auditoire. On ne l'interdit pas : la
+                mémoire d'une aïeule tient souvent dans ces échanges-là. On
+                le dit avant qu'on coche. */}
+            {lecture.participants.length === 2 ? (
+              <p className="justification">
+                Cette conversation n’a que deux voix. Ces mots ont été écrits à une seule personne,
+                pas à la famille : les garder ici change qui les lira.{' '}
+                {lecture.participants
+                  .filter((nom) => correspondances[nom])
+                  .map((nom) => nom)
+                  .join(' et ') || 'Chacun'}{' '}
+                pourra retirer les siens à tout moment.
+              </p>
+            ) : null}
           </section>
 
           {/* Qui est qui. Rien n'est deviné. */}

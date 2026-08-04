@@ -22,7 +22,7 @@ describe('Un menu ne propose que ce qui existe (§6.1)', () => {
   it('ouvre les sections dès qu’un récit existe', () => {
     const avec = { ...INVENTAIRE_VIDE, recits: 1 };
     const ouvertes = SECTIONS.filter((s) => s.utile(avec)).map((s) => s.label);
-    expect(ouvertes).toEqual(['Veillée', 'Récits', 'Transmission']);
+    expect(ouvertes).toEqual(['Veillée', 'Récits', 'Le livre', 'Transmission']);
   });
 
   it('n’ouvre le graphe que lorsqu’il a des nœuds', () => {

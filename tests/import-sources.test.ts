@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   assembler,
   decouperEnMoments,
@@ -220,3 +222,52 @@ describe('Le modèle commun — doublons et ordre', () => {
     }
   });
 });
+
+describe('§3.1 amendée — apporté n’est pas capté', () => {
+  /**
+   * L'amendement distingue deux gestes que la liste d'origine confondait :
+   * le produit qui VA CHERCHER dans le téléphone, et une personne qui
+   * APPORTE un fichier qu'elle a exporté, lu et coché. Le second est de la
+   * saisie utilisateur, déjà autorisée. Trois conditions le tiennent.
+   */
+  it('condition 1 — aucun lecteur ne touche au réseau ni au disque', () => {
+    // L'analyse a lieu dans le navigateur. Un lecteur qui téléverserait le
+    // fichier ferait tomber toute l'autorisation.
+    const sources = ['modele.ts', 'messenger.ts', 'sms.ts'];
+    for (const fichier of sources) {
+      const code = readFileSync(join(process.cwd(), 'src', 'lib', 'import', fichier), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+      expect(code, `${fichier} ne doit rien émettre`).not.toMatch(
+        /\bfetch\(|XMLHttpRequest|navigator\.|localStorage|indexedDB|fs\./,
+      );
+    }
+  });
+
+  it('condition 2 — un lecteur lit une conversation, jamais une archive', () => {
+    // Un export Facebook contient toutes les conversations d'une vie.
+    // Aucune source n'accepte le ZIP.
+    for (const source of SOURCES) {
+      expect(source.extensions).not.toContain('.zip');
+      expect(source.extensions.every((extension) => ['.txt', '.json', '.xml'].includes(extension))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('reconnaît un tête-à-tête, pour pouvoir le dire', () => {
+    // Un groupe est un espace créé ensemble ; un échange à deux a été écrit
+    // à une seule personne. L'importer change l'auditoire.
+    const aDeux = lireSauvegardeSms(SMS_A_DEUX, { proprietaire: 'Claire Martin' });
+    expect(aDeux.participants).toHaveLength(2);
+
+    const enGroupe = lireExportMessenger(MESSENGER);
+    expect(enGroupe.participants.length).toBeGreaterThan(2);
+  });
+});
+
+const SMS_A_DEUX = `<smses>
+  <sms address="+33612345678" date="1710253391000" type="1" body="Tu te souviens de la montre ?" contact_name="Mamie" />
+  <sms address="+33612345678" date="1710253500000" type="2" body="Oui" contact_name="Mamie" />
+  <sms address="+33612345678" date="1710253600000" type="1" body="Elle est dans le buffet" contact_name="Mamie" />
+</smses>`;

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { formatDateFr } from '@/lib/normalize';
 import { MARK_LABELS, MARK_KINDS, type ThreadWithMessages } from '@/services/thread.service';
-import { markMessage, postMessage } from '@/app/actions';
+import { markMessage, postMessage, removeMessage } from '@/app/actions';
 
 /**
  * LE FIL — l'affichage.
@@ -83,6 +83,20 @@ export function Fil({
                       </button>
                     </form>
                   ))}
+
+                  {/* Annexe A point 6 : le droit à l'oubli est absolu, et il
+                      appartient à qui a écrit ces mots comme à qui les a
+                      dits. Le bouton est visible, jamais caché dans un menu
+                      (§6.3) — mais seulement pour ces deux personnes. */}
+                  {message.author.id === memberId || message.narrator?.id === memberId ? (
+                    <form action={removeMessage}>
+                      <input type="hidden" name="messageId" value={message.id} />
+                      <input type="hidden" name="retour" value={retour} />
+                      <button type="submit" className="justification underline">
+                        Retirer mes mots
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               ) : null}
             </li>

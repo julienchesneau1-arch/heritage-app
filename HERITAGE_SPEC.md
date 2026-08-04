@@ -78,7 +78,7 @@ Le schéma de référence est `prisma/schema.prisma`. Aucune table ne peut être
 ### 2.1 Règles de modèle (non négociables)
 
 1. **Toute suppression de Member** : soft-delete uniquement (flag `isDeleted`). Les histoires restent, l'auteur devient « Auteur anonymisé ».
-2. **Toute suppression de Story** : possible uniquement par l'auteur ou un admin familial.
+2. **Toute suppression de Story** : possible uniquement par l'auteur ou un admin familial. **Amendée** : le droit s'étend au **narrateur**. Cette règle a été écrite avant que `narratorId` existe (§2.3 : « la spec ne connaît qu'un `authorId` ») ; appliquée telle quelle, elle empêcherait Jeanne de retirer ses propres mots parce que Claire tenait le clavier — ce qui retire le point 6 de l'Annexe A à la seule personne à qui ces mots appartiennent. Même autorité que pour la correction (§2.5).
 3. **Family est le tenant isolé** : toute requête SQL doit filtrer par `familyId`. Jamais de requête cross-family.
 4. **Entity.normalizedName** : lowercase, sans accent, sans ponctuation. Utilisé pour le matching.
 
@@ -148,6 +148,27 @@ Le type MIME déclaré doit figurer dans une liste fermée (JPEG, PNG, WebP, HEI
 **Entrées autorisées** : dates déclarées dans l'app (anniversaires, dates d'événements, traditions), actions explicites dans l'app, données saisies par l'utilisateur.
 
 **Entrées interdites** : localisation GPS, historique d'appels, messages texte, activité sur d'autres apps, toute donnée externe non déclarée. La garantie est structurelle : le service ne lit que la base de la famille.
+
+**Amendement — ce que le produit va chercher, et ce qu'un humain lui apporte.** Cette liste a été écrite contre la *captation* : un produit qui lit le téléphone pour en déduire des signaux. Elle ne distinguait pas deux gestes que tout oppose.
+
+| | Aller chercher | Recevoir |
+|---|---|---|
+| Qui décide | le produit | une personne |
+| Qui a vu les données | personne | celle qui les apporte |
+| Ce qui entre | tout ce qui est lisible | ce qui a été coché |
+| Peut-on refuser | non, c'est passif | oui, c'est le geste même |
+
+**Reste interdit** : que le produit accède à une source du téléphone (SMS, appels, GPS, contacts, agenda), par permission système ou par n'importe quel autre moyen. Le Trigger Model, en particulier, ne lit que la base de la famille — la garantie est inchangée, et elle est structurelle.
+
+**Est autorisé** : qu'une personne apporte un fichier qu'elle a elle-même exporté, lu, et dans lequel elle a **coché** ce qui entre. Le produit n'a alors accès qu'à ce qu'un humain lui a tendu. C'est la définition même des « données saisies par l'utilisateur » déjà autorisées ci-dessus — la saisie passe par un fichier au lieu d'un clavier.
+
+**Trois conditions, sans lesquelles l'autorisation tombe** :
+
+1. **Le fichier n'est jamais téléversé.** L'analyse a lieu dans le navigateur ; seuls les passages cochés partent au serveur (§5.1 ter).
+2. **Jamais l'archive entière.** Un export Facebook contient toutes les conversations d'une vie ; on n'accepte qu'un fichier de conversation à la fois.
+3. **Chaque parole importée reste retirable par celui à qui elle appartient** (Annexe A point 6, §2.1 règle 2 amendée). Sans cette troisième condition, importer reviendrait à *prendre* une parole au lieu de la recevoir.
+
+**Le tête-à-tête.** Un **groupe** est un espace que la famille a créé ensemble : chacun savait qui écoutait. Un échange à deux — SMS, ou fil privé — a été écrit à une seule personne. L'importer ne change pas de support, il change d'**auditoire**. Ce n'est pas interdit — la mémoire d'une aïeule tient souvent dans ces échanges-là — mais l'interface le dit avant qu'on coche, et la condition 3 s'applique pleinement : l'autre personne peut retirer ses mots.
 
 **Types de signaux et priorités** :
 
@@ -534,6 +555,23 @@ La primitive de la spec est pourtant « une histoire doit engendrer une autre hi
 
 **Migration et compatibilité.** La migration `le_fil` **transporte** les conversations avant de détruire quoi que ce soit, et lève une exception si le transport est incomplet : une migration qui perd la parole d'une famille est pire qu'une migration qui échoue. L'export passe en `heritage-export/v2` ; l'import relit les deux formats, car un export d'il y a six mois doit encore se restaurer (amendement 3).
 
+### 5.2 ter Le livre — Annexe A, points 1 et 7
+
+**Pourquoi lui, et pas autre chose.** L'Annexe A dit deux choses qui ne se rencontrent qu'ici : *« une histoire doit pouvoir engendrer une autre histoire »* (point 1) et *« le succès ultime est que la famille continue de transmettre sans l'app »* (point 7). Toutes les autres pièces du produit attirent vers l'intérieur. Un objet de papier fonctionne l'application fermée — et un livre qui montre ses trous donne envie de les combler. C'est un Passeur qui n'a pas besoin d'écran.
+
+**Le genre qu'il quitte.** Le livre de mémoire ordinaire tient en quatre traits : chronologique, une voix par récit, d'apparence complète, fini. Les quatre sont abandonnés.
+
+1. **Par filiation, pas par année.** Le produit sait quel récit en a engendré un autre — c'est sa primitive, et aucun autre livre de famille ne peut le montrer. On lit « ce récit, et ceux qu'il a provoqués ». *L'amendement 5 est respecté* : il interdit au **Conservateur** de reclasser selon ce qu'il juge intéressant ; la filiation n'est pas un jugement du produit, ce sont les `Passage` que la famille a créés. À l'intérieur de chaque niveau, l'ordre redevient chronologique.
+2. **Deux noms par récit.** « Raconté par Jeanne Martin, noté par Claire Martin. » Le livre crédite la voix, pas le clavier (§2.3). Un membre retiré reste « un auteur anonymisé » (§2.1 règle 1).
+3. **Il dit ce qu'il ne sait pas.** L'amendement 6 en papier : les questions restées sans réponse, les récits dont la date de l'événement manque — **la date de saisie n'est jamais mise à sa place** — et les membres qu'aucun récit ne mentionne. Formulés en constats, jamais en reproches (§6.2).
+4. **Il n'est pas fini.** Chaque question sans réponse est imprimée avec des lignes pour y répondre à la main.
+
+**Aucun renvoi vers l'écran.** Ni code à scanner, ni adresse. Le point 7 dit « sans l'app » : un livre qui ramène est un dépliant publicitaire. C'est testé.
+
+**Rien n'est borné.** Partout ailleurs le produit limite ce qu'il montre (§6.1) ; le livre est la **sortie**, et une sortie incomplète ne libère personne. Un colophon donne le compte imprimé sur le compte conservé, de quoi vérifier qu'aucun récit n'a été perdu. Les archivés et les mis en quarantaine n'y figurent pas — ils restent dans l'application et dans l'export (amendement 3).
+
+**Aucune dépendance.** Le navigateur fabrique le PDF à partir d'une feuille de style d'impression. Un générateur externe ferait dépendre la sortie du produit d'un service qu'on ne contrôle pas, ce que le point 7 refuse.
+
 ### 5.3 ter Le calendrier familial — extension hors spec v1.0, assumée
 
 Le Trigger Model (§3.1) calcule de vraies occasions datées et les affiche dans une page que personne n'a ouverte. Le signal est juste ; il ne rencontre personne. Une mémoire familiale en *pull* intégral s'ouvre à Noël, puis plus jamais — c'est le risque produit que les §3 et §5 laissaient entier.
@@ -793,7 +831,7 @@ lettre-non-envoyee
 - Ne pas ajouter de « feed » ou « timeline » infini. C'est contraire à la parcimonie.
 - Ne pas envoyer de notifications push. Jamais.
 - Ne pas utiliser de « like » ni de score. Pas d'optimisation d'engagement.
-- Ne pas stocker de données externes (GPS, contacts, calendrier).
+- Ne pas stocker de données externes (GPS, contacts, calendrier) **captées par le produit**. Un fichier apporté, relu et coché par une personne relève de la saisie utilisateur : voir l'amendement de la §3.1.
 
 ---
 

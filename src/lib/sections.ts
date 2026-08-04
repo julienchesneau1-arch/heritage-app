@@ -52,6 +52,12 @@ export const SECTIONS: Section[] = [
     role: 'Les personnes, les lieux, les objets — et ce qui se dit de chacun.',
   },
   {
+    href: '/livre',
+    label: 'Le livre',
+    utile: (i) => i.recits > 0,
+    role: 'Tout ce qui a été gardé, composé pour le papier — avec ce qui manque.',
+  },
+  {
     href: '/transmission',
     label: 'Transmission',
     utile: (i) => i.recits > 0,

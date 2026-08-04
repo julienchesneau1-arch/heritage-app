@@ -336,3 +336,87 @@ describe('Un export d’avant le fil se restaure encore', () => {
     expect(compteurs.sort()).toEqual([1, 2]);
   });
 });
+
+describe('Annexe A point 6 — une parole se retire', () => {
+  /**
+   * « Oubli = droit : archivage, silence, suppression sont des décisions
+   * familiales ABSOLUES ». Ce chemin n'existait pas : un message versé
+   * dans la mémoire ne pouvait plus être repris par personne, pas même par
+   * celui qui l'avait dit. Une parole qu'on ne peut pas retirer n'a pas été
+   * donnée, elle a été prise.
+   */
+  function serviceAvec(
+    message: { id: string; threadId: string; authorId: string; narratorId: string | null } | null,
+    restants: number,
+    trace: string[] = [],
+  ) {
+    const prisma = {
+      message: { findFirst: async () => message },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          message: {
+            delete: async () => {
+              trace.push('message supprimé');
+              return {};
+            },
+            count: async () => restants,
+            findFirst: async () => ({ createdAt: new Date(2024, 0, 1) }),
+          },
+          thread: {
+            delete: async () => {
+              trace.push('fil supprimé');
+              return {};
+            },
+            update: async ({ data }: { data: { messageCount: number } }) => {
+              trace.push(`compteur → ${data.messageCount}`);
+              return {};
+            },
+          },
+        }),
+    } as unknown as PrismaClient;
+    return { service: new ThreadService(prisma), trace };
+  }
+
+  const MESSAGE = { id: 'm1', threadId: 't1', authorId: 'claire', narratorId: 'jeanne' };
+
+  it('laisse celui qui a écrit retirer ses mots', async () => {
+    const { service } = serviceAvec(MESSAGE, 2);
+    expect((await service.removeMessage(FAMILY, 'm1', 'claire')).retire).toBe(true);
+  });
+
+  it('laisse celui qui a PARLÉ retirer ses mots, même s’il n’a pas tapé', async () => {
+    // C'est tout l'enjeu : Jeanne a 92 ans et ne tape pas. Ses mots sont
+    // saisis par Claire. Sans cette règle, la seule personne à qui ils
+    // appartiennent serait la seule à ne pas pouvoir les reprendre.
+    const { service } = serviceAvec(MESSAGE, 2);
+    expect((await service.removeMessage(FAMILY, 'm1', 'jeanne')).retire).toBe(true);
+  });
+
+  it('refuse à quiconque d’autre — le reste de la famille n’a aucune autorité', async () => {
+    const { service } = serviceAvec(MESSAGE, 2);
+    const resultat = await service.removeMessage(FAMILY, 'm1', 'lucas');
+    expect(resultat.retire).toBe(false);
+    expect(resultat.raison).toBe('autorite');
+  });
+
+  it('ne fuite rien sur un message d’une autre famille', async () => {
+    const { service } = serviceAvec(null, 0);
+    expect((await service.removeMessage(FAMILY, 'm1', 'claire')).raison).toBe('introuvable');
+  });
+
+  it('emporte le fil avec sa dernière parole', async () => {
+    // Ouvrir un fil, c'est y parler ; un fil vide n'existe pas.
+    const { service, trace } = serviceAvec(MESSAGE, 0);
+    const resultat = await service.removeMessage(FAMILY, 'm1', 'claire');
+    expect(resultat.filSupprime).toBe(true);
+    expect(trace).toEqual(['message supprimé', 'fil supprimé']);
+  });
+
+  it('remet le compteur d’aplomb quand le fil survit', async () => {
+    // Le compteur est dénormalisé : s'il ne bouge pas dans la même
+    // transaction, il ment dès la première suppression.
+    const { service, trace } = serviceAvec(MESSAGE, 3);
+    await service.removeMessage(FAMILY, 'm1', 'claire');
+    expect(trace).toContain('compteur → 3');
+  });
+});
