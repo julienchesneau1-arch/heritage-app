@@ -2,30 +2,57 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const PAGES = [
-  { href: '/', label: 'Aujourd’hui' },
-  { href: '/veillee', label: 'Veillée' },
-  { href: '/recits', label: 'Récits' },
-  { href: '/brouillons', label: 'À mettre au propre' },
-  { href: '/archives', label: 'Archives' },
-  { href: '/traditions', label: 'Traditions' },
-  { href: '/graphe', label: 'Graphe' },
-  { href: '/transmission', label: 'Transmission' },
-];
+import { SECTIONS, INVENTAIRE_VIDE, type Section } from '@/lib/sections';
+import type { Inventaire } from '@/lib/context';
 
 /**
  * Navigation. Aucun badge, aucun compteur, aucune pastille rouge (§6.1).
- * « Raconter » est le seul appel à l'action permanent (§5.1).
+ *
+ * ── Un menu ne propose que ce qui existe ──
+ *
+ * La §6.1 dit « parcimonie visuelle ». Neuf entrées dont sept mènent à une
+ * page vide ne sont pas parcimonieuses : elles sont décoratives, et elles
+ * demandent à une famille qui arrive d'apprendre un vocabulaire — « Veillée »,
+ * « À mettre au propre », « Transmission » — avant d'avoir dit un seul mot.
+ *
+ * Chaque section reste donc repliée tant qu'elle est vide. Mais rien ne
+ * devient inatteignable : « Tout le reste » les rend toutes, avec une ligne
+ * qui dit à quoi chacune sert. C'est un `<details>` : ni script, ni état, et
+ * le clavier le manipule sans qu'on ait rien à écrire.
  */
+
 export function Nav({
   familyName,
   member,
+  inventaire,
 }: {
   familyName: string | null;
   member: { id: string; name: string } | null;
+  inventaire: Inventaire | null;
 }) {
   const pathname = usePathname();
+  const inv = inventaire ?? INVENTAIRE_VIDE;
+
+  const ouvertes = SECTIONS.filter((page) => page.utile(inv));
+  const repliees = SECTIONS.filter((page) => !page.utile(inv));
+
+  const lien = (page: Section) => {
+    const current = pathname.startsWith(page.href);
+    return (
+      <Link
+        key={page.href}
+        href={page.href}
+        // Lu par les lecteurs d'écran, et souligné pour tout le monde :
+        // la couleur seule ne dirait rien à qui ne la perçoit pas.
+        aria-current={current ? 'page' : undefined}
+        className={`py-2 font-sans text-sm hover:text-ink ${
+          current ? 'text-ink underline underline-offset-4' : 'text-muted'
+        }`}
+      >
+        {page.label}
+      </Link>
+    );
+  };
 
   return (
     <header className="border-b border-rule pt-6">
@@ -50,26 +77,39 @@ export function Nav({
       </div>
 
       <nav aria-label="Sections" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2">
-        {PAGES.map((page) => {
-          const current = page.href === '/' ? pathname === '/' : pathname.startsWith(page.href);
-          return (
-            <Link
-              key={page.href}
-              href={page.href}
-              // Lu par les lecteurs d'écran, et souligné pour tout le monde :
-              // la couleur seule ne dirait rien à qui ne la perçoit pas.
-              aria-current={current ? 'page' : undefined}
-              className={`py-2 font-sans text-sm hover:text-ink ${
-                current ? 'text-ink underline underline-offset-4' : 'text-muted'
-              }`}
-            >
-              {page.label}
-            </Link>
-          );
-        })}
+        <Link
+          href="/"
+          aria-current={pathname === '/' ? 'page' : undefined}
+          className={`py-2 font-sans text-sm hover:text-ink ${
+            pathname === '/' ? 'text-ink underline underline-offset-4' : 'text-muted'
+          }`}
+        >
+          Aujourd’hui
+        </Link>
+
+        {ouvertes.map(lien)}
+
         <Link href="/recits/nouveau" className="py-2 font-sans text-sm text-accent hover:underline">
           Raconter
         </Link>
+
+        {repliees.length > 0 ? (
+          <details className="w-full">
+            <summary className="cursor-pointer py-2 font-sans text-sm text-muted hover:text-ink">
+              Tout le reste
+            </summary>
+            <ul className="space-y-2 py-2">
+              {repliees.map((page) => (
+                <li key={page.href}>
+                  <Link href={page.href} className="font-sans text-sm underline">
+                    {page.label}
+                  </Link>
+                  <span className="justification block">{page.role}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </nav>
     </header>
   );

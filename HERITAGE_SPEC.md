@@ -445,6 +445,27 @@ C'est la page vers laquelle renvoient toutes les vues bornées (graphe, veillée
 
 **La recherche survit à la navigation.** Tourner la page ou basculer les archives conservait l'un et perdait l'autre : tous les liens de la page reconstruisent la requête complète (`q`, `type`, `archivees`), et le formulaire GET reporte le filtre d'archives dans un champ caché.
 
+### 5.1 bis Le premier jour — correction d'une dérive, pas une extension
+
+**Le constat, vérifié en conditions réelles.** Une famille neuve voyait ceci, et rien d'autre : le nom de sa famille, sous un menu de neuf entrées dont sept menaient à une page vide. Aucune phrase ne disait ce qu'était le produit ni quoi faire. La §6.1 était respectée à la lettre — *une* suggestion au plus — et le résultat était un écran muet.
+
+Deux causes distinctes, et la première est une dérive par rapport à ce document :
+
+1. **La §1 annonce sept pages ; l'application en compte vingt.** L'onboarding, la famille, la restauration, les brouillons, les fils s'y sont ajoutés un par un, chacun justifié, aucun jamais retiré du menu. Neuf entrées dans un vocabulaire privé — « Veillée », « À mettre au propre », « Transmission » — demandent d'apprendre le produit avant d'avoir dit un mot.
+2. **La parcimonie appliquée à une mémoire vide ne produit rien.** Zéro récit, donc zéro Passeur, zéro signal. Le principe est juste pour une mémoire installée ; il est mortel pour une mémoire qui commence.
+
+**Le menu ne propose que ce qui existe.** Chaque section reste repliée tant qu'elle est vide, sous « Tout le reste » qui les rend toutes avec une ligne disant à quoi chacune sert — c'est aussi là que le vocabulaire du produit s'explique. Rien ne devient inatteignable : cacher n'est pas calmer. Un `<details>`, donc sans script ni état.
+
+**Le premier écran dit trois choses, dans cet ordre** : ce que c'est, comment ça marche, quoi faire. Puis une seule action — parler.
+
+> Ici, la famille Martin se raconte.
+> Quelqu'un dit une chose. Quelqu'un d'autre ajoute la sienne. Quand il y en a assez, cela devient un récit qui reste.
+> *Rien à rédiger : personne n'écrit de mémoires ici. Une phrase suffit, et elle peut être dite à voix haute.*
+
+**Ce que la §6.2 interdit ici.** Jamais « vous n'avez encore rien écrit » : constater un manque est du chantage émotionnel déguisé en information. On décrit un lieu, pas un vide. La règle est testée sur les trois phrases.
+
+**Coût.** L'inventaire de la famille — six comptes — est fait en **une seule requête** dans `loadContext`, puisqu'il est nécessaire à chaque page.
+
 ### 5.2 bis Le fil — extension hors spec v1.0, assumée
 
 **Le constat.** `Conversation` tenait en deux verrous. `storyId` était obligatoire : impossible de dire trois mots sur la montre de Robert tant que personne n'avait *rédigé* un récit. Et le modèle n'admettait qu'un `responseText` : le troisième intervenant n'avait nulle part où parler — Jeanne ne pouvait pas corriger la réponse de Claire.

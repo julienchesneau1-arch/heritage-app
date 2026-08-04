@@ -4,6 +4,7 @@ import { loadContext } from '@/lib/context';
 import { TriggerModelService } from '@/services/trigger-model.service';
 import { PasseurService, subjectOf, type PasseurQuestion } from '@/services/passeur.service';
 import { dismissSignal, ignorePasseur } from './actions';
+import { PremierJour } from '@/components/premier-jour';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,18 @@ export default async function TodayPage() {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
   if (!context.member) redirect('/qui');
+
+  // Avant tout : une mémoire vide n'a rien à suggérer, et un écran muet
+  // n'apprend rien à qui vient d'arriver.
+  if (context.inventaire.recits === 0 && context.inventaire.fils === 0) {
+    return (
+      <PremierJour
+        familyName={context.family.name}
+        members={context.members}
+        memberId={context.member.id}
+      />
+    );
+  }
 
   const [signal, question] = await Promise.all([
     triggerModel.generateSignal(context.family.id, context.member.id),

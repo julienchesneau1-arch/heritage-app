@@ -191,6 +191,14 @@ Une question du Passeur a le droit de tomber à côté : c'est une question, la 
 
 Le même défaut avait une conséquence plus concrète : le seul filtre de plausibilité était « pas décédé ». Sur la famille de démonstration, l'application demandait à Lucas (né en 2019) son souvenir d'un déménagement de 1971, et à Emma son point de vue sur un événement daté du jour de sa naissance. `couldRememberFirsthand()` écarte qui n'était pas né, qui était déjà mort, et qui avait moins de cinq ans. Une date de naissance inconnue, en revanche, ne disqualifie personne.
 
+### Les deux premières secondes
+
+Vérifié sur une famille neuve : le premier écran n'affichait que le nom de la famille, sous neuf entrées de menu dont sept menaient à une page vide. Rien ne disait ce qu'était le produit ni quoi faire.
+
+Deux causes. La §1 de la spec annonce **sept pages** ; l'application en compte vingt — chaque ajout justifié, aucun jamais retiré du menu. Et la parcimonie appliquée à une mémoire vide ne produit rien du tout : zéro récit, donc zéro suggestion.
+
+Le menu ne propose désormais que les sections qui contiennent quelque chose ; les autres attendent sous « Tout le reste », chacune avec une ligne disant à quoi elle sert — cacher n'est pas calmer. Et le premier écran dit trois choses puis propose une seule action : parler. Jamais « vous n'avez encore rien écrit » : constater un manque est du chantage émotionnel déguisé en information (§6.2), et la règle est testée.
+
 ### Le fil : le livre devient la sortie, plus jamais l'entrée
 
 `Conversation` tenait en deux verrous. `storyId` était obligatoire — impossible de dire trois mots sur la montre de Robert tant que personne n'avait *rédigé* un récit. Et il n'y avait qu'un `responseText` : Jeanne ne pouvait pas corriger la réponse de Claire. La page blanche gardait l'entrée du produit.
