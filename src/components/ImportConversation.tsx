@@ -3,10 +3,13 @@
 import { useState } from 'react';
 import {
   decouperEnMoments,
-  lireExportWhatsApp,
-  type LectureWhatsApp,
+  detecterSource,
+  EXTENSIONS_ACCEPTEES,
+  SOURCES,
+  type Lecture,
   type Moment,
-} from '@/lib/whatsapp';
+  type Source,
+} from '@/lib/import';
 
 /**
  * IMPORTER UNE CONVERSATION DE FAMILLE.
@@ -37,12 +40,17 @@ interface Membre {
   name: string;
 }
 
-type Etat = 'attente' | 'lecture' | 'choix' | 'envoi' | 'fait' | 'erreur';
+type Etat = 'attente' | 'lecture' | 'proprietaire' | 'choix' | 'envoi' | 'fait' | 'erreur';
 
-export function ImportWhatsApp({ familyId, members }: { familyId: string; members: Membre[] }) {
+export function ImportConversation({ familyId, members }: { familyId: string; members: Membre[] }) {
   const [etat, setEtat] = useState<Etat>('attente');
   const [erreur, setErreur] = useState('');
-  const [lecture, setLecture] = useState<LectureWhatsApp | null>(null);
+  const [lecture, setLecture] = useState<Lecture | null>(null);
+  const [source, setSource] = useState<Source | null>(null);
+  const [proprietaire, setProprietaire] = useState('');
+  const [fichierEnAttente, setFichierEnAttente] = useState<{ nom: string; contenu: string } | null>(
+    null,
+  );
   const [moments, setMoments] = useState<Moment[]>([]);
   const [retenus, setRetenus] = useState<Set<number>>(new Set());
   const [correspondances, setCorrespondances] = useState<Record<string, string>>({});
@@ -53,25 +61,49 @@ export function ImportWhatsApp({ familyId, members }: { familyId: string; member
     setErreur('');
     try {
       const contenu = await fichier.text();
-      const lu = lireExportWhatsApp(contenu);
+      const trouvee = detecterSource(contenu, fichier.name);
 
-      if (lu.messages.length === 0) {
+      if (!trouvee) {
         setEtat('erreur');
         setErreur(
-          'Aucun message reconnu dans ce fichier. Vérifiez qu’il s’agit bien du .txt produit par « Exporter la discussion » de WhatsApp.',
+          'Ce fichier ne correspond à aucun format connu. Aucune lecture n’a été tentée : deviner produirait un import silencieusement faux.',
         );
         return;
       }
 
-      setLecture(lu);
-      setMoments(decouperEnMoments(lu.messages));
-      setRetenus(new Set());
-      setCorrespondances({});
-      setEtat('choix');
+      setSource(trouvee);
+
+      // Un export SMS ne nomme jamais celui qui a envoyé. Sans réponse, la
+      // moitié de la conversation serait sans auteur — on demande avant de lire.
+      if (trouvee.demandeProprietaire && proprietaire.trim() === '') {
+        setFichierEnAttente({ nom: fichier.name, contenu });
+        setEtat('proprietaire');
+        return;
+      }
+
+      analyser(trouvee, contenu, proprietaire);
     } catch {
       setEtat('erreur');
       setErreur('Ce fichier n’a pas pu être lu.');
     }
+  }
+
+  function analyser(source: Source, contenu: string, nomProprietaire: string) {
+    const lu = source.lire(contenu, { proprietaire: nomProprietaire.trim() || undefined });
+
+    if (lu.messages.length === 0) {
+      setEtat('erreur');
+      setErreur(
+        `Aucun message reconnu dans ce fichier ${source.nom}. ${source.commentExporter}`,
+      );
+      return;
+    }
+
+    setLecture(lu);
+    setMoments(decouperEnMoments(lu.messages));
+    setRetenus(new Set());
+    setCorrespondances({});
+    setEtat('choix');
   }
 
   async function envoyer() {
@@ -83,6 +115,7 @@ export function ImportWhatsApp({ familyId, members }: { familyId: string; member
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          source: lecture.source,
           correspondances,
           moments: choisis.map((moment) => ({
             debut: moment.debut.toISOString(),
@@ -120,7 +153,7 @@ export function ImportWhatsApp({ familyId, members }: { familyId: string; member
           <input
             id="fichier"
             type="file"
-            accept=".txt,text/plain"
+            accept={EXTENSIONS_ACCEPTEES}
             className="block w-full font-sans text-sm"
             onChange={(event) => {
               const fichier = event.target.files?.[0];
@@ -128,15 +161,69 @@ export function ImportWhatsApp({ familyId, members }: { familyId: string; member
             }}
           />
           <p className="justification">
-            Dans WhatsApp : ouvrez la discussion de famille, puis « Exporter la discussion », puis
-            « Sans les médias ». Le fichier <strong>reste sur cet appareil</strong> — il est lu ici,
-            dans votre navigateur, et n’est jamais envoyé.
+            Le fichier <strong>reste sur cet appareil</strong> : il est lu ici, dans votre
+            navigateur, et n’est jamais envoyé. Seuls les passages que vous cocherez seront
+            enregistrés.
           </p>
+
+          <details>
+            <summary className="cursor-pointer py-2 font-sans text-sm text-muted hover:text-ink">
+              Comment obtenir ce fichier
+            </summary>
+            <ul className="space-y-3 py-2">
+              {SOURCES.map((disponible) => (
+                <li key={disponible.id}>
+                  <span className="section-label block">{disponible.nom}</span>
+                  <span className="justification block">{disponible.commentExporter}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
           {erreur ? <p className="justification text-accent">{erreur}</p> : null}
         </div>
       ) : null}
 
       {etat === 'lecture' ? <p className="leading-relaxed">Lecture du fichier…</p> : null}
+
+      {etat === 'proprietaire' && source && fichierEnAttente ? (
+        <div className="space-y-4">
+          <h2 className="section-label">À qui est ce téléphone ?</h2>
+          <p className="leading-relaxed">
+            Une sauvegarde de SMS nomme la personne qui a écrit les messages <em>reçus</em>, mais
+            jamais celle qui a envoyé les autres : elle sait seulement qu’ils sont sortis de cet
+            appareil.
+          </p>
+          <p className="justification">
+            Sans ce nom, la moitié de la conversation resterait sans auteur. L’application ne le
+            devinera pas.
+          </p>
+          <label htmlFor="proprietaire" className="section-label block">
+            Nom du propriétaire du téléphone
+          </label>
+          <input
+            id="proprietaire"
+            value={proprietaire}
+            onChange={(event) => setProprietaire(event.target.value)}
+            className="min-h-[44px] w-full max-w-sm rounded-sm border border-rule bg-transparent px-3 font-sans"
+          />
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => analyser(source, fichierEnAttente.contenu, proprietaire)}
+            >
+              Continuer
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => analyser(source, fichierEnAttente.contenu, '')}
+            >
+              Je ne sais pas
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {etat === 'choix' && lecture ? (
         <>
@@ -144,6 +231,7 @@ export function ImportWhatsApp({ familyId, members }: { familyId: string; member
           <section className="space-y-2">
             <h2 className="section-label">Ce que contient ce fichier</h2>
             <p className="leading-relaxed">
+              Format reconnu : {source?.nom ?? lecture.source}.{' '}
               {lecture.messages.length.toLocaleString('fr-FR')} messages de{' '}
               {lecture.participants.length} personnes, du{' '}
               {lecture.debut!.toLocaleDateString('fr-FR')} au{' '}
@@ -151,15 +239,25 @@ export function ImportWhatsApp({ familyId, members }: { familyId: string; member
             </p>
             <p className="justification">
               {lecture.systeme > 0
-                ? `${lecture.systeme} lignes écartées : elles viennent de WhatsApp lui-même (chiffrement, arrivées, appels manqués) et ne sont la parole de personne. `
+                ? `${lecture.systeme} lignes écartées : elles viennent de la plateforme elle-même et ne sont la parole de personne. `
+                : ''}
+              {lecture.doublons > 0
+                ? `${lecture.doublons} messages en double écartés — même minute, même auteur, même texte. `
                 : ''}
               {lecture.ignorees > 0
-                ? `${lecture.ignorees} lignes n’ont pas pu être rattachées à un message — elles ne seront pas importées.`
+                ? `${lecture.ignorees} lignes n’ont pas pu être rattachées à un message ; elles ne seront pas importées.`
                 : ''}
             </p>
+            {/* Ce que le lecteur sait d'incertain est dit avant le choix,
+                jamais découvert après (amendement 6). */}
+            {lecture.avertissements.map((avertissement) => (
+              <p key={avertissement} className="justification">
+                {avertissement}
+              </p>
+            ))}
             <p className="justification">
-              Vérifiez la plage de dates : si l’année paraît fausse, c’est que le téléphone a exporté
-              en mois/jour et non en jour/mois. Ne poursuivez pas dans ce cas.
+              Vérifiez la plage de dates : si l’année paraît fausse, le fichier a été lu en
+              mois/jour au lieu de jour/mois. Ne poursuivez pas dans ce cas.
             </p>
           </section>
 
@@ -167,8 +265,8 @@ export function ImportWhatsApp({ familyId, members }: { familyId: string; member
           <section className="space-y-3 border-t border-rule pt-6">
             <h2 className="section-label">Qui est qui</h2>
             <p className="justification">
-              Les noms viennent du carnet d’adresses de celui qui a exporté. Rattachez ceux que vous
-              reconnaissez ; les autres resteront cités par leur nom, sans être rattachés à personne.
+              Les noms viennent du carnet d’adresses de celui qui a exporté — ou d’un numéro de
+              téléphone. Rattachez ceux que vous reconnaissez ; les autres resteront cités par leur nom, sans être rattachés à personne.
               Rien n’est deviné.
             </p>
             <ul className="space-y-2">

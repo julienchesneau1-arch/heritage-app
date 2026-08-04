@@ -1,3 +1,5 @@
+import { assembler, type Lecture, type MessageBrut, type Source } from './import/modele';
+
 /**
  * LIRE UN EXPORT WHATSAPP — extension hors spec v1.0, assumée.
  *
@@ -27,26 +29,6 @@
  * passages qu'un humain a explicitement retenus.
  */
 
-export interface MessageWhatsApp {
-  /** Ordre d'apparition dans le fichier — sert d'identifiant stable. */
-  index: number;
-  date: Date;
-  auteur: string;
-  texte: string;
-  /** Une pièce jointe dont seul le nom subsiste dans l'export. */
-  pieceJointe: string | null;
-}
-
-export interface LectureWhatsApp {
-  messages: MessageWhatsApp[];
-  participants: string[];
-  /** Lignes que l'analyseur n'a pas su rattacher. On les compte, on ne les cache pas. */
-  ignorees: number;
-  /** Messages système retirés (chiffrement, arrivées, changements de sujet). */
-  systeme: number;
-  debut: Date | null;
-  fin: Date | null;
-}
 
 /**
  * Les quatre formats qu'exporte WhatsApp selon la plateforme et la langue.
@@ -130,7 +112,7 @@ export const EXEMPLES_SYSTEME = SYSTEME.map((entree) => entree.exemple);
  * devinée ni silencieusement jetée (amendement 6 — le produit ne prétend
  * pas avoir tout lu s'il n'a pas tout lu).
  */
-export function lireExportWhatsApp(contenu: string): LectureWhatsApp {
+export function lireExportWhatsApp(contenu: string): Lecture {
   // WhatsApp sème des marques de direction invisibles (U+200E, U+200F) et
   // des espaces insécables étroits (U+202F) devant les heures. Sans ce
   // nettoyage, aucun motif ne s'accroche.
@@ -140,7 +122,7 @@ export function lireExportWhatsApp(contenu: string): LectureWhatsApp {
     .replace(/[  ]/g, ' ')
     .split(/\r?\n/);
 
-  const messages: MessageWhatsApp[] = [];
+  const messages: MessageBrut[] = [];
   let ignorees = 0;
   let systeme = 0;
 
@@ -156,11 +138,13 @@ export function lireExportWhatsApp(contenu: string): LectureWhatsApp {
       }
       const { texte, pieceJointe } = extrairePieceJointe(entete.texte);
       messages.push({
-        index: messages.length,
         date: entete.date,
         auteur: entete.auteur,
         texte,
         pieceJointe,
+        // WhatsApp écrit l'heure LOCALE du téléphone qui a exporté, sans
+        // jamais dire quel fuseau. L'instant n'est donc pas absolu.
+        heureFiable: false,
       });
       continue;
     }
@@ -181,18 +165,14 @@ export function lireExportWhatsApp(contenu: string): LectureWhatsApp {
     ignorees += 1;
   }
 
-  const participants = [...new Set(messages.map((m) => m.auteur))].sort((a, b) =>
-    a.localeCompare(b, 'fr'),
-  );
+  const avertissements =
+    messages.length > 0
+      ? [
+          'WhatsApp n’indique pas le fuseau horaire : les heures sont celles du téléphone qui a exporté. Les dates restent justes.',
+        ]
+      : [];
 
-  return {
-    messages,
-    participants,
-    ignorees,
-    systeme,
-    debut: messages[0]?.date ?? null,
-    fin: messages[messages.length - 1]?.date ?? null,
-  };
+  return assembler('whatsapp', messages, { ignorees, systeme, avertissements });
 }
 
 function analyserEntete(
@@ -264,94 +244,15 @@ function extrairePieceJointe(texte: string): { texte: string; pieceJointe: strin
   return { texte: texte.trim(), pieceJointe: null };
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Les moments
-// ─────────────────────────────────────────────────────────────────────
-
-export interface Moment {
-  /** Index des messages qui le composent, dans l'ordre du fichier. */
-  indices: number[];
-  debut: Date;
-  fin: Date;
-  participants: string[];
-  /** Ce que la famille lit pour décider. Jamais un résumé produit par une machine. */
-  apercu: string;
-}
-
-const PAUSE_MINUTES = 90;
-const MIN_MESSAGES = 3;
-const MIN_PARTICIPANTS = 2;
-
-/**
- * Découpe la conversation en MOMENTS : des rafales d'échange séparées par
- * des silences.
- *
- * Ce n'est pas un classement par intérêt, et c'est important : le produit
- * ne sait pas ce qui compte pour une famille, et l'amendement 6 lui
- * interdit de faire semblant. Le découpage est purement temporel — un
- * critère vérifiable, que l'interface peut expliquer en une phrase.
- *
- * Les seuils sont conservateurs : au moins trois messages, au moins deux
- * personnes. Un message isolé (« ok », « à demain ») n'est pas un souvenir,
- * et un monologue n'est pas une conversation.
- */
-export function decouperEnMoments(
-  messages: readonly MessageWhatsApp[],
-  options: { pauseMinutes?: number; minMessages?: number; minParticipants?: number } = {},
-): Moment[] {
-  const pause = (options.pauseMinutes ?? PAUSE_MINUTES) * 60_000;
-  const minMessages = options.minMessages ?? MIN_MESSAGES;
-  const minParticipants = options.minParticipants ?? MIN_PARTICIPANTS;
-
-  const moments: Moment[] = [];
-  let courant: MessageWhatsApp[] = [];
-
-  const cloturer = () => {
-    if (courant.length === 0) return;
-    const participants = [...new Set(courant.map((m) => m.auteur))];
-    if (courant.length >= minMessages && participants.length >= minParticipants) {
-      moments.push({
-        indices: courant.map((m) => m.index),
-        debut: courant[0]!.date,
-        fin: courant[courant.length - 1]!.date,
-        participants,
-        apercu: apercuDe(courant),
-      });
-    }
-    courant = [];
-  };
-
-  for (const message of messages) {
-    const precedent = courant[courant.length - 1];
-    if (precedent && message.date.getTime() - precedent.date.getTime() > pause) cloturer();
-    courant.push(message);
-  }
-  cloturer();
-
-  return moments;
-}
-
-/**
- * Les premiers mots réellement dits, tels quels.
- *
- * Pas de résumé : ce que la famille lit pour décider doit être ce qui est
- * écrit dans le fichier, sans quoi elle choisit sur la foi d'une machine.
- */
-function apercuDe(messages: readonly MessageWhatsApp[], maxLongueur = 160): string {
-  const parlant = messages.filter((m) => m.texte.length > 0);
-  const source = parlant.length > 0 ? parlant : messages;
-
-  let apercu = '';
-  for (const message of source) {
-    const bout = message.texte || `(${message.pieceJointe ?? 'média'})`;
-    const ajout = apercu === '' ? `${message.auteur} : ${bout}` : ` — ${message.auteur} : ${bout}`;
-    if (apercu.length + ajout.length > maxLongueur) break;
-    apercu += ajout;
-  }
-
-  if (apercu === '') {
-    const premier = source[0]!;
-    apercu = `${premier.auteur} : ${premier.texte || `(${premier.pieceJointe ?? 'média'})`}`;
-  }
-  return apercu.length > maxLongueur ? `${apercu.slice(0, maxLongueur - 1).trimEnd()}…` : apercu;
-}
+export const SOURCE_WHATSAPP: Source = {
+  id: 'whatsapp',
+  nom: 'WhatsApp',
+  extensions: ['.txt'],
+  demandeProprietaire: false,
+  reconnait: (debut, nomFichier) =>
+    /\.txt$/i.test(nomFichier) &&
+    /^\s*\[?\d{1,2}[/.]\d{1,2}[/.]\d{2,4}[,.]?\s+(?:à\s+)?\d{1,2}:\d{2}/m.test(debut),
+  lire: (contenu) => lireExportWhatsApp(contenu),
+  commentExporter:
+    'Dans WhatsApp : ouvrez la discussion de famille, puis « Exporter la discussion », puis « Sans les médias ». Vous obtenez un fichier .txt.',
+};

@@ -480,6 +480,26 @@ Or presque chaque famille possède déjà des années de conversation, dans un e
 2. **On ne devine aucune identité.** Un nom de l'export n'est rattaché à un membre que si quelqu'un l'a déclaré — « Mamie » n'est pas un identifiant. Sans rattachement, le nom de l'export est **conservé dans le corps du message** : c'est la seule trace de qui a parlé, et la perdre attribuerait ces mots au déposant.
 3. **On ne résume rien.** L'aperçu qui sert à choisir est fait des mots réellement écrits.
 
+**Trois sources, un seul modèle.** Le premier lecteur rendait un type qui lui était propre ; en ajouter trois aurait donné quatre lecteurs, quatre types, quatre interfaces et quatre fois les mêmes règles. Tout converge sur `src/lib/import/modele.ts` : découpage, rattachement des identités, dédoublonnage, écran de choix et route d'écriture sont écrits **une** fois. Une source nouvelle n'apporte qu'un lecteur — et ses pièges à elle.
+
+| Source | Format | Piège propre |
+|---|---|---|
+| WhatsApp | `.txt`, 4 variantes de langue et de plateforme | Heure **locale** du téléphone, fuseau jamais indiqué |
+| Messenger | `message_1.json` (Download Your Information) | UTF-8 **encodé deux fois** ; messages du plus récent au plus ancien |
+| SMS | `.xml` (SMS Backup & Restore, Android) | Un message **envoyé** n'a pas d'auteur nommé |
+
+**Le double encodage de Facebook.** L'export écrit « arrÃªtÃ©e » pour « arrêtée » — défaut ancien et jamais corrigé. Sans réparation, tout import français est illisible. Mais appliquée à un texte sain, la même transformation le **détruit** : la détection n'est donc pas une optimisation, c'est une condition. On n'agit que sur une signature de double encodage, on annule si la relecture produit un caractère de remplacement, et la réparation est **annoncée** à la famille.
+
+**Les SMS envoyés n'ont pas d'auteur.** La sauvegarde nomme le contact d'un message reçu ; d'un message envoyé, elle sait seulement qu'il est sorti de l'appareil. La moitié de la conversation serait sans auteur — et l'inventer est exactement ce que la Constitution interdit. L'application demande donc le nom du propriétaire du téléphone, et accepte « je ne sais pas » : les messages restent alors attribués à « depuis cet appareil ».
+
+**On n'accepte jamais l'archive entière.** L'export Facebook contient **toutes** les conversations — les ex, les collègues, les médecins. Accepter le ZIP reviendrait à inviter quelqu'un à verser dix ans de vie privée dans une archive familiale permanente, en un geste, sans l'avoir relue. Un seul fichier de conversation à la fois.
+
+**Les doublons.** Une même conversation existe souvent dans deux exports — on migre de SMS vers WhatsApp et l'on garde les deux. Deux messages sont réputés identiques quand ils ont la **même minute**, le même auteur et le même texte : la seconde près serait trop stricte d'un appareil à l'autre. La règle est approximative, elle est dite comme telle, et le nombre d'écartés est affiché.
+
+**Les heures ne sont pas comparables entre sources.** Messenger et les SMS horodatent en millisecondes depuis 1970 : l'instant est absolu. WhatsApp écrit l'heure locale du téléphone qui a exporté. `MessageImporte.heureFiable` porte la distinction, et l'écart est signalé plutôt que masqué — c'est l'amendement 6 appliqué au temps.
+
+**Ce qu'on ne lit pas, et pourquoi.** iMessage n'a aucun export utilisateur ; Signal chiffre ses sauvegardes. Prétendre les couvrir supposerait de demander à une famille de fouiller une sauvegarde chiffrée. Ces sources sont donc absentes, et l'interface ne les mentionne pas.
+
 **L'attribution.** L'importateur est l'`authorId` — c'est lui qui pose ces mots ici. Le `narratorId` est celui qui les a dits, quand il est déclaré. Même distinction que pour un récit dicté (§2.3), et pour la même raison : sans elle, dix ans de paroles familiales seraient attribués à celui qui a exporté le fichier, et Jeanne disparaîtrait de sa mémoire une seconde fois.
 
 **Ce que l'analyseur ne comprend pas, il le compte.** Quatre formats d'export coexistent selon la plateforme et la langue du téléphone, aucun n'est documenté. Les lignes non rattachées sont affichées comme telles, jamais devinées ni jetées en silence. La plage de dates lue est montrée pour que la famille vérifie d'un coup d'œil que le fichier n'a pas été lu en mois/jour.

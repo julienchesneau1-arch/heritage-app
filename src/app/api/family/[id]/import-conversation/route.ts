@@ -18,6 +18,7 @@ export const dynamic = 'force-dynamic';
  * n'est pas à l'appelant de déclarer qui écrit dans la mémoire.
  */
 const schema = z.object({
+  source: z.enum(['whatsapp', 'messenger', 'sms']),
   // nom dans l'export → identifiant de membre. Vide = personne, et c'est
   // une réponse valide : on ne devine pas une identité.
   correspondances: z.record(z.string(), z.string()),
@@ -63,8 +64,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     Object.entries(parsed.data.correspondances).filter(([, id]) => valides.has(id)),
   );
 
+  const origine = { whatsapp: 'WhatsApp', messenger: 'Messenger', sms: 'SMS' }[parsed.data.source];
+
   let fils = 0;
   for (const moment of parsed.data.moments) {
+    // D'où viennent ces mots, dit une fois pour le fil. La famille doit
+    // pouvoir savoir qu'un échange a été repris ailleurs, et non écrit ici.
+    const titre = `Conversation ${origine} du ${new Date(moment.debut).toLocaleDateString('fr-FR')}`;
     const [premier, ...suite] = moment.messages;
     if (!premier) continue;
 
@@ -87,7 +93,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       };
     };
 
-    const thread = await threadService.open({ kind: 'none' }, enMessage(premier));
+    const thread = await threadService.open({ kind: 'none' }, enMessage(premier), titre);
     for (const message of suite) await threadService.reply(thread.id, enMessage(message));
     fils += 1;
   }

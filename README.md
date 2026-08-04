@@ -203,7 +203,19 @@ Trois refus, qui découlent de l'amendement 6. On **n'importe pas tout** : le d�
 
 L'importateur est l'auteur, le narrateur est celui qui a parlé — sinon dix ans de paroles familiales seraient attribués à celui qui a exporté le fichier.
 
-Quatre formats d'export coexistent (iOS, Android, US, français), aucun n'est documenté. Ce que l'analyseur ne comprend pas, il le compte et l'affiche.
+**Trois sources, un seul modèle.** WhatsApp (`.txt`, quatre variantes), Messenger (`message_1.json`) et les SMS Android (`.xml`). Découpage, identités, dédoublonnage et écriture sont écrits une fois ; une source n'apporte qu'un lecteur et ses pièges.
+
+| Source | Piège propre |
+|---|---|
+| WhatsApp | heure **locale**, fuseau jamais indiqué |
+| Messenger | UTF-8 **encodé deux fois** (« arrÃªtÃ©e ») ; messages du plus récent au plus ancien |
+| SMS | un message **envoyé** n'a pas d'auteur nommé |
+
+La réparation du double encodage détruirait un texte sain : elle n'est appliquée que sur signature, annulée si la relecture échoue, et annoncée à la famille. Pour les SMS, l'application demande qui possède le téléphone et accepte « je ne sais pas ». On n'accepte jamais l'archive Facebook entière — elle contient toutes les conversations, pas seulement la famille.
+
+Les heures ne sont pas comparables entre sources : Messenger et les SMS donnent un instant absolu, WhatsApp une heure locale. La distinction est portée par le modèle et signalée, jamais masquée.
+
+iMessage et Signal sont absents : aucun export utilisateur pour l'un, sauvegardes chiffrées pour l'autre. On ne prétend pas les couvrir.
 
 ### Les deux premières secondes
 

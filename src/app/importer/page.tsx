@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
-import { ImportWhatsApp } from '@/components/ImportWhatsApp';
+import { ImportConversation } from '@/components/ImportConversation';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,12 +21,13 @@ export default async function ImporterPage() {
       <div className="space-y-3">
         <h1 className="text-2xl leading-snug">La famille se parle déjà quelque part.</h1>
         <p className="text-lg leading-relaxed">
-          Des années de conversation dorment dans un groupe WhatsApp, où tout défile et où personne
-          ne retrouve rien. Vous pouvez en garder ce qui mérite de rester.
+          Des années de conversation dorment dans un groupe WhatsApp, un fil Messenger ou les SMS
+          d’un téléphone — là où tout défile et où personne ne retrouve rien. Vous pouvez en garder
+          ce qui mérite de rester.
         </p>
       </div>
 
-      <ImportWhatsApp familyId={context.family.id} members={context.members} />
+      <ImportConversation familyId={context.family.id} members={context.members} />
     </div>
   );
 }

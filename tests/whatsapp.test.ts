@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  decouperEnMoments,
-  estSysteme,
-  lireExportWhatsApp,
-  EXEMPLES_SYSTEME,
-} from '@/lib/whatsapp';
+import { estSysteme, lireExportWhatsApp, EXEMPLES_SYSTEME } from '@/lib/whatsapp';
+import { decouperEnMoments, type MessageImporte } from '@/lib/import';
 
 /**
  * Les formats viennent d'exports réels : WhatsApp n'en documente aucun, et
@@ -299,7 +295,7 @@ describe('Ce qui est envoyé au serveur', () => {
     // sensibles — n'est jamais transmis.
     const retenus = new Set([0]);
     const envoyes = moments
-      .filter((_, i) => retenus.has(i))
+      .filter((_: unknown, i: number) => retenus.has(i))
       .flatMap((moment) => moment.indices.map((index) => lu.messages[index]!.texte));
 
     expect(envoyes.join(' ')).toContain('La montre de papa');
@@ -319,7 +315,7 @@ describe('Ce qui est envoyé au serveur', () => {
 
   it('repère les questions pour que le Passeur puisse les reprendre', () => {
     const lu = lireExportWhatsApp(CONVERSATION);
-    const questions = lu.messages.filter((m) => m.texte.trimEnd().endsWith('?'));
+    const questions = lu.messages.filter((m: MessageImporte) => m.texte.trimEnd().endsWith('?'));
     expect(questions.map((q) => q.texte)).toContain('Elle est où ?');
   });
 });
