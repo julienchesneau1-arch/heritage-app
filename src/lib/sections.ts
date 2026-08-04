@@ -76,4 +76,6 @@ export const PREMIER_JOUR = {
   rassurance:
     'Rien à rédiger : personne n’écrit de mémoires ici. Une phrase suffit, et elle peut être dite à voix haute.',
   action: 'Dites une première chose',
+  autreChemin:
+    'La famille se parle peut-être déjà ailleurs — dans un groupe WhatsApp, où tout défile et où personne ne retrouve rien.',
 } as const;

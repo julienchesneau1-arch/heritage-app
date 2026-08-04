@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { ChampDeParole } from '@/components/fil';
 import { PREMIER_JOUR } from '@/lib/sections';
 
@@ -43,13 +44,23 @@ export function PremierJour({
       </div>
 
       {memberId ? (
-        <div className="border-t border-rule pt-6">
+        <div className="space-y-4 border-t border-rule pt-6">
           <ChampDeParole
             members={members}
             memberId={memberId}
             retour="/"
             label={PREMIER_JOUR.action}
           />
+          {/* Une seule ACTION sur cet écran (§6.1), mais deux chemins pour y
+              venir : celui qui commence quelque chose, et celui qui reprend
+              ce qui existe déjà. Le second n'est pas un bouton — il ne
+              rivalise pas avec le premier. */}
+          <p className="justification">
+            {PREMIER_JOUR.autreChemin}{' '}
+            <Link href="/importer" className="underline">
+              Reprendre une conversation existante
+            </Link>
+          </p>
         </div>
       ) : null}
     </div>

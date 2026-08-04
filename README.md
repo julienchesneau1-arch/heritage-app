@@ -67,6 +67,7 @@ src/
 │   ├── veillee/            Trois récits à lire à voix haute, ensemble
 │   ├── recits/             Liste, lecture, création
 │   ├── fils/               Un fil de discussion, et sa cristallisation en récit
+│   ├── importer/           Reprendre une conversation WhatsApp existante
 │   ├── archives/           Photos, documents, enregistrements
 │   ├── traditions/         Rituels cycliques
 │   ├── graphe/             Graphe SVG déterministe (§5.3)
@@ -191,6 +192,18 @@ Une question du Passeur a le droit de tomber à côté : c'est une question, la 
 - `RARE_PATRIMONY` annonçait un récit « parmi les moins relus » sans jamais avoir regardé les autres. Elle donne le nombre de lectures et la date de la dernière.
 
 Le même défaut avait une conséquence plus concrète : le seul filtre de plausibilité était « pas décédé ». Sur la famille de démonstration, l'application demandait à Lucas (né en 2019) son souvenir d'un déménagement de 1971, et à Emma son point de vue sur un événement daté du jour de sa naissance. `couldRememberFirsthand()` écarte qui n'était pas né, qui était déjà mort, et qui avait moins de cinq ans. Une date de naissance inconnue, en revanche, ne disqualifie personne.
+
+### Le seul chemin qui ne demande pas de produire du neuf
+
+Tous les autres exigeaient d'écrire un récit, d'enregistrer sa voix, d'ouvrir un fil. Une mémoire vide le restait donc — et c'est ce qui tue ces produits, pas un défaut de fonctionnalité mais une page blanche le premier soir.
+
+`/importer` lit un export de groupe WhatsApp. **Le fichier ne quitte jamais l'appareil** : il est analysé dans le navigateur, comme la transcription, et seuls les moments cochés par un humain sont transmis.
+
+Trois refus, qui découlent de l'amendement 6. On **n'importe pas tout** : le découpage est purement temporel (une rafale séparée des autres par 90 minutes de silence, au moins 3 messages, au moins 2 voix), pas un tri par intérêt — le produit ne sait pas ce qui compte pour une famille. On **ne devine aucune identité** : « Mamie » n'est pas un identifiant, et sans rattachement le nom de l'export est conservé dans le message. On **ne résume rien** : l'aperçu qui sert à choisir est fait des mots réellement écrits.
+
+L'importateur est l'auteur, le narrateur est celui qui a parlé — sinon dix ans de paroles familiales seraient attribués à celui qui a exporté le fichier.
+
+Quatre formats d'export coexistent (iOS, Android, US, français), aucun n'est documenté. Ce que l'analyseur ne comprend pas, il le compte et l'affiche.
 
 ### Les deux premières secondes
 

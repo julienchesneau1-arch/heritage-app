@@ -95,8 +95,21 @@ describe('Le premier écran ne propose qu’une seule action (§6.1)', () => {
     expect(source).not.toMatch(/étape|tutoriel|bienvenue dans|découvrir|commencer par|checklist/i);
   });
 
-  it('n’affiche aucun lien vers une autre section', () => {
-    // Une seule chose à faire : parler. Le menu est ailleurs.
-    expect(source).not.toContain('<Link');
+  it('n’offre qu’un seul autre chemin, et jamais sous forme de bouton', () => {
+    // §6.1 interdit plus d'une SUGGESTION par écran. Reprendre une
+    // conversation qui existe déjà n'est pas une seconde suggestion : c'est
+    // l'autre porte du même geste, pour une famille qui a déjà parlé
+    // ailleurs. Mais elle ne doit pas rivaliser avec l'action : un lien en
+    // texte, pas un bouton.
+    const liens = source.match(/<Link/g) ?? [];
+    expect(liens).toHaveLength(1);
+    expect(source).toMatch(/<Link[^>]*className="underline"/);
+    expect(source).not.toMatch(/<Link[^>]*className="[^"]*\bbtn/);
+  });
+
+  it('nomme l’autre chemin sans reprocher l’absence de récits', () => {
+    expect(PREMIER_JOUR.autreChemin).not.toMatch(/vous n[’']avez|aucun récit|vide/i);
+    expect(constitutionEmotionFilter(PREMIER_JOUR.autreChemin)).toBe(true);
+    expect(isNonCoerciveLanguage(PREMIER_JOUR.autreChemin)).toBe(true);
   });
 });

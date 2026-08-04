@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
@@ -173,6 +174,19 @@ export default async function FamilyPage({
         <p className="justification">
           Révoquer un lien n’affecte que ce membre : les autres restent connectés. Retirer quelqu’un ne
           supprime aucun récit — l’auteur devient « Auteur anonymisé ».
+        </p>
+      </section>
+
+      <section className="space-y-3 border-t border-rule pt-6">
+        <h2 className="section-label">Reprendre une conversation existante</h2>
+        <p className="leading-relaxed">
+          Des années d’échanges dorment dans un groupe WhatsApp. Vous pouvez en garder ce qui mérite
+          de rester — le fichier est lu sur votre appareil, jamais envoyé.
+        </p>
+        <p className="justification">
+          <Link href="/importer" className="underline">
+            Importer une conversation
+          </Link>
         </p>
       </section>
 

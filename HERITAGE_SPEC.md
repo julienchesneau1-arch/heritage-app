@@ -466,6 +466,24 @@ Deux causes distinctes, et la première est une dérive par rapport à ce docume
 
 **Coût.** L'inventaire de la famille — six comptes — est fait en **une seule requête** dans `loadContext`, puisqu'il est nécessaire à chaque page.
 
+### 5.1 ter Reprendre une conversation existante — extension hors spec v1.0, assumée
+
+**Le constat.** Tous les chemins vers la mémoire exigeaient de produire du **neuf** : écrire un récit, enregistrer sa voix, ouvrir un fil. Une mémoire vide le restait donc. C'est ce qui tue ces produits — pas un défaut de fonctionnalité, une page blanche le premier soir.
+
+Or presque chaque famille possède déjà des années de conversation, dans un endroit où elles ne servent à rien : le groupe WhatsApp. Tout y défile ; personne n'y retrouve, trois ans plus tard, ce que la grand-mère a dit de la montre ; et le jour où quelqu'un meurt, ses messages sont perdus ou enfermés dans un téléphone.
+
+**Le fichier ne quitte jamais l'appareil.** Lecture et découpage ont lieu dans le navigateur, comme la transcription. Ce qui part au serveur, ce sont uniquement les moments qu'un humain a cochés. Ce n'est pas une optimisation : un export de groupe familial contient des années de logistique, de disputes et de coordonnées bancaires, et rien de cela n'a demandé à entrer dans une archive permanente.
+
+**Trois refus, qui découlent de l'amendement 6 :**
+
+1. **On n'importe pas tout.** Le produit ne sait pas ce qui compte pour une famille. Le découpage en *moments* est purement **temporel** — une rafale d'échanges séparée des autres par plus de 90 minutes de silence, au moins 3 messages, au moins 2 voix. Critère vérifiable, explicable en une phrase, et qui n'est pas un jugement. Sur un fichier réel, le moment contenant un RIB est proposé comme les autres : c'est à la famille de ne pas le cocher.
+2. **On ne devine aucune identité.** Un nom de l'export n'est rattaché à un membre que si quelqu'un l'a déclaré — « Mamie » n'est pas un identifiant. Sans rattachement, le nom de l'export est **conservé dans le corps du message** : c'est la seule trace de qui a parlé, et la perdre attribuerait ces mots au déposant.
+3. **On ne résume rien.** L'aperçu qui sert à choisir est fait des mots réellement écrits.
+
+**L'attribution.** L'importateur est l'`authorId` — c'est lui qui pose ces mots ici. Le `narratorId` est celui qui les a dits, quand il est déclaré. Même distinction que pour un récit dicté (§2.3), et pour la même raison : sans elle, dix ans de paroles familiales seraient attribués à celui qui a exporté le fichier, et Jeanne disparaîtrait de sa mémoire une seconde fois.
+
+**Ce que l'analyseur ne comprend pas, il le compte.** Quatre formats d'export coexistent selon la plateforme et la langue du téléphone, aucun n'est documenté. Les lignes non rattachées sont affichées comme telles, jamais devinées ni jetées en silence. La plage de dates lue est montrée pour que la famille vérifie d'un coup d'œil que le fichier n'a pas été lu en mois/jour.
+
 ### 5.2 bis Le fil — extension hors spec v1.0, assumée
 
 **Le constat.** `Conversation` tenait en deux verrous. `storyId` était obligatoire : impossible de dire trois mots sur la montre de Robert tant que personne n'avait *rédigé* un récit. Et le modèle n'admettait qu'un `responseText` : le troisième intervenant n'avait nulle part où parler — Jeanne ne pouvait pas corriger la réponse de Claire.
