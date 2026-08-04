@@ -16,7 +16,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string; storyId: string } },
 ) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const { data, errors } = parseOrNull(dismissStorySchema, await request.json().catch(() => null));
   if (!data) return apiError('INVALID_INPUT', errors);

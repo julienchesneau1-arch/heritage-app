@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 /** GET /api/family/:id/stories — ordre chronologique, toujours (amendement 5). */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const familyId = params.id;
-  if (!authorizeFamily(request, familyId)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, familyId))) return apiError('FORBIDDEN');
 
   const limit = await rateLimit(`ip:${clientIp(request)}`, LIMITS.perIp.limit, LIMITS.perIp.window);
   if (!limit.allowed) return apiError('RATE_LIMITED');
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 /** POST /api/family/:id/stories — créer un récit (et son passage, s'il en a un). */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const familyId = params.id;
-  if (!authorizeFamily(request, familyId)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, familyId))) return apiError('FORBIDDEN');
 
   const limit = await rateLimit(`ip:${clientIp(request)}`, LIMITS.perIp.limit, LIMITS.perIp.window);
   if (!limit.allowed) return apiError('RATE_LIMITED');

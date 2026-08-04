@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  * Aucun lien inféré : le graphe ne montre que ce que la famille a dit.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const [entities, stories, passages] = await Promise.all([
     prisma.entity.findMany({ where: { familyId: params.id } }),

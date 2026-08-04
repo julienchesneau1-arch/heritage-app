@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { formatDateFr } from '@/lib/normalize';
-import { MARK_LABELS, MARK_KINDS, type ThreadWithMessages } from '@/services/thread.service';
+import { MARK_LABELS, MARK_KINDS, voixDe, type ThreadWithMessages } from '@/services/thread.service';
 import { markMessage, postMessage, removeMessage } from '@/app/actions';
 
 /**
@@ -41,16 +41,20 @@ export function Fil({
 
       <ul className="space-y-4">
         {thread.messages.map((message) => {
-          // La voix d'abord, la plume ensuite — comme sur un récit.
-          const voix = message.narrator ?? message.author;
+          // La voix d'abord, la plume ensuite — comme sur un récit. Et un
+          // membre retiré est anonymisé ici comme ailleurs (§2.1 règle 1).
+          const voix = voixDe(message);
           const scribe = message.narrator ? message.author : null;
 
           return (
             <li key={message.id} className="space-y-1">
               <p className="leading-relaxed">{message.body}</p>
               <p className="justification">
-                {voix.name}
-                {scribe ? `, noté par ${scribe.name}` : ''} · {formatDateFr(message.createdAt)}
+                {voix.nom}
+                {scribe
+                  ? `, noté par ${scribe.isDeleted ? 'un membre anonymisé' : scribe.name}`
+                  : ''}{' '}
+                · {formatDateFr(message.createdAt)}
               </p>
 
               {/* Des noms, jamais un nombre : « Jeanne y était » n'est pas

@@ -77,10 +77,11 @@ Le schéma de référence est `prisma/schema.prisma`. Aucune table ne peut être
 
 ### 2.1 Règles de modèle (non négociables)
 
-1. **Toute suppression de Member** : soft-delete uniquement (flag `isDeleted`). Les histoires restent, l'auteur devient « Auteur anonymisé ».
+1. **Toute suppression de Member** : soft-delete uniquement (flag `isDeleted`). Les histoires restent, l'auteur devient « Auteur anonymisé ». **Précisée** : la règle ne dit pas « anonymisé dans les récits », elle dit anonymisé. Elle vaut donc aussi dans les **fils** — c'est là qu'un nom survivait, parce que la requête ne chargeait pas `isDeleted` pour le narrateur. `voixDe()` est le point de passage unique : narrateur d'abord (§2.3), nom remplacé si retiré. Aucun composant ne lit `author.name` directement.
 2. **Toute suppression de Story** : possible uniquement par l'auteur ou un admin familial. **Amendée** : le droit s'étend au **narrateur**. Cette règle a été écrite avant que `narratorId` existe (§2.3 : « la spec ne connaît qu'un `authorId` ») ; appliquée telle quelle, elle empêcherait Jeanne de retirer ses propres mots parce que Claire tenait le clavier — ce qui retire le point 6 de l'Annexe A à la seule personne à qui ces mots appartiennent. Même autorité que pour la correction (§2.5).
 3. **Family est le tenant isolé** : toute requête SQL doit filtrer par `familyId`. Jamais de requête cross-family.
 4. **Entity.normalizedName** : lowercase, sans accent, sans ponctuation. Utilisé pour le matching.
+5. **Aucune suppression n'emporte la parole d'un tiers.** *Ajoutée.* `Thread.storyId` et `Thread.entityId` portaient `onDelete: Cascade` : supprimer « La montre arrêtée » — un droit que la règle 2 accorde à son auteur — effaçait au passage la question qu'Emma avait posée dessous, et la réponse de Claire. Vérifié sur la base réelle avant correction : deux messages avant, zéro après. Le fil se **détache** désormais (`SetNull`) et survit sans son ancrage. Le `Cascade` reste là où il ne détruit que les mots d'un seul auteur : un `Message` appartient à son fil, sans le fil il n'a plus de lieu. La règle générale : **un `onDelete: Cascade` ne se pose qu'entre deux objets dont la même personne est l'auteur.**
 
 ### 2.2 Écarts assumés par rapport à la v1.0 du document
 
@@ -357,6 +358,10 @@ Deux niveaux désormais :
 
 Le cookie de membre est signé, niveau compris — sans quoi il suffirait de remplacer `declared` par `verified` à la main. Le jeton personnel intègre `Member.tokenVersion` : l'incrémenter **révoque le lien d'un seul membre**, sans déconnecter le reste de la famille. Retirer quelqu'un de la famille révoque son lien au passage.
 
+**Le lien familial se révoque aussi.** Il est le secret de cette section ; il n'avait pourtant aucun recours. Une famille qui le publiait par erreur — un groupe WhatsApp de travail, une capture d'écran — l'avait publié pour toujours. `Family.tokenVersion` corrige ce trou : « Changer ce lien », sur la page Famille, l'incrémente et invalide l'ancien **pour tout le monde d'un coup**. C'est brutal, et c'est exactement ce qu'on veut dans ce cas : chacun devra recevoir le nouveau lien.
+
+La version entre dans la signature (`familyId:version`), donc on ne la réécrit pas dans le jeton. Elle se confronte à la base : une signature reste valide après rotation, seule la base sait qu'elle est périmée. `currentFamilyId()` et `authorizeFamily()` sont donc asynchrones — un aller-retour par requête, le prix d'une révocation qui révoque vraiment.
+
 Les routes API dérivent l'identité du cookie signé, jamais d'un paramètre.
 
 ### 4.2 Endpoints
@@ -591,6 +596,10 @@ Entrent donc : `Member.birthDate` (des vivants), `Member.deathDate`, `Tradition.
 **Révocation.** Le flux porte le jeton personnel du membre (`tokenVersion`) : « Révoquer ce lien » sur la page Famille coupe aussi son calendrier, et le sien seul. Deux mécanismes de révocation seraient deux occasions d'en oublier un.
 
 **Ce qui est dit avant l'abonnement.** Un agenda recopie le flux sur les serveurs de son fournisseur. Les noms et les titres y sortent — le texte des récits, jamais. L'interface l'écrit en toutes lettres au-dessus du lien : une application de mémoire intime qui exporte vers un tiers sans le dire trahirait sa promesse en silence.
+
+**On peut en sortir sans sortir de la mémoire.** `Member.calendarOptOut` retire du flux la naissance et le décès d'une personne. La §12 interdit d'exporter des données personnelles vers un tiers ; ce flux le fait, avec l'accord de la famille — mais l'accord d'une famille n'est pas celui de chacun de ses membres. On peut vouloir figurer dans la mémoire des siens sans que sa date de naissance parte chez Google. Le retrait est filtré **dans la requête SQL**, pas dans `familyEvents()` : aucun appelant futur ne peut l'oublier.
+
+Ce que ce retrait ne fait pas, et l'interface le dit : il ne réécrit pas les textes des autres. Un prénom cité dans la description d'une tradition ou le titre d'un récit y demeure — ces mots appartiennent à qui les a écrits, et les effacer serait retirer à un tiers sa propre parole, ce que la §2.1 interdit exactement autant.
 
 ### 5.4 La veillée — extension hors spec v1.0, assumée
 

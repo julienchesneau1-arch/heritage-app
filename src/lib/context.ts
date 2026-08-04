@@ -24,7 +24,13 @@ export interface Inventaire {
 }
 
 export interface AppContext {
-  family: { id: string; name: string };
+  /**
+   * `tokenVersion` sert à réémettre le jeton familial affiché en page
+   * Famille. Sans lui, l'écran montrerait un jeton de version 1 alors que
+   * la famille aurait fait tourner son lien — un secret de secours faux
+   * est pire qu'aucun.
+   */
+  family: { id: string; name: string; tokenVersion: number };
   member: ContextMember | null;
   /** « declared » : choisi dans une liste. « verified » : lien personnel. */
   identityLevel: IdentityLevel | null;
@@ -39,7 +45,7 @@ export interface AppContext {
  * `npm run dev` juste après le seed doit afficher quelque chose.
  */
 export async function loadContext(): Promise<AppContext | null> {
-  let familyId = currentFamilyId();
+  let familyId = await currentFamilyId();
 
   if (!familyId && process.env.NODE_ENV !== 'production') {
     const count = await prisma.family.count();
@@ -49,7 +55,7 @@ export async function loadContext(): Promise<AppContext | null> {
 
   const family = await prisma.family.findUnique({
     where: { id: familyId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, tokenVersion: true },
   });
   if (!family) return null;
 

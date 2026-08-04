@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 /** GET — les fils de la famille, du plus récemment nourri au plus ancien. */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const take = Math.min(100, Number(request.nextUrl.searchParams.get('take') ?? 50) || 50);
   const entityId = request.nextUrl.searchParams.get('entite') ?? undefined;
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
  * du produit tient dans ce contrat.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const { data, errors } = parseOrNull(openThreadSchema, await request.json().catch(() => null));
   if (!data) return apiError('INVALID_INPUT', errors);

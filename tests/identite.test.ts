@@ -14,9 +14,12 @@ import {
  * par l'appelant. Ces tests fixent le nouveau contrat.
  */
 
-describe('Jeton familial', () => {
-  it('reconnaît un jeton qu’il a signé', () => {
-    expect(verifyFamilyToken(signFamilyToken('fam_1'))).toBe('fam_1');
+describe('Jeton familial — révocable, lui aussi', () => {
+  it('reconnaît un jeton qu’il a signé, et rend sa version', () => {
+    expect(verifyFamilyToken(signFamilyToken('fam_1'))).toEqual({
+      familyId: 'fam_1',
+      tokenVersion: 1,
+    });
   });
 
   it('refuse une signature altérée', () => {
@@ -25,12 +28,30 @@ describe('Jeton familial', () => {
   });
 
   it('refuse qu’on remplace l’identifiant de famille', () => {
-    const [, mac] = signFamilyToken('fam_1').split('.');
-    expect(verifyFamilyToken(`fam_2.${mac}`)).toBeNull();
+    const [, version, mac] = signFamilyToken('fam_1').split('.');
+    expect(verifyFamilyToken(`fam_2.${version}.${mac}`)).toBeNull();
+  });
+
+  /**
+   * Le cœur de « Changer ce lien ». Le lien familial EST le secret de la
+   * §4.1 : publié par erreur, il n'avait aucun recours. Réécrire la version
+   * dans le jeton ne sert à rien — elle entre dans la signature.
+   */
+  it('refuse qu’on réécrive la version pour survivre à une rotation', () => {
+    const [familyId, , mac] = signFamilyToken('fam_1', 1).split('.');
+    expect(verifyFamilyToken(`${familyId}.2.${mac}`)).toBeNull();
+  });
+
+  it('signe des jetons distincts par version', () => {
+    expect(signFamilyToken('fam_1', 1)).not.toBe(signFamilyToken('fam_1', 2));
+    expect(verifyFamilyToken(signFamilyToken('fam_1', 7))).toEqual({
+      familyId: 'fam_1',
+      tokenVersion: 7,
+    });
   });
 
   it('refuse une valeur vide ou malformée', () => {
-    for (const value of [undefined, '', 'sansPoint', '.mac', 'fam_1.']) {
+    for (const value of [undefined, '', 'sansPoint', '.mac', 'fam_1.', 'fam_1.1', 'fam_1.x.mac', 'fam_1.0.mac']) {
       expect(verifyFamilyToken(value as string | undefined)).toBeNull();
     }
   });

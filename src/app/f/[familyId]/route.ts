@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(_request: NextRequest, { params }: { params: { familyId: string } }) {
   const family = await prisma.family.findUnique({
     where: { id: params.familyId },
-    select: { id: true },
+    select: { id: true, tokenVersion: true },
   });
 
   const response = NextResponse.redirect(
@@ -19,7 +19,7 @@ export async function GET(_request: NextRequest, { params }: { params: { familyI
   );
 
   if (family) {
-    response.cookies.set({ ...cookieOptions(), value: signFamilyToken(family.id) });
+    response.cookies.set({ ...cookieOptions(), value: signFamilyToken(family.id, family.tokenVersion) });
   }
 
   return response;

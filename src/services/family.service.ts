@@ -17,6 +17,8 @@ export interface NewMember {
   birthDate?: Date | null;
   deathDate?: Date | null;
   role?: string | null;
+  /** Retiré du flux `.ics`. Absent = on y figure, comme avant la case. */
+  calendarOptOut?: boolean;
 }
 
 export class FamilyService {
@@ -99,6 +101,7 @@ function normalize(member: NewMember) {
     birthDate: member.birthDate ?? null,
     deathDate: member.deathDate ?? null,
     role: member.role?.trim() || null,
+    calendarOptOut: member.calendarOptOut ?? false,
   };
 }
 

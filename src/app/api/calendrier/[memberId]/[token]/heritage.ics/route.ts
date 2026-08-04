@@ -33,8 +33,12 @@ export async function GET(
 
   const [family, members, traditions, stories] = await Promise.all([
     prisma.family.findUniqueOrThrow({ where: { id: member.familyId }, select: { name: true } }),
+    // Le flux est recopié chez Google ou Apple. Quelqu'un peut appartenir
+    // à la mémoire de sa famille sans que sa date de naissance parte chez
+    // un tiers : le retrait est filtré ICI, à la source, pour qu'aucune
+    // date ne puisse sortir par un chemin oublié.
     prisma.member.findMany({
-      where: { familyId: member.familyId, isDeleted: false },
+      where: { familyId: member.familyId, isDeleted: false, calendarOptOut: false },
       select: { id: true, name: true, birthDate: true, deathDate: true },
     }),
     prisma.tradition.findMany({

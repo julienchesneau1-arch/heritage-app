@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 /** GET — transmission (§9.1) + rapport du Conservateur (§3.2). */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const [transmission, conservateurReport] = await Promise.all([
     metricsService.transmission(params.id),

@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const [traditions, activeToday] = await Promise.all([
     prisma.tradition.findMany({ where: { familyId: params.id }, orderBy: { name: 'asc' } }),
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const { data, errors } = parseOrNull(createTraditionSchema, await request.json().catch(() => null));
   if (!data) return apiError('INVALID_INPUT', errors);

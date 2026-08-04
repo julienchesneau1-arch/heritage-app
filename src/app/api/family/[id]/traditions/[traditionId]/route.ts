@@ -17,7 +17,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; traditionId: string } },
 ) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const { data, errors } = parseOrNull(patchSchema, await request.json().catch(() => null));
   if (!data) return apiError('INVALID_INPUT', errors);

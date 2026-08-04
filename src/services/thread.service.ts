@@ -49,7 +49,7 @@ export type ThreadWithMessages = Thread & {
   messages: Array<
     Message & {
       author: { id: string; name: string; isDeleted: boolean };
-      narrator: { id: string; name: string } | null;
+      narrator: { id: string; name: string; isDeleted: boolean } | null;
       marks: Array<{ kind: string; member: { id: string; name: string } }>;
     }
   >;
@@ -193,8 +193,7 @@ export class ThreadService {
 
     const speakers = new Map<string, string>();
     for (const message of thread.messages) {
-      const speaker = message.narrator ?? message.author;
-      speakers.set(speaker.id, speaker.name);
+      speakers.set(voixDe(message).id, voixDe(message).nom);
     }
 
     return {
@@ -202,7 +201,7 @@ export class ThreadService {
       /** Qui a parlé — narrateur d'abord, scribe seulement à défaut. */
       speakers: [...speakers.entries()].map(([id, name]) => ({ id, name })),
       transcript: thread.messages
-        .map((message) => `${(message.narrator ?? message.author).name} : ${message.body}`)
+        .map((message) => `${voixDe(message).nom} : ${message.body}`)
         .join('\n'),
     };
   }
@@ -272,6 +271,24 @@ export class ThreadService {
   }
 }
 
+/**
+ * Qui parle, et sous quel nom.
+ *
+ * Le narrateur d'abord — la voix, pas le clavier (§2.3). Et §2.1 règle 1 :
+ * un membre retiré de la famille est « anonymisé » partout, sans exception.
+ */
+export function voixDe(message: {
+  author: { id: string; name: string; isDeleted: boolean };
+  narrator: { id: string; name: string; isDeleted: boolean } | null;
+}): { id: string; nom: string; anonymise: boolean } {
+  const qui = message.narrator ?? message.author;
+  return {
+    id: qui.id,
+    nom: qui.isDeleted ? 'Membre anonymisé' : qui.name,
+    anonymise: qui.isDeleted,
+  };
+}
+
 function messageData(threadId: string, input: PostInput, now: Date) {
   return {
     threadId,
@@ -292,7 +309,11 @@ function threadInclude() {
       take: MESSAGE_PAGE,
       include: {
         author: { select: { id: true, name: true, isDeleted: true } },
-        narrator: { select: { id: true, name: true } },
+        // §2.1 règle 1 : « l'auteur devient Auteur anonymisé ». La règle est
+        // absolue ; elle valait pour les récits et pas pour les fils, faute
+        // de ce seul champ. Un membre retiré gardait son nom dans les
+        // conversations.
+        narrator: { select: { id: true, name: true, isDeleted: true } },
         marks: { include: { member: { select: { id: true, name: true } } } },
       },
     },

@@ -53,7 +53,7 @@ export async function chooseMember(formData: FormData) {
   if (!context.members.some((m) => m.id === memberId)) return;
 
   cookies().set({ ...memberCookieOptions(), value: signMemberCookie(memberId, 'declared') });
-  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(context.family.id) });
+  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(context.family.id, await versionFamille(context.family.id)) });
 
   revalidatePath('/', 'layout');
   redirect('/');
@@ -269,6 +269,45 @@ export async function postMessage(formData: FormData) {
  * le droit à l'oubli ne s'exerce pas sous une identité qu'on s'est
  * attribuée soi-même dans une liste.
  */
+/** La version en cours du lien familial, pour le signer justement. */
+async function versionFamille(familyId: string): Promise<number> {
+  const famille = await prisma.family.findUniqueOrThrow({
+    where: { id: familyId },
+    select: { tokenVersion: true },
+  });
+  return famille.tokenVersion;
+}
+
+/**
+ * Faire tourner le lien familial.
+ *
+ * §4.1 : l'URL de la famille EST le secret. Les liens personnels se
+ * révoquent depuis toujours ; celui-là n'avait aucun équivalent, et une
+ * famille qui le publiait par erreur restait sans recours. L'incrémenter
+ * déconnecte tout le monde, y compris celui qui le demande — c'est le
+ * comportement voulu : on refait circuler un lien neuf.
+ */
+export async function rotateFamilyLink() {
+  const context = await requireContext();
+  if (!canDelete(context)) redirect('/famille?lien=identite');
+
+  const famille = await prisma.family.update({
+    where: { id: context.family.id },
+    data: { tokenVersion: { increment: 1 } },
+    select: { id: true, tokenVersion: true },
+  });
+
+  // Celui qui fait tourner le lien garde le sien : sans cela il se
+  // déconnecterait lui-même et ne pourrait plus distribuer le nouveau.
+  cookies().set({
+    ...familyCookieOptions(),
+    value: signFamilyToken(famille.id, famille.tokenVersion),
+  });
+
+  revalidatePath('/famille');
+  redirect('/famille?lien=change');
+}
+
 export async function removeMessage(formData: FormData) {
   const context = await requireContext();
   const retour = String(formData.get('retour') ?? '/');
@@ -487,7 +526,7 @@ export async function createFamily(formData: FormData) {
 
   // Le fondateur repart avec une identité vérifiée : c'est lui qui
   // distribuera les liens des autres.
-  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(family.id) });
+  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(family.id, family.tokenVersion) });
   cookies().set({ ...memberCookieOptions(), value: signMemberCookie(first.id, 'verified') });
 
   revalidatePath('/', 'layout');
@@ -537,6 +576,9 @@ function readMember(formData: FormData) {
     birthDate: String(formData.get('birthDate') ?? '') || undefined,
     deathDate: String(formData.get('deathDate') ?? '') || undefined,
     role: String(formData.get('role') ?? '') || undefined,
+    // Une case décochée n'est pas envoyée du tout : c'est l'absence, et non
+    // une valeur, qui vaut « non ».
+    calendarOptOut: formData.get('calendarOptOut') !== null,
   };
 }
 
@@ -653,7 +695,10 @@ export async function restoreBackup(formData: FormData) {
     .map(([label, count]) => `${count} ${label}`)
     .join(', ');
 
-  cookies().set({ ...familyCookieOptions(), value: signFamilyToken(result.familyId) });
+  cookies().set({
+    ...familyCookieOptions(),
+    value: signFamilyToken(result.familyId, await versionFamille(result.familyId)),
+  });
   revalidatePath('/', 'layout');
   redirect(`/qui?restaure=${encodeURIComponent(`${result.familyName} : ${summary}.`)}`);
 }

@@ -50,6 +50,16 @@ export interface CalendarEvent {
 
 export interface CalendarSource {
   familyName: string;
+  /**
+   * Les membres qui acceptent d'y figurer. Le retrait se décide ailleurs
+   * (`Member.calendarOptOut`) — ce module ne reçoit que ceux qui restent,
+   * pour qu'aucun oubli de filtre ici ne fasse sortir une date.
+   *
+   * Le retrait porte sur les DATES de la personne, pas sur son nom : celui-ci
+   * peut figurer dans la description d'une tradition ou le titre d'un récit,
+   * écrits par quelqu'un d'autre. Réécrire ces textes serait retirer à un
+   * tiers ses propres mots, ce que la §2.1 interdit exactement autant.
+   */
   members: Array<{ id: string; name: string; birthDate: Date | null; deathDate: Date | null }>;
   traditions: Array<{ id: string; name: string; description: string; monthDay: string | null }>;
   stories: Array<{ id: string; title: string; eventDate: Date | null }>;

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
 import { familyService } from '@/services/family.service';
-import { addMember, removeMember, revokeMemberLink, updateMember } from '@/app/actions';
+import { addMember, removeMember, revokeMemberLink, rotateFamilyLink, updateMember } from '@/app/actions';
 import { signFamilyToken } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 export default async function FamilyPage({
   searchParams,
 }: {
-  searchParams: { bienvenue?: string; erreur?: string };
+  searchParams: { bienvenue?: string; erreur?: string; lien?: string };
 }) {
   const context = await loadContext();
   if (!context) redirect('/commencer');
@@ -63,7 +63,23 @@ export default async function FamilyPage({
           Quiconque le détient entre — ne le publiez nulle part.
         </p>
         <p className="justification break-all">
-          Jeton de secours (si le cookie est perdu) : {signFamilyToken(context.family.id).slice(0, 16)}…
+          Jeton de secours (si le cookie est perdu) :{' '}
+          {signFamilyToken(context.family.id, context.family.tokenVersion).slice(0, 16)}…
+        </p>
+        {/* §4.1 : ce lien EST le secret. Les liens personnels se révoquent
+            depuis toujours ; celui-ci n'avait aucun équivalent. */}
+        <form action={rotateFamilyLink}>
+          <button type="submit" className="justification underline">
+            Changer ce lien
+          </button>
+        </form>
+        <p className="justification">
+          Si ce lien a été publié par erreur, le changer l’invalide pour de bon. Tout le monde devra
+          recevoir le nouveau — c’est le but.
+          {searchParams.lien === 'change' ? ' Le lien a été changé.' : ''}
+          {searchParams.lien === 'identite'
+            ? ' Il faut un lien personnel, et non une identité déclarée, pour faire cela.'
+            : ''}
         </p>
       </section>
 
@@ -128,6 +144,18 @@ export default async function FamilyPage({
                       className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
                     />
                   </div>
+                  <div className="flex items-end pb-2">
+                    <label htmlFor={`c-${member.id}`} className="justification flex items-center gap-2">
+                      <input
+                        id={`c-${member.id}`}
+                        type="checkbox"
+                        name="calendarOptOut"
+                        defaultChecked={member.calendarOptOut}
+                        className="h-5 w-5"
+                      />
+                      Ne pas faire figurer ces dates au calendrier
+                    </label>
+                  </div>
                   <div className="min-w-[12rem] flex-1 space-y-1">
                     <label htmlFor={`r-${member.id}`} className="section-label block">
                       En un mot
@@ -171,6 +199,14 @@ export default async function FamilyPage({
             </li>
           ))}
         </ul>
+        <p className="justification">
+          La case « ne pas faire figurer ces dates au calendrier » retire du flux `.ics` la
+          naissance et le décès de cette personne — ce flux est recopié chez Google ou Apple, et on
+          peut vouloir appartenir à la mémoire de sa famille sans que sa date de naissance en
+          sorte. Elle reste partout ailleurs dans l’application. Un nom cité dans le texte d’une
+          tradition ou le titre d’un récit y demeure : ces mots sont ceux de quelqu’un d’autre, et
+          cette case ne les réécrit pas.
+        </p>
         <p className="justification">
           Révoquer un lien n’affecte que ce membre : les autres restent connectés. Retirer quelqu’un ne
           supprime aucun récit — l’auteur devient « Auteur anonymisé ».

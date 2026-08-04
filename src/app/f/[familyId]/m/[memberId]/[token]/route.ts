@@ -23,14 +23,17 @@ export async function GET(
 ) {
   const member = await prisma.member.findFirst({
     where: { id: params.memberId, familyId: params.familyId, isDeleted: false },
-    select: { id: true, tokenVersion: true },
+    select: { id: true, tokenVersion: true, family: { select: { tokenVersion: true } } },
   });
 
   const valid = member && verifyMemberToken(member.id, member.tokenVersion, params.token);
 
   const response = NextResponse.redirect(new URL(valid ? '/' : '/bienvenue', request.nextUrl.origin));
   if (valid) {
-    response.cookies.set({ ...familyCookieOptions(), value: signFamilyToken(params.familyId) });
+    response.cookies.set({
+      ...familyCookieOptions(),
+      value: signFamilyToken(params.familyId, member.family.tokenVersion),
+    });
     response.cookies.set({ ...memberCookieOptions(), value: signMemberCookie(member.id, 'verified') });
   }
   return response;

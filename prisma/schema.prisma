@@ -15,6 +15,13 @@ datasource db {
 model Family {
   id        String   @id @default(cuid())
   name      String
+
+  // Le lien familial est le secret d'accès (§4.1). Les liens PERSONNELS se
+  // révoquent déjà par `Member.tokenVersion` ; celui-ci n'avait aucun
+  // équivalent. Une famille qui publiait son lien par erreur n'avait aucun
+  // recours. L'incrémenter invalide l'ancien lien pour tout le monde —
+  // c'est brutal, et c'est exactement ce qu'on veut dans ce cas-là.
+  tokenVersion Int @default(1) @map("token_version")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -50,6 +57,15 @@ model Member {
   // Révocation : incrémenter invalide le lien personnel de CE membre,
   // sans déconnecter le reste de la famille.
   tokenVersion Int @default(1) @map("token_version")
+
+  // Ne pas figurer au calendrier familial.
+  //
+  // Le flux .ics est recopié chez Google ou Apple. Quelqu'un peut vouloir
+  // appartenir à la mémoire de sa famille SANS que sa date de naissance
+  // parte chez un tiers. C'est le « retirer mes mots » de l'Annexe A
+  // point 6, appliqué à ce qui SORT. Le défaut reste l'inclusion : on ne
+  // retire personne de sa famille sans qu'il l'ait demandé.
+  calendarOptOut Boolean @default(false) @map("calendar_opt_out")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -249,8 +265,15 @@ model Thread {
   createdAt DateTime @default(now()) @map("created_at")
 
   family             Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  entity             Entity?   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  story              Story?    @relation("ThreadOnStory", fields: [storyId], references: [id], onDelete: Cascade)
+  // `Cascade` détruisait la parole des autres. Vérifié sur les données
+  // réelles : Claire supprimait son récit, et la question qu'Emma avait
+  // posée dessous disparaissait — Emma n'ayant rien décidé, ni été
+  // prévenue. L'Annexe A point 6 fait de la suppression une décision de
+  // celui à qui les mots appartiennent ; une cascade la donnait à un tiers.
+  //
+  // Le fil se DÉTACHE désormais. Il perd son ancrage, il garde sa parole.
+  entity             Entity?   @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  story              Story?    @relation("ThreadOnStory", fields: [storyId], references: [id], onDelete: SetNull)
   crystallizedStory  Story?    @relation("ThreadCrystallized", fields: [crystallizedStoryId], references: [id])
   openedBy           Member    @relation("ThreadOpener", fields: [openedById], references: [id])
   messages           Message[]

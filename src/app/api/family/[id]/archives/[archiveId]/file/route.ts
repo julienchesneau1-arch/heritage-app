@@ -17,7 +17,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string; archiveId: string } },
 ) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const archive = await prisma.archive.findFirst({
     where: { id: params.archiveId, familyId: params.id },

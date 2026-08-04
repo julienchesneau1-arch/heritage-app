@@ -14,7 +14,7 @@ const passeur = new PasseurService();
 /** GET /api/family/:id/home → { signal, passeur } — au plus un de chaque (§5.1). */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const familyId = params.id;
-  if (!authorizeFamily(request, familyId)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, familyId))) return apiError('FORBIDDEN');
 
   const ipLimit = await rateLimit(`ip:${clientIp(request)}`, LIMITS.perIp.limit, LIMITS.perIp.window);
   if (!ipLimit.allowed) return apiError('RATE_LIMITED');

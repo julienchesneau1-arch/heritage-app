@@ -138,6 +138,8 @@ Il n'y a toujours pas de mot de passe — c'est le choix de la spec, et il tient
 
 Le cookie de membre est signé, niveau compris — sinon il suffirait de remplacer `declared` par `verified` à la main. Le jeton personnel intègre un numéro de version : l'incrémenter **révoque le lien d'un seul membre**, sans déconnecter le reste de la famille. Les routes API dérivent l'identité du cookie signé, jamais d'un paramètre.
 
+**Le lien familial se change aussi.** Il est le secret d'accès, et il n'avait pourtant aucune révocation : publié par erreur dans un groupe ou sur une capture d'écran, il l'était pour toujours. « Changer ce lien », sur la page Famille, incrémente `Family.tokenVersion` et invalide l'ancien pour tout le monde d'un coup — chacun devra recevoir le nouveau, c'est le but. La version entre dans la signature, donc on ne la réécrit pas dans le jeton ; elle se confronte à la base, car une signature reste valide après rotation et seule la base sait qu'elle est périmée.
+
 ### Corriger sans perdre la transmission
 
 `/recits/<id>/modifier` corrige le texte d'un récit. Ce n'est pas du confort : avant, la seule façon de rattraper une faute dans un récit dicté était de supprimer et retaper, et `DELETE` efface les `Passage` attachés. Corriger une virgule coûtait une chaîne de transmission — la seule chose que le produit mesure.
@@ -213,6 +215,10 @@ Annexe A point 6 : *« Oubli = droit : archivage, silence, suppression sont des 
 
 Deux personnes ont autorité sur des mots, et seulement elles : celle qui les a écrits et celle qui les a dits. La §2.1 règle 2 disait « uniquement par l'auteur » — écrite avant que `narratorId` existe ; le droit s'étend donc au narrateur, sinon Jeanne ne pourrait pas retirer ses propres mots parce que Claire tenait le clavier. Comme pour un récit, seule une identité **prouvée** détruit (§4.1 amendé). Le dernier message emporte son fil.
 
+**Et retirer les siens n'emporte pas ceux des autres.** `Thread.storyId` portait `onDelete: Cascade` : supprimer « La montre arrêtée » — un droit que la spec accorde à son auteur — effaçait la question qu'Emma avait posée dessous. Vérifié sur la base réelle avant correction : deux messages avant, zéro après. Le fil se **détache** maintenant et survit sans son ancrage. On ne se sent pas libre de reprendre ses mots si les reprendre coûte ceux d'un proche.
+
+**Un membre retiré est anonyme partout.** La règle dit « anonymisé », pas « anonymisé dans les récits » — un nom survivait pourtant dans les fils, parce que la requête ne chargeait pas `isDeleted` pour le narrateur. Un point de passage unique, `voixDe()`, rend la voix : le narrateur d'abord, le nom remplacé s'il est parti.
+
 ### Le seul chemin qui ne demande pas de produire du neuf
 
 Tous les autres exigeaient d'écrire un récit, d'enregistrer sa voix, d'ouvrir un fil. Une mémoire vide le restait donc — et c'est ce qui tue ces produits, pas un défaut de fonctionnalité mais une page blanche le premier soir.
@@ -269,6 +275,8 @@ Le flux publie une récurrence annuelle et l'année de référence plutôt qu'un
 
 Un agenda recopie ce flux chez son fournisseur : les noms et les titres y sortent, le texte des récits jamais. C'est écrit au-dessus du lien, avant l'abonnement.
 
+**On peut en sortir sans sortir de la mémoire.** L'accord d'une famille n'est pas celui de chacun de ses membres : une case, sur la page Famille, retire du flux la naissance et le décès d'une personne, qui reste partout ailleurs dans l'application. Le retrait est filtré dans la requête SQL, pas au moment de fabriquer les lignes — aucun appelant futur ne peut l'oublier. Il ne réécrit pas les textes des autres : un prénom cité dans la description d'une tradition y demeure, ces mots appartiennent à qui les a écrits.
+
 ### Une liste bornée qui dit qu'elle l'est
 
 « Récits » chargeait le corpus entier, sans limite : cinq mille récits dans une page. Elle est paginée par 50 — et elle l'annonce (« Récits 51 à 63 sur 63 »), faute de quoi elle retomberait dans le défaut que le graphe avait déjà corrigé.
@@ -301,6 +309,6 @@ Sprints 0 à 6 de la roadmap (§10) : schéma et seed, CRUD des récits, graphe 
 
 Sprint 7, fait : Service Worker (réseau d'abord, cache en secours, page hors-ligne), lien d'évitement clavier, page courante annoncée.
 
-Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, justifications du Passeur ramenées à ce qu'elles vérifient, liste des récits paginée et explicite sur ce qu'elle masque, calendrier familial iCalendar, fils de discussion ancrés aux entités et cristallisation en récit, intégration continue.
+Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, justifications du Passeur ramenées à ce qu'elles vérifient, liste des récits paginée et explicite sur ce qu'elle masque, calendrier familial iCalendar, fils de discussion ancrés aux entités et cristallisation en récit, intégration continue, le livre imprimable, retrait de ses propres messages, détachement des fils au lieu de leur destruction, anonymisation des membres retirés jusque dans les fils, rotation du lien familial, retrait individuel du calendrier.
 
 Ouvert : transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil. Le pilote S3 est écrit mais n'a pas pu être testé contre un vrai bucket depuis cet environnement.

@@ -44,7 +44,7 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const identity = requestIdentity(request);
   if (!identity) return apiError('FORBIDDEN', 'Identité requise pour écrire dans la mémoire.');

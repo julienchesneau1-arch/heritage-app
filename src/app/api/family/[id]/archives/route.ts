@@ -14,7 +14,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const archives = await prisma.archive.findMany({
     where: { familyId: params.id },
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
  *    été déposé ailleurs (import, migration).
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   if (request.headers.get('content-type')?.includes('multipart/form-data')) {
     return uploadFile(request, params.id);

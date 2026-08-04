@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { familySecret } from './secrets';
+import { prisma } from './prisma';
 
 /**
  * Accès familial — §4.1 amendé.
@@ -38,16 +39,36 @@ function verify(payload: string, mac: string): boolean {
 
 // ─── Jeton familial ───
 
-export function signFamilyToken(familyId: string): string {
-  return `${familyId}.${sign(familyId)}`;
+/**
+ * Le jeton familial porte désormais un NUMÉRO DE VERSION.
+ *
+ * Les liens personnels se révoquent depuis toujours (`Member.tokenVersion`).
+ * Le lien familial — qui est le secret d'accès de la §4.1 — n'avait aucun
+ * équivalent : une famille qui le publiait par erreur restait sans recours.
+ * Incrémenter `Family.tokenVersion` invalide l'ancien lien pour tout le
+ * monde. C'est brutal, et c'est exactement ce qu'on veut dans ce cas.
+ */
+export function signFamilyToken(familyId: string, tokenVersion = 1): string {
+  const payload = `${familyId}:${tokenVersion}`;
+  return `${familyId}.${tokenVersion}.${sign(payload)}`;
 }
 
-export function verifyFamilyToken(token: string | undefined): string | null {
+/**
+ * Vérifie la SIGNATURE seule — sans base. Le numéro de version est rendu à
+ * l'appelant, qui doit encore le confronter à celui de la famille.
+ */
+export function verifyFamilyToken(
+  token: string | undefined,
+): { familyId: string; tokenVersion: number } | null {
   if (!token) return null;
-  const separator = token.lastIndexOf('.');
-  if (separator <= 0) return null;
-  const familyId = token.slice(0, separator);
-  return verify(familyId, token.slice(separator + 1)) ? familyId : null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [familyId, version, mac] = parts as [string, string, string];
+  const tokenVersion = Number(version);
+  if (!Number.isInteger(tokenVersion) || tokenVersion < 1) return null;
+
+  return verify(`${familyId}:${tokenVersion}`, mac) ? { familyId, tokenVersion } : null;
 }
 
 // ─── Jeton personnel ───
@@ -107,8 +128,24 @@ export function memberCookieOptions() {
 /** Rétro-compatibilité de nom, utilisée par les routes d'entrée. */
 export const cookieOptions = familyCookieOptions;
 
-export function currentFamilyId(): string | null {
-  return verifyFamilyToken(cookies().get(FAMILY_COOKIE)?.value);
+/**
+ * La famille du cookie, si sa version est encore en cours.
+ *
+ * Un aller-retour en base est nécessaire : la signature seule ne peut pas
+ * savoir qu'une famille a fait tourner son lien depuis.
+ */
+export async function currentFamilyId(): Promise<string | null> {
+  const jeton = verifyFamilyToken(cookies().get(FAMILY_COOKIE)?.value);
+  if (!jeton) return null;
+  return (await versionCourante(jeton.familyId)) === jeton.tokenVersion ? jeton.familyId : null;
+}
+
+async function versionCourante(familyId: string): Promise<number | null> {
+  const famille = await prisma.family.findUnique({
+    where: { id: familyId },
+    select: { tokenVersion: true },
+  });
+  return famille?.tokenVersion ?? null;
 }
 
 export function currentIdentity(): MemberIdentity | null {
@@ -119,12 +156,18 @@ export function currentIdentity(): MemberIdentity | null {
  * Une requête API n'est autorisée que sur la famille de son URL.
  * Jamais de requête cross-family (§2.1 règle 3).
  */
-export function authorizeFamily(request: Request, familyId: string): boolean {
+export async function authorizeFamily(request: Request, familyId: string): Promise<boolean> {
   const header = request.headers.get('cookie') ?? '';
   const match = header.match(new RegExp(`(?:^|;\\s*)${FAMILY_COOKIE}=([^;]+)`));
-  const fromCookie = verifyFamilyToken(match?.[1] ? decodeURIComponent(match[1]) : undefined);
-  if (fromCookie === familyId) return true;
-  return request.headers.get('x-family-token') === signFamilyToken(familyId);
+
+  const duCookie = verifyFamilyToken(match?.[1] ? decodeURIComponent(match[1]) : undefined);
+  const enEntete = verifyFamilyToken(request.headers.get('x-family-token') ?? undefined);
+  const jeton = duCookie?.familyId === familyId ? duCookie : enEntete?.familyId === familyId ? enEntete : null;
+  if (!jeton) return false;
+
+  // Un lien révoqué porte une signature valide : seule la version le
+  // distingue, et elle ne se lit qu'en base.
+  return (await versionCourante(familyId)) === jeton.tokenVersion;
 }
 
 /**

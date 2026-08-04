@@ -14,7 +14,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string; storyId: string } },
 ) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const story = await prisma.story.findFirst({
     where: { id: params.storyId, familyId: params.id },
@@ -59,7 +59,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; storyId: string } },
 ) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const { data, errors } = parseOrNull(patchSchema, await request.json().catch(() => null));
   if (!data) return apiError('INVALID_INPUT', errors);
@@ -101,7 +101,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string; storyId: string } },
 ) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const identity = requestIdentity(request);
   if (!identity) return apiError('FORBIDDEN', 'Identité requise.');

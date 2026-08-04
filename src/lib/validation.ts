@@ -53,6 +53,10 @@ export const memberSchema = z
     birthDate: z.coerce.date().optional(),
     deathDate: z.coerce.date().optional(),
     role: z.string().max(280).optional(),
+    // Ne pas figurer au flux `.ics`, qui est recopié chez Google ou Apple.
+    // Par défaut on y figure : c'est l'état d'avant cette case, et une
+    // migration ne doit pas retirer les gens d'un calendrier sans le dire.
+    calendarOptOut: z.boolean().default(false),
   })
   .refine((m) => !m.birthDate || !m.deathDate || m.deathDate >= m.birthDate, {
     message: 'La date de décès ne peut précéder la naissance.',

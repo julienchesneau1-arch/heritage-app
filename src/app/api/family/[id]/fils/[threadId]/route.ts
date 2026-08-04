@@ -10,7 +10,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string; threadId: string } },
 ) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const thread = await threadService.byId(params.id, params.threadId);
   if (!thread) return apiError('NOT_FOUND');

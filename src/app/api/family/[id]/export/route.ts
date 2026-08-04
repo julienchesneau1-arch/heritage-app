@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
  * Export complet, sans traitement, sans filtre, en téléchargement direct.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  if (!authorizeFamily(request, params.id)) return apiError('FORBIDDEN');
+  if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const data = await exportService.exportFamily(params.id);
   if (!data) return apiError('NOT_FOUND');
