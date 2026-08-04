@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 export default async function NewStoryPage({
   searchParams,
 }: {
-  searchParams: { parent?: string; trigger?: string; conversation?: string; erreur?: string };
+  searchParams: { parent?: string; trigger?: string; fil?: string; erreur?: string };
 }) {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
@@ -46,8 +46,8 @@ export default async function NewStoryPage({
       <form action={createStory} className="space-y-5">
         {parent ? <input type="hidden" name="parentStoryId" value={parent.id} /> : null}
         {parent ? <input type="hidden" name="triggerType" value={searchParams.trigger ?? 'manual'} /> : null}
-        {searchParams.conversation ? (
-          <input type="hidden" name="fromConversationId" value={searchParams.conversation} />
+        {searchParams.fil ? (
+          <input type="hidden" name="fromThreadId" value={searchParams.fil} />
         ) : null}
 
         {/* Dans une famille, celui qui raconte n'est presque jamais celui

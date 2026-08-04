@@ -87,16 +87,16 @@ export default async function TransmissionPage() {
             }
           />
           <Row
-            label="Questions devenues récit"
+            label="Fils devenus récit"
             value={
               metrics.passeurConversion === null
                 ? '—'
-                : `${metrics.conversationsConverted} / ${metrics.conversationsTotal}`
+                : `${metrics.threadsCrystallized} / ${metrics.threadsTotal}`
             }
             note={
               metrics.passeurConversion === null
-                ? 'Aucune question n’a encore été posée : il n’y a pas un taux nul, il n’y a pas de taux.'
-                : 'Questions posées qui sont devenues un récit.'
+                ? 'Aucun fil n’a encore été ouvert : il n’y a pas un taux nul, il n’y a pas de taux.'
+                : 'Fils de discussion qui se sont cristallisés en récit.'
             }
           />
         </dl>

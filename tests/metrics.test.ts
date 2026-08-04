@@ -11,7 +11,8 @@ function metricsWith(
   const prisma = {
     story: { count: async () => storiesCount },
     passage: { findMany: async () => passages },
-    conversation: { groupBy: async () => [] },
+    thread: { count: async () => 0 },
+    message: { count: async () => 0 },
   } as unknown as PrismaClient;
   return new MetricsService(prisma);
 }

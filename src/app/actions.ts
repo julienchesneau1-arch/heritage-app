@@ -17,6 +17,8 @@ import { createFamilySchema, memberSchema, updateStorySchema } from '@/lib/valid
 import { prisma } from '@/lib/prisma';
 import { conservateur } from '@/services/conservateur.service';
 import { storyService } from '@/services/story.service';
+import { threadService, MARK_KINDS, type MarkKind } from '@/services/thread.service';
+import { isStructureType, type StructureType } from '@/lib/structure-types';
 import { traditionService } from '@/services/tradition.service';
 import { TriggerModelService, type TriggerType } from '@/services/trigger-model.service';
 import { PasseurService } from '@/services/passeur.service';
@@ -119,7 +121,7 @@ export async function ignorePasseur(formData: FormData) {
   await passeurService.markIgnored(
     context.family.id,
     context.member.id,
-    String(formData.get('storyId') ?? ''),
+    String(formData.get('subjectId') ?? ''),
     String(formData.get('ruleId') ?? ''),
   );
   revalidatePath('/');
@@ -162,7 +164,7 @@ export async function createStory(formData: FormData) {
   const rawTone = String(formData.get('tone') ?? 'factuel');
   const rawEventDate = String(formData.get('eventDate') ?? '');
   const parentStoryId = String(formData.get('parentStoryId') ?? '');
-  const conversationId = String(formData.get('fromConversationId') ?? '');
+  const threadId = String(formData.get('fromThreadId') ?? '');
   const triggerType = String(formData.get('triggerType') ?? 'manual');
 
   const rawNarrator = String(formData.get('narratorId') ?? '');
@@ -181,7 +183,7 @@ export async function createStory(formData: FormData) {
     eventDate: rawEventDate || undefined,
     parentStoryId: parentStoryId || undefined,
     triggerType: parentStoryId ? triggerType : undefined,
-    fromConversationId: conversationId || undefined,
+    fromThreadId: threadId || undefined,
     entityNames: parseEntityNames(String(formData.get('entities') ?? '')),
   });
 
@@ -193,54 +195,137 @@ export async function createStory(formData: FormData) {
   redirect(`/recits/${story.id}`);
 }
 
-export async function askQuestion(formData: FormData) {
+/**
+ * Parler dans un fil.
+ *
+ * Ouvre le fil si besoin. Aucun titre n'est demandé, aucun type, aucune
+ * structure : c'est tout l'intérêt du fil sur la page de rédaction. Trois
+ * mots sur la montre de Robert doivent coûter trois mots.
+ */
+export async function postMessage(formData: FormData) {
   const context = await requireContext();
   if (!context.member) redirect('/qui');
 
-  const storyId = String(formData.get('storyId') ?? '');
-  const questionText = String(formData.get('questionText') ?? '').trim();
-  if (questionText.length < 3) return;
+  const body = String(formData.get('body') ?? '').trim();
+  if (body.length < 2) return;
 
-  const story = await prisma.story.findFirst({
-    where: { id: storyId, familyId: context.family.id },
-    select: { id: true },
-  });
-  if (!story) return;
+  const isQuestion = formData.get('isQuestion') === '1' || body.endsWith('?');
+  // Qui a PARLÉ, si ce n'est pas qui tape. Le clavier n'est pas la voix.
+  const narratorRaw = String(formData.get('narratorId') ?? '');
+  const narratorId = narratorRaw && narratorRaw !== context.member.id ? narratorRaw : null;
 
-  await prisma.conversation.create({
-    data: {
-      familyId: context.family.id,
-      storyId,
-      questionerId: context.member.id,
-      questionText,
-    },
-  });
-  revalidatePath(`/recits/${storyId}`);
+  const threadId = String(formData.get('threadId') ?? '');
+  const post = {
+    familyId: context.family.id,
+    authorId: context.member.id,
+    narratorId,
+    body,
+    isQuestion,
+  };
+
+  if (threadId) {
+    await threadService.reply(threadId, post);
+  } else {
+    const entityId = String(formData.get('entityId') ?? '');
+    const storyId = String(formData.get('storyId') ?? '');
+    const anchor = entityId
+      ? { kind: 'entity' as const, entityId }
+      : storyId
+        ? { kind: 'story' as const, storyId }
+        : { kind: 'none' as const };
+
+    // On ne fait confiance à aucun identifiant venu du formulaire : il doit
+    // appartenir à cette famille.
+    if (anchor.kind === 'entity') {
+      const entity = await prisma.entity.findFirst({
+        where: { id: anchor.entityId, familyId: context.family.id },
+        select: { id: true },
+      });
+      if (!entity) return;
+    } else if (anchor.kind === 'story') {
+      const story = await prisma.story.findFirst({
+        where: { id: anchor.storyId, familyId: context.family.id },
+        select: { id: true },
+      });
+      if (!story) return;
+    }
+
+    await threadService.open(anchor, post);
+  }
+
+  revalidatePath(String(formData.get('retour') ?? '/'));
 }
 
-export async function answerQuestion(formData: FormData) {
+/**
+ * Cristalliser un fil en récit.
+ *
+ * C'est le texte RELU par un humain qui entre dans la mémoire, jamais celui
+ * que la machine a proposé. Le fil reste, comme provenance.
+ */
+export async function crystallizeThread(formData: FormData) {
   const context = await requireContext();
   if (!context.member) redirect('/qui');
 
-  const conversationId = String(formData.get('conversationId') ?? '');
-  const responseText = String(formData.get('responseText') ?? '').trim();
-  if (!responseText) return;
-
-  const conversation = await prisma.conversation.findFirst({
-    where: { id: conversationId, familyId: context.family.id },
+  const threadId = String(formData.get('threadId') ?? '');
+  const thread = await prisma.thread.findFirst({
+    where: { id: threadId, familyId: context.family.id },
+    select: { id: true, storyId: true, title: true, crystallizedStoryId: true },
   });
-  if (!conversation) return;
+  if (!thread || thread.crystallizedStoryId) redirect('/recits');
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      responderId: context.member.id,
-      responseText,
-      status: conversation.status === 'converted' ? 'converted' : 'answered',
-      answeredAt: new Date(),
-    },
+  const narratorRaw = String(formData.get('narratorId') ?? '');
+
+  const story = await storyService.createStory(context.family.id, {
+    authorId: context.member.id,
+    narratorId: narratorRaw || undefined,
+    title: String(formData.get('title') ?? '').trim(),
+    content: String(formData.get('content') ?? '').trim(),
+    // La grammaire narrative est fermée : un type hors liste retombe sur le
+    // défaut plutôt que d'entrer dans la base.
+    structureType: isStructureType(String(formData.get('structureType') ?? ''))
+      ? (String(formData.get('structureType')) as StructureType)
+      : undefined,
+    tone: 'factuel',
+    // Un fil accroché à un récit qui en engendre un autre : c'est
+    // exactement la primitive du produit, et le passage est enregistré.
+    parentStoryId: thread.storyId ?? undefined,
+    triggerType: thread.storyId ? 'question' : undefined,
+    fromThreadId: thread.id,
   });
-  revalidatePath(`/recits/${conversation.storyId}`);
+
+  revalidatePath('/recits');
+  revalidatePath('/transmission');
+  redirect(`/recits/${story.id}`);
+}
+
+/**
+ * Marquer un message. Ce n'est pas un « j'aime » : « j'y étais » est un
+ * fait, et c'est justement le fait que le Passeur devinait faute de mieux.
+ * Rien n'est compté ni classé — on affiche des noms.
+ */
+export async function markMessage(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const messageId = String(formData.get('messageId') ?? '');
+  const kind = String(formData.get('kind') ?? '');
+  if (!MARK_KINDS.includes(kind as MarkKind)) return;
+
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, familyId: context.family.id },
+    select: { id: true },
+  });
+  if (!message) return;
+
+  const existing = await prisma.messageMark.findFirst({
+    where: { messageId, memberId: context.member.id, kind },
+    select: { id: true },
+  });
+
+  if (existing) await threadService.unmark(messageId, context.member.id, kind as MarkKind);
+  else await threadService.mark(messageId, context.member.id, kind as MarkKind);
+
+  revalidatePath(String(formData.get('retour') ?? '/'));
 }
 
 export async function createTradition(formData: FormData) {
@@ -484,7 +569,9 @@ export async function deleteStory(formData: FormData) {
 
   await prisma.$transaction([
     prisma.passage.deleteMany({ where: { OR: [{ parentStoryId: storyId }, { childStoryId: storyId }] } }),
-    prisma.conversation.deleteMany({ where: { storyId } }),
+    // Les fils accrochés au récit partent avec lui (cascade) ; ceux qui
+    // s'y sont cristallisés se détachent, la parole reste.
+    prisma.thread.updateMany({ where: { crystallizedStoryId: storyId }, data: { crystallizedStoryId: null } }),
     prisma.visibilityLog.deleteMany({ where: { storyId } }),
     prisma.archive.updateMany({ where: { storyId }, data: { storyId: null } }),
     prisma.story.delete({ where: { id: storyId } }),

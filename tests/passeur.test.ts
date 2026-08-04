@@ -7,6 +7,7 @@ import {
   tensionFragment,
 } from '@/services/passeur.service';
 import { ConservateurService } from '@/services/conservateur.service';
+import { ThreadService } from '@/services/thread.service';
 import { LLMOperatorService } from '@/services/llm-operator.service';
 import { createMemoryStore, type KeyValueStore } from '@/lib/redis';
 import { constitutionEmotionFilter } from '@/lib/constitution';
@@ -80,6 +81,7 @@ function buildService(
   store: KeyValueStore = createMemoryStore(),
   llm = new LLMOperatorService(undefined),
   members: Array<Record<string, unknown>> = MEMBERS,
+  fils: Array<Record<string, unknown>> = [],
 ) {
   const prisma = {
     story: {
@@ -92,9 +94,16 @@ function buildService(
     visibilityLog: { groupBy: async () => [] },
     // Rien n'est mis en sourdine par ce membre dans ces scénarios.
     storyMute: { findMany: async () => [] },
+    thread: { findMany: async () => fils },
   } as unknown as PrismaClient;
 
-  return new PasseurService(prisma, store, llm, new ConservateurService(prisma, store));
+  return new PasseurService(
+    prisma,
+    store,
+    llm,
+    new ConservateurService(prisma, store),
+    new ThreadService(prisma),
+  );
 }
 
 describe('PasseurService — parcimonie', () => {
@@ -166,40 +175,91 @@ describe('PasseurService — sélection', () => {
   });
 });
 
-describe('PasseurService — question restée sans réponse', () => {
-  const asked = {
-    ...TENSION_STORY,
-    id: 's_question',
-    conversations: [
-      {
-        id: 'c1',
-        status: 'pending',
-        questionerId: 'mem_2',
-        questionText: 'Est-ce que quelqu’un sait d’où venait ce vélo de 1953 ?',
-      },
-    ],
+describe('PasseurService — une question que quelqu’un a réellement posée', () => {
+  /**
+   * Le fil a défait le verrou : une question n'a plus besoin qu'un récit
+   * existe pour être posée. Elle peut pendre à une entité, ou à rien.
+   */
+  const filSurRecit = {
+    id: 'thr_1',
+    storyId: 's_tension',
+    entityId: null,
+    openedById: 'mem_2',
+    openedBy: { id: 'mem_2', name: 'Claire' },
+    story: { id: 's_tension', title: 'Les vélos de la rue des Peupliers' },
+    entity: null,
+    messageCount: 1,
+    messages: [{ id: 'm1', body: 'Est-ce que quelqu’un sait d’où venait ce vélo de 1953 ?', isQuestion: true }],
+  };
+
+  const filSurEntite = {
+    ...filSurRecit,
+    id: 'thr_2',
+    storyId: null,
+    story: null,
+    entityId: 'e_montre',
+    entity: { id: 'e_montre', name: 'la montre de Robert' },
+    messages: [{ id: 'm2', body: 'Elle est où maintenant ?', isQuestion: true }],
   };
 
   it('passe avant toute règle déduite d’un texte', async () => {
-    const question = await buildService([asked]).generateQuestion(FAMILY, MEMBER, NOW);
+    const question = await buildService([TENSION_STORY], createMemoryStore(), undefined, MEMBERS, [
+      filSurRecit,
+    ]).generateQuestion(FAMILY, MEMBER, NOW);
     expect(question?.ruleId).toBe('UNANSWERED_QUESTION');
     expect(question?.text).toContain('d’où venait ce vélo');
   });
 
   it('nomme qui a posé la question, dans la justification', async () => {
-    const question = await buildService([asked]).generateQuestion(FAMILY, MEMBER, NOW);
+    const question = await buildService([TENSION_STORY], createMemoryStore(), undefined, MEMBERS, [
+      filSurRecit,
+    ]).generateQuestion(FAMILY, MEMBER, NOW);
     expect(question?.justification).toContain('Claire');
   });
 
-  it('ne renvoie pas à un membre sa propre question', async () => {
-    // mem_2 a posé la question : on ne la lui repose pas.
-    const question = await buildService([asked]).generateQuestion(FAMILY, 'mem_2', NOW);
-    expect(question?.ruleId).not.toBe('UNANSWERED_QUESTION');
+  it('remonte une question posée sur une entité, sans aucun récit', async () => {
+    // Impossible avant le fil : `Conversation.storyId` était obligatoire.
+    const question = await buildService([], createMemoryStore(), undefined, MEMBERS, [
+      filSurEntite,
+    ]).generateQuestion(FAMILY, MEMBER, NOW);
+    expect(question?.ruleId).toBe('UNANSWERED_QUESTION');
+    expect(question?.storyId).toBeNull();
+    expect(question?.threadId).toBe('thr_2');
+    expect(question?.justification).toContain('la montre de Robert');
   });
 
-  it('ne se déclenche plus une fois la question répondue', async () => {
-    const answered = { ...asked, conversations: [{ ...asked.conversations[0]!, status: 'answered' }] };
-    const question = await buildService([answered]).generateQuestion(FAMILY, MEMBER, NOW);
+  it('ne renvoie à personne sa propre question', async () => {
+    // La sélection se fait en base : le service passe l'exclusion à la
+    // requête, on vérifie qu'elle y est.
+    let recu: Record<string, unknown> | null = null;
+    const prisma = {
+      story: { findMany: async () => [] },
+      member: { findMany: async () => MEMBERS },
+      visibilityLog: { groupBy: async () => [] },
+      storyMute: { findMany: async () => [] },
+      thread: {
+        findMany: async ({ where }: { where: Record<string, unknown> }) => {
+          recu = where;
+          return [];
+        },
+      },
+    } as unknown as PrismaClient;
+    const store = createMemoryStore();
+    await new PasseurService(
+      prisma,
+      store,
+      new LLMOperatorService(undefined),
+      new ConservateurService(prisma, store),
+      new ThreadService(prisma),
+    ).generateQuestion(FAMILY, 'mem_2', NOW);
+
+    expect(recu!.openedById).toEqual({ not: 'mem_2' });
+  });
+
+  it('ne se déclenche plus dès que quelqu’un a repris la parole', async () => {
+    // Un fil à deux messages n'est plus un vide : la requête ne le rend pas.
+    const question = await buildService([], createMemoryStore(), undefined, MEMBERS, [])
+      .generateQuestion(FAMILY, MEMBER, NOW);
     expect(question?.ruleId).not.toBe('UNANSWERED_QUESTION');
   });
 });

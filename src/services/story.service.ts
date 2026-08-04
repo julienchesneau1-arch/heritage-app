@@ -61,10 +61,12 @@ export class StoryService {
       });
     }
 
-    if (input.fromConversationId) {
-      await this.prisma.conversation.updateMany({
-        where: { id: input.fromConversationId, familyId },
-        data: { status: 'converted', convertedToStoryId: story.id },
+    // Le fil dont ce récit s'est cristallisé ne disparaît pas : il devient
+    // la provenance, et l'on peut toujours remonter à qui a dit quoi.
+    if (input.fromThreadId) {
+      await this.prisma.thread.updateMany({
+        where: { id: input.fromThreadId, familyId },
+        data: { crystallizedStoryId: story.id },
       });
     }
 

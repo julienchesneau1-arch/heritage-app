@@ -7,14 +7,15 @@ import { ONE_TAP_QUESTIONS } from '@/lib/questions';
 import { conservateur } from '@/services/conservateur.service';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import {
-  answerQuestion,
   archiveStory,
-  askQuestion,
   deleteStory,
+  postMessage,
   releaseQuarantine,
   requestTranscription,
   uploadArchive,
 } from '@/app/actions';
+import { Fil, ChampDeParole } from '@/components/fil';
+import { threadService } from '@/services/thread.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,19 +52,14 @@ export default async function StoryPage({
       transcriptionDraft: {
         select: { validatedAt: true, validatedBy: { select: { name: true } }, model: true },
       },
-      conversations: {
-        orderBy: { createdAt: 'asc' },
-        include: {
-          questioner: { select: { name: true } },
-          responder: { select: { name: true } },
-        },
-      },
       parentPassages: { include: { childStory: { select: { id: true, title: true } } } },
       childPassages: { include: { parentStory: { select: { id: true, title: true } } } },
     },
   });
 
   if (!story) notFound();
+
+  const fils = await threadService.forStory(context.family.id, story.id);
 
   const depot = searchParams.depot ? DEPOT_MESSAGES[searchParams.depot] : null;
   const suppression = searchParams.suppr ? SUPPR_MESSAGES[searchParams.suppr] : null;
@@ -220,83 +216,50 @@ export default async function StoryPage({
       ) : null}
 
       <section id="conversations" className="space-y-4 border-t border-rule pt-6">
-        <h2 className="section-label">Conversations</h2>
+        <h2 className="section-label">Le fil</h2>
 
-        {story.conversations.length === 0 ? (
-          <p className="justification">Aucune question n’a encore été posée sur ce récit.</p>
+        {fils.length === 0 ? (
+          <p className="justification">
+            Personne n’a encore parlé de ce récit. Trois mots suffisent — ce n’est pas une rédaction.
+          </p>
         ) : (
-          <ul className="space-y-5">
-            {story.conversations.map((conversation) => (
-              <li key={conversation.id} className="space-y-2">
-                <p className="leading-relaxed">« {conversation.questionText} »</p>
-                <p className="justification">— {conversation.questioner.name} demande</p>
-
-                {conversation.responseText ? (
-                  <div className="border-l-2 border-rule pl-3">
-                    <p className="leading-relaxed">« {conversation.responseText} »</p>
-                    <p className="justification">— {conversation.responder?.name ?? 'Réponse'} répond</p>
-                    {conversation.status !== 'converted' ? (
-                      <Link
-                        href={`/recits/nouveau?parent=${story.id}&trigger=question&conversation=${conversation.id}`}
-                        className="justification underline"
-                      >
-                        En faire un récit
-                      </Link>
-                    ) : null}
-                  </div>
-                ) : context.member ? (
-                  <form action={answerQuestion} className="space-y-2">
-                    <input type="hidden" name="conversationId" value={conversation.id} />
-                    <label htmlFor={`r-${conversation.id}`} className="sr-only">
-                      Répondre
-                    </label>
-                    <textarea
-                      id={`r-${conversation.id}`}
-                      name="responseText"
-                      rows={3}
-                      className="w-full rounded-sm border border-rule bg-transparent p-2 font-sans text-sm"
-                    />
-                    <button type="submit" className="btn">
-                      Répondre
-                    </button>
-                  </form>
-                ) : null}
-              </li>
+          <ul className="divide-y divide-rule">
+            {fils.map((fil) => (
+              <Fil
+                key={fil.id}
+                thread={fil}
+                members={context.members}
+                memberId={context.member?.id ?? null}
+                retour={`/recits/${story.id}`}
+              />
             ))}
           </ul>
         )}
 
         {context.member ? (
-          <div className="space-y-4 pt-2">
-            <form action={askQuestion} className="space-y-2">
-              <input type="hidden" name="storyId" value={story.id} />
-              <label htmlFor="question" className="section-label block">
-                Poser une question
-              </label>
-              <textarea
-                id="question"
-                name="questionText"
-                rows={2}
-                className="w-full rounded-sm border border-rule bg-transparent p-2 font-sans text-sm"
-              />
-              <button type="submit" className="btn">
-                Poser
-              </button>
-            </form>
-
-            {/* Même action, sans clavier — pour les enfants, et pour tous
-                ceux que la page blanche arrête. */}
-            <form action={askQuestion} className="space-y-2">
-              <input type="hidden" name="storyId" value={story.id} />
-              <p className="justification">Ou, en un geste :</p>
-              <div className="flex flex-wrap gap-2">
-                {ONE_TAP_QUESTIONS.map((question) => (
-                  <button key={question} type="submit" name="questionText" value={question} className="btn">
+          <div className="border-t border-rule pt-4">
+            <ChampDeParole
+              storyId={story.id}
+              members={context.members}
+              memberId={context.member.id}
+              retour={`/recits/${story.id}`}
+              label="Ouvrir un fil sur ce récit"
+            />
+            {/* Une question en un geste : le plus jeune membre a sept ans et
+                n'écrira pas dans un champ de texte. */}
+            <div className="flex flex-wrap gap-2 pt-3">
+              {ONE_TAP_QUESTIONS.map((question) => (
+                <form action={postMessage} key={question}>
+                  <input type="hidden" name="storyId" value={story.id} />
+                  <input type="hidden" name="body" value={question} />
+                  <input type="hidden" name="isQuestion" value="1" />
+                  <input type="hidden" name="retour" value={`/recits/${story.id}`} />
+                  <button type="submit" className="btn">
                     {question}
                   </button>
-                ))}
-              </div>
-            </form>
+                </form>
+              ))}
+            </div>
           </div>
         ) : null}
       </section>

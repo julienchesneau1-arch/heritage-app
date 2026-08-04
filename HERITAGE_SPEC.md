@@ -69,7 +69,9 @@ Le schéma de référence est `prisma/schema.prisma`. Aucune table ne peut être
 | `Entity` | Nœud du graphe : PERSON, PLACE, OBJECT, DATE, CONCEPT. Matching par `normalizedName`. |
 | `Archive` | Photo, document, audio, vidéo. Binaire sur stockage objet, métadonnées en base. |
 | `Tradition` | Rituel cyclique. Peut s'endormir ; le sommeil n'est pas un échec. |
-| `Conversation` | Q&A autour d'un récit. Peut se convertir en récit. |
+| `Thread` | Un fil de discussion, accroché à une entité, à un récit, ou à rien. Peut se cristalliser en récit. |
+| `Message` | Une prise de parole dans un fil. Porte auteur **et** narrateur, comme un récit. |
+| `MessageMark` | Marque informative sur un message (« j'y étais »). Jamais comptée, jamais classée. |
 | `Passage` | Lien de transmission parent → enfant. **La primitive du produit.** |
 | `VisibilityLog` | Audit du Conservateur. Toute impression est traçable. |
 
@@ -355,9 +357,9 @@ GET    /api/family/:id/traditions                 → { traditions, activeTodayI
 POST   /api/family/:id/traditions                 → créer
 PATCH  /api/family/:id/traditions/:traditionId    → activate | sleep | wake
 
-GET    /api/family/:id/conversations              → { conversations }
-POST   /api/family/:id/conversations              → poser une question
-PATCH  /api/family/:id/conversations/:id          → répondre
+GET    /api/family/:id/fils                       → { threads }
+POST   /api/family/:id/fils                       → parler (ouvre un fil, ou en nourrit un)
+GET    /api/family/:id/fils/:threadId             → un fil et tous ses messages
 
 GET    /api/family/:id/graph                      → { nodes, links }
 DELETE /api/family/:id/stories/:storyId           → suppression (identité vérifiée, auteur seul)
@@ -442,6 +444,36 @@ C'est la page vers laquelle renvoient toutes les vues bornées (graphe, veillée
 **Ce que le filtre écarte est compté.** Tant que les archives sont masquées, « Aucun récit ne correspond » pouvait s'afficher alors que douze récits archivés correspondaient parfaitement à la recherche. Trois situations distinctes disent maintenant trois phrases distinctes : aucun récit du tout, aucune correspondance, ou aucune correspondance **active** — avec le nombre d'archivés qui, eux, correspondent. Le lien d'inclusion porte ce compte.
 
 **La recherche survit à la navigation.** Tourner la page ou basculer les archives conservait l'un et perdait l'autre : tous les liens de la page reconstruisent la requête complète (`q`, `type`, `archivees`), et le formulaire GET reporte le filtre d'archives dans un champ caché.
+
+### 5.2 bis Le fil — extension hors spec v1.0, assumée
+
+**Le constat.** `Conversation` tenait en deux verrous. `storyId` était obligatoire : impossible de dire trois mots sur la montre de Robert tant que personne n'avait *rédigé* un récit. Et le modèle n'admettait qu'un `responseText` : le troisième intervenant n'avait nulle part où parler — Jeanne ne pouvait pas corriger la réponse de Claire.
+
+La primitive de la spec est pourtant « une histoire doit engendrer une autre histoire ». La page de rédaction la servait mal : elle gardait l'entrée du produit derrière une page blanche.
+
+**La thèse.** Le livre devient la **sortie**, plus jamais l'entrée. On parle à plusieurs, à peu de frais, et le récit se **condense** ensuite.
+
+**Le modèle.** Un `Thread` s'accroche à une `Entity`, à une `Story`, ou à rien — au plus un ancrage, contrainte `CHECK` en base, pas seulement promise. Un `Message` porte `authorId` **et** `narratorId` : dans un fil écrit, le clavier rapide parle à la place de celui qui se souvient, et sans cette distinction l'interface amplifierait exactement la distorsion que le Conservateur mesure. `Story.createdAt` reste ce qu'il est ; le fil ne le remplace pas.
+
+**Le graphe devient la navigation.** Il était décoratif. Chaque entité porte désormais son fil : on parle de la montre sur la page de la montre. Les entités cessent d'être un ornement du modèle de données.
+
+**La cristallisation** (`/fils/<id>/recit`). Le LLM **assemble**, il ne résume pas — résumer, c'est décider de ce qui mérite d'être gardé. Trois garanties reprises telles quelles de la chaîne de transcription (§3.5) : le texte proposé est un brouillon modifiable ; ce qui a été dit est affiché **à côté**, intégralement ; le fil survit et devient la provenance. Sans clé API, le repli est le fil lui-même, ligne à ligne — moins fluide, tout aussi vrai.
+
+**Ce qu'on refuse d'emprunter aux salons de discussion**, et qui est testé (`tests/fil.test.ts`) :
+
+| Interdit | Pourquoi |
+|---|---|
+| Compteur de non-lus | C'est le moteur d'engagement de ces produits. |
+| Présence, « est en train d'écrire » | Fabrique une urgence qui n'existe pas. |
+| Notification, `@everyone` | §3.1 : le produit ne décide pas d'interrompre. |
+| Décompte de réactions | Un compteur est un score ; le Conservateur existe pour les combattre. |
+| Affichage de l'inactivité | **Le plus important.** « Personne n'a parlé depuis trois semaines » transforme un rythme familial normal en reproche. Dix messages par mois, c'est une famille — pas un échec. Le fil montre ce qu'il contient, jamais ce qui lui manque. |
+
+`lastMessageAt` sert à **trier**, jamais à afficher. Les tests lisent le source composant privé de ses commentaires : sans cela, l'en-tête qui énumère les interdits les ferait échouer, et du code fautif commenté passerait.
+
+**Les marques remplacent le « j'aime ».** Vocabulaire fermé, contraint en base : `WITNESS` (« j'y étais »), `REMEMBER` (« je m'en souviens »), `LEARNED` (« je ne savais pas »). Ce sont des **faits**, pas des avis — et « j'y étais » est précisément le fait que `MISSING_VIEWPOINT` devinait faute de mieux. On affiche des noms, jamais des nombres.
+
+**Migration et compatibilité.** La migration `le_fil` **transporte** les conversations avant de détruire quoi que ce soit, et lève une exception si le transport est incomplet : une migration qui perd la parole d'une famille est pire qu'une migration qui échoue. L'export passe en `heritage-export/v2` ; l'import relit les deux formats, car un export d'il y a six mois doit encore se restaurer (amendement 3).
 
 ### 5.3 ter Le calendrier familial — extension hors spec v1.0, assumée
 
@@ -602,7 +634,8 @@ Objectif V1 : > 20 %.
 | `transmission_rate` | Récits ayant transmis / total | > 20 % |
 | `medianLatencyDays` | Délai médian parent → enfant | — |
 | `maxChainDepth` | Plus longue chaîne de transmission | — |
-| `passeur_conversion` | Conversations devenues récit | > 15 % |
+| `passeur_conversion` | Fils devenus récit | > 15 % |
+| `narrated_share` | Messages dont le narrateur n'est pas le scribe | à surveiller : un fil écrit avantage le clavier |
 | `quarantine_rate` | Récits en quarantaine | < 5 % |
 | `distortionScore` | Écart écriture / lecture par auteur | mesuré, non corrigé |
 

@@ -22,7 +22,8 @@ model Family {
   stories        Story[]
   archives       Archive[]
   traditions     Tradition[]
-  conversations  Conversation[]
+  threads        Thread[]
+  messages       Message[]
   entities       Entity[]
   passages       Passage[]
   visibilityLogs VisibilityLog[]
@@ -57,8 +58,10 @@ model Member {
   storiesAuthored  Story[]        @relation("Author")
   storiesNarrated  Story[]        @relation("Narrator")
   entities         Entity[]
-  questionsAsked   Conversation[] @relation("Questioner")
-  answersGiven     Conversation[] @relation("Responder")
+  messagesWritten  Message[]      @relation("MessageAuthor")
+  messagesNarrated Message[]      @relation("MessageNarrator")
+  threadsOpened    Thread[]       @relation("ThreadOpener")
+  messageMarks     MessageMark[]
   archivesUploaded Archive[]
   mutedStories     StoryMute[]
 
@@ -113,9 +116,10 @@ model Story {
   author   Member  @relation("Author", fields: [authorId], references: [id])
   narrator Member? @relation("Narrator", fields: [narratorId], references: [id])
 
-  linkedEntities Entity[]       @relation("StoryEntities")
+  linkedEntities Entity[]  @relation("StoryEntities")
   archives       Archive[]
-  conversations  Conversation[]
+  threads        Thread[]  @relation("ThreadOnStory")
+  bornFromThread Thread?   @relation("ThreadCrystallized")
 
   // Passages (chaînes de transmission)
   parentPassages Passage[] @relation("ParentStory")
@@ -148,6 +152,7 @@ model Entity {
   family  Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
   member  Member? @relation(fields: [memberId], references: [id])
   stories Story[] @relation("StoryEntities")
+  threads Thread[]
 
   @@unique([familyId, normalizedName, type])
   @@map("entities")
@@ -177,6 +182,7 @@ model Archive {
   story    Story? @relation(fields: [storyId], references: [id])
 
   transcriptionDraft TranscriptionDraft?
+  messages           Message[]
 
   @@index([familyId])
   @@map("archives")
@@ -206,29 +212,116 @@ model Tradition {
 }
 
 // ─── CONVERSATION (Q&A autour d'un récit) ───
-model Conversation {
-  id           String  @id @default(cuid())
-  familyId     String  @map("family_id")
-  storyId      String  @map("story_id")
-  questionerId String  @map("questioner_id")
-  responderId  String? @map("responder_id")
+// ─── LE FIL ───
+//
+// Le modèle `Conversation` qu'il remplace était une question et UNE réponse,
+// obligatoirement accrochée à un récit déjà écrit. Deux verrous en un :
+// personne ne pouvait parler avant que quelqu'un ait rédigé, et personne ne
+// pouvait répondre à une réponse. La page blanche gardait l'entrée, et le
+// troisième intervenant n'avait pas de place.
+//
+// Un fil se rattache à une ENTITÉ (la maison de Bordeaux, la montre de
+// Robert), à un RÉCIT, ou à rien du tout — une question en l'air. Au plus un
+// point d'ancrage : la contrainte est posée en SQL, pas seulement promise.
+model Thread {
+  id       String  @id @default(cuid())
+  familyId String  @map("family_id")
+  entityId String? @map("entity_id")
+  storyId  String? @map("story_id")
 
-  questionText String  @map("question_text")
-  responseText String? @map("response_text")
+  // La plupart des fils n'ont pas de titre : on parle de la montre, c'est
+  // tout. Il n'est demandé nulle part.
+  title String?
 
-  status             String  @default("pending") // pending, answered, converted
-  convertedToStoryId String? @map("converted_to_story_id")
+  openedById String @map("opened_by_id")
 
-  createdAt  DateTime  @default(now()) @map("created_at")
-  answeredAt DateTime? @map("answered_at")
+  // Cristallisation : le récit né de ce fil. Le fil ne disparaît pas — il
+  // devient la provenance, et le récit peut citer qui a dit quoi.
+  crystallizedStoryId String? @unique @map("crystallized_story_id")
 
-  family     Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  story      Story   @relation(fields: [storyId], references: [id])
-  questioner Member  @relation("Questioner", fields: [questionerId], references: [id])
-  responder  Member? @relation("Responder", fields: [responderId], references: [id])
+  // Dénormalisés pour ordonner et pour repérer un fil resté sans réponse
+  // sans compter les messages à chaque affichage. `lastMessageAt` sert à
+  // TRIER, jamais à afficher « inactif depuis trois semaines » : le fil
+  // montre ce qu'il contient, jamais ce qui lui manque.
+  messageCount  Int      @default(0) @map("message_count")
+  lastMessageAt DateTime @default(now()) @map("last_message_at")
 
-  @@index([familyId, status])
-  @@map("conversations")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  family             Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  entity             Entity?   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  story              Story?    @relation("ThreadOnStory", fields: [storyId], references: [id], onDelete: Cascade)
+  crystallizedStory  Story?    @relation("ThreadCrystallized", fields: [crystallizedStoryId], references: [id])
+  openedBy           Member    @relation("ThreadOpener", fields: [openedById], references: [id])
+  messages           Message[]
+
+  @@index([familyId, lastMessageAt])
+  @@index([entityId])
+  @@map("threads")
+}
+
+model Message {
+  id       String @id @default(cuid())
+  threadId String @map("thread_id")
+  familyId String @map("family_id")
+
+  // Même distinction que sur un récit, et pour la même raison : dans un fil
+  // écrit, le clavier rapide parle à la place de celui qui se souvient. Sans
+  // `narratorId`, une interface de conversation amplifie exactement la
+  // distorsion que le Conservateur mesure.
+  authorId   String  @map("author_id")
+  narratorId String? @map("narrator_id")
+
+  body String
+
+  // Vingt secondes de voix valent mieux qu'un paragraphe que Jeanne
+  // n'écrira pas. L'audio est une Archive, comme le reste.
+  archiveId String? @map("archive_id")
+
+  // Un fil ouvert par une question et resté seul est le vide informationnel
+  // le plus pur du produit : c'est ce que le Passeur va chercher.
+  isQuestion Boolean @default(false) @map("is_question")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread   Thread        @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  family   Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  author   Member        @relation("MessageAuthor", fields: [authorId], references: [id])
+  narrator Member?       @relation("MessageNarrator", fields: [narratorId], references: [id])
+  archive  Archive?      @relation(fields: [archiveId], references: [id])
+  marks    MessageMark[]
+
+  @@index([threadId, createdAt])
+  @@index([familyId])
+  @@map("messages")
+}
+
+// Ce qui remplace le « j'aime ».
+//
+// Un compteur de pouces est un score, et le Conservateur existe pour
+// combattre les scores. Mais la réaction est la contribution la moins chère
+// qui existe — la seule qu'un enfant de sept ans et une femme de
+// quatre-vingt-douze ans font aussi facilement l'un que l'autre.
+//
+// On garde le geste et on jette le jugement : ces marques sont
+// INFORMATIVES, pas évaluatives. « J'y étais » n'est pas un avis, c'est un
+// fait — et c'est précisément le fait que le Passeur devinait faute de
+// mieux. Aucune n'est comptée ni classée : on affiche des noms.
+model MessageMark {
+  id        String @id @default(cuid())
+  messageId String @map("message_id")
+  memberId  String @map("member_id")
+
+  // WITNESS « j'y étais » · REMEMBER « je m'en souviens » · LEARNED « je ne savais pas »
+  kind String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, memberId, kind])
+  @@map("message_marks")
 }
 
 // ─── PASSAGE (lien de transmission entre histoires) ───

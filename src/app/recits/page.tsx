@@ -50,7 +50,7 @@ export default async function StoriesPage({
       take: PAGE_SIZE,
       include: {
         author: { select: { name: true, isDeleted: true } },
-        _count: { select: { parentPassages: true, conversations: true } },
+        _count: { select: { parentPassages: true, threads: true } },
       },
     }),
     prisma.story.count({ where: { ...filters, ...(includeArchived ? {} : { archived: false }) } }),

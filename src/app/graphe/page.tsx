@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
+import { threadService } from '@/services/thread.service';
+import { Fil, ChampDeParole } from '@/components/fil';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,14 @@ export const dynamic = 'force-dynamic';
  * On entre par une personne, un lieu ou un objet, on voit ses voisins
  * immédiats, on se déplace de proche en proche. Le nombre de nœuds affichés
  * est borné par construction, quelle que soit la taille de la mémoire.
+ *
+ * ── Le graphe n'est plus une image, c'est une porte ──
+ *
+ * Il était décoratif : joli, et sans usage. Chaque entité porte désormais
+ * SON FIL — on parle de la montre de Robert sur la page de la montre de
+ * Robert, sans que personne ait eu à rédiger quoi que ce soit d'abord. Les
+ * entités cessent d'être un ornement du modèle de données pour devenir la
+ * navigation du produit.
  */
 
 const COLORS: Record<string, string> = {
@@ -132,6 +142,8 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
     }),
     prisma.story.count({ where: linkedToSelected }),
   ]);
+
+  const fils = await threadService.forEntity(context.family.id, selected.id);
 
   const allNeighbours = new Map<string, { id: string; name: string; type: string }>();
   for (const story of stories) {
@@ -275,6 +287,40 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
           La liste complète des récits reste accessible depuis « Récits ».
         </p>
       ) : null}
+
+      <section className="space-y-4 border-t border-rule pt-6">
+        <h2 className="section-label">Le fil de {selected.name}</h2>
+
+        {fils.length === 0 ? (
+          <p className="justification">
+            Rien n’a encore été dit ici. Une phrase suffit — il n’y a pas de rédaction à faire.
+          </p>
+        ) : (
+          <ul className="divide-y divide-rule">
+            {fils.map((fil) => (
+              <Fil
+                key={fil.id}
+                thread={fil}
+                members={context.members}
+                memberId={context.member?.id ?? null}
+                retour={`/graphe?entite=${selected.id}`}
+              />
+            ))}
+          </ul>
+        )}
+
+        {context.member ? (
+          <div className="border-t border-rule pt-4">
+            <ChampDeParole
+              entityId={selected.id}
+              members={context.members}
+              memberId={context.member.id}
+              retour={`/graphe?entite=${selected.id}`}
+              label={`Dire quelque chose sur ${selected.name}`}
+            />
+          </div>
+        ) : null}
+      </section>
 
       {stories.length > 0 ? (
         <section className="space-y-2 border-t border-rule pt-6">

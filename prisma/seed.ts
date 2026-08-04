@@ -223,31 +223,100 @@ Au deuxième, la caisse de vaisselle est tombée sur l'autoroute. On s'est arrê
   await passage(velos, montreStory, 'question');
   await passage(tarte, premiereTarte, 'tradition');
 
-  // ── Conversations ──
-  await prisma.conversation.create({
+  // ── Les fils ──
+  //
+  // Un fil sur un récit, avec une réponse. Un fil sur un récit, resté seul
+  // (c'est lui que le Passeur ira chercher). Et un fil sur une ENTITÉ, que
+  // l'ancien modèle rendait impossible : on parle de la montre sans que
+  // personne ait eu à rédiger un récit d'abord.
+  const filMontre = await prisma.thread.create({
     data: {
       familyId: family.id,
       storyId: montreStory.id,
-      questionerId: emma.id,
-      responderId: claire.id,
-      questionText: 'Pourquoi Robert a arrêté la montre ?',
-      responseText: 'Parce que c’était l’heure de ta naissance.',
-      status: 'answered',
+      openedById: emma.id,
+      messageCount: 2,
       createdAt: yearsAgo(2, 6, 12),
-      answeredAt: yearsAgo(2, 6, 13),
+      lastMessageAt: yearsAgo(2, 6, 13),
     },
   });
+  await prisma.message.createMany({
+    data: [
+      {
+        threadId: filMontre.id,
+        familyId: family.id,
+        authorId: emma.id,
+        body: 'Pourquoi Robert a arrêté la montre ?',
+        isQuestion: true,
+        createdAt: yearsAgo(2, 6, 12),
+      },
+      {
+        threadId: filMontre.id,
+        familyId: family.id,
+        authorId: claire.id,
+        body: 'Parce que c’était l’heure de ta naissance.',
+        createdAt: yearsAgo(2, 6, 13),
+      },
+    ],
+  });
 
-  await prisma.conversation.create({
+  const filVelos = await prisma.thread.create({
     data: {
       familyId: family.id,
       storyId: velos.id,
-      questionerId: emma.id,
-      questionText: 'Est-ce que quelqu’un sait d’où venait ce vélo de 1953 ?',
-      status: 'pending',
+      openedById: emma.id,
+      messageCount: 1,
+      createdAt: yearsAgo(0, Math.max(1, now.getMonth()), 8),
+      lastMessageAt: yearsAgo(0, Math.max(1, now.getMonth()), 8),
+    },
+  });
+  await prisma.message.create({
+    data: {
+      threadId: filVelos.id,
+      familyId: family.id,
+      authorId: emma.id,
+      body: 'Est-ce que quelqu’un sait d’où venait ce vélo de 1953 ?',
+      isQuestion: true,
       createdAt: yearsAgo(0, Math.max(1, now.getMonth()), 8),
     },
   });
+
+  const entiteMontre = await prisma.entity.findFirst({
+    where: { familyId: family.id, type: 'OBJECT' },
+  });
+  if (entiteMontre) {
+    const filObjet = await prisma.thread.create({
+      data: {
+        familyId: family.id,
+        entityId: entiteMontre.id,
+        openedById: lucas.id,
+        messageCount: 2,
+        createdAt: yearsAgo(0, 1, 2),
+        lastMessageAt: yearsAgo(0, 1, 3),
+      },
+    });
+    await prisma.message.createMany({
+      data: [
+        {
+          threadId: filObjet.id,
+          familyId: family.id,
+          authorId: lucas.id,
+          body: 'Elle est où maintenant ?',
+          isQuestion: true,
+          createdAt: yearsAgo(0, 1, 2),
+        },
+        {
+          // Claire tient le clavier, Jeanne parle : sans cette distinction,
+          // Jeanne disparaîtrait de sa propre mémoire familiale.
+          threadId: filObjet.id,
+          familyId: family.id,
+          authorId: claire.id,
+          narratorId: jeanne.id,
+          body: 'Dans le tiroir du buffet, avec les alliances. Je ne l’ai jamais fait réparer.',
+          createdAt: yearsAgo(0, 1, 3),
+        },
+      ],
+    });
+  }
 
   // ── Traditions ──
   await prisma.tradition.createMany({

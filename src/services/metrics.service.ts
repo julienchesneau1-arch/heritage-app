@@ -42,32 +42,44 @@ export interface TransmissionMetrics {
   medianLatencyDays: number | null;
   /** Plus longue chaîne de transmission (nombre de récits). */
   maxChainDepth: number;
-  conversationsTotal: number;
-  conversationsAnswered: number;
-  conversationsConverted: number;
-  /** Part des conversations devenues un récit. 0-1, ou `null` si aucune question n'a été posée. */
+  /** Fils ouverts, toutes ancres confondues. */
+  threadsTotal: number;
+  /** Fils où quelqu'un a repris la parole après le premier message. */
+  threadsAnswered: number;
+  /** Fils devenus un récit. */
+  threadsCrystallized: number;
+  /** Part des fils devenus un récit. 0-1, ou `null` si aucun fil n'a été ouvert. */
   passeurConversion: number | null;
+  /**
+   * Part des messages dont le narrateur n'est pas le scribe.
+   *
+   * Un fil écrit avantage le clavier rapide : sans cette mesure, on ne
+   * saurait pas si l'interface a fait taire ceux qui ne tapent pas.
+   * `null` tant qu'aucun message n'a été écrit.
+   */
+  narratedShare: number | null;
 }
 
 export class MetricsService {
   constructor(private prisma: PrismaClient = defaultPrisma) {}
 
   async transmission(familyId: string): Promise<TransmissionMetrics> {
-    const [storiesCount, passages, conversations] = await Promise.all([
-      this.prisma.story.count({ where: { familyId } }),
-      this.prisma.passage.findMany({
-        where: { familyId },
-        select: { parentStoryId: true, childStoryId: true, latencyDays: true },
-      }),
-      this.prisma.conversation.groupBy({ by: ['status'], where: { familyId }, _count: { status: true } }),
-    ]);
+    const [storiesCount, passages, threadsTotal, threadsAnswered, threadsCrystallized, messagesTotal, messagesNarrated] =
+      await Promise.all([
+        this.prisma.story.count({ where: { familyId } }),
+        this.prisma.passage.findMany({
+          where: { familyId },
+          select: { parentStoryId: true, childStoryId: true, latencyDays: true },
+        }),
+        this.prisma.thread.count({ where: { familyId } }),
+        this.prisma.thread.count({ where: { familyId, messageCount: { gt: 1 } } }),
+        this.prisma.thread.count({ where: { familyId, crystallizedStoryId: { not: null } } }),
+        this.prisma.message.count({ where: { familyId } }),
+        this.prisma.message.count({ where: { familyId, narratorId: { not: null } } }),
+      ]);
 
     const distinctParents = new Set(passages.map((p) => p.parentStoryId));
     const latencies = passages.map((p) => p.latencyDays).sort((a, b) => a - b);
-
-    const byStatus = new Map(conversations.map((c) => [c.status, c._count.status]));
-    const conversationsTotal = [...byStatus.values()].reduce((sum, n) => sum + n, 0);
-    const converted = byStatus.get('converted') ?? 0;
 
     const basisSufficient = storiesCount >= MIN_STORIES_FOR_RATE;
 
@@ -79,12 +91,13 @@ export class MetricsService {
       rawPassageRatio: storiesCount === 0 ? null : passages.length / storiesCount,
       medianLatencyDays: median(latencies),
       maxChainDepth: longestChain(passages),
-      conversationsTotal,
-      conversationsAnswered: byStatus.get('answered') ?? 0,
-      conversationsConverted: converted,
-      // Même principe : sans aucune question posée, il n'y a pas un taux de
+      threadsTotal,
+      threadsAnswered,
+      threadsCrystallized,
+      // Même principe : sans aucun fil ouvert, il n'y a pas un taux de
       // conversion nul, il n'y a pas de taux du tout.
-      passeurConversion: conversationsTotal === 0 ? null : converted / conversationsTotal,
+      passeurConversion: threadsTotal === 0 ? null : threadsCrystallized / threadsTotal,
+      narratedShare: messagesTotal === 0 ? null : messagesNarrated / messagesTotal,
     };
   }
 }

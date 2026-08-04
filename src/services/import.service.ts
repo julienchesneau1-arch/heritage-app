@@ -131,25 +131,102 @@ export class ImportService {
       passages += 1;
     }
 
-    let conversations = 0;
+    // ── Les fils ──
+    //
+    // Deux formats coexistent : `threads` + `messages` (v2), et l'ancien
+    // `conversations` (v1). Un export fait avant le changement doit encore
+    // se restaurer : la famille possède ses données, y compris celles
+    // qu'elle a emportées il y a six mois (amendement 3).
+    const threadIds = new Map<string, string>();
+    let threads = 0;
+    let messages = 0;
+
+    for (const thread of asArray(data.threads)) {
+      const openedById = mapped(memberIds, thread.openedById);
+      if (!openedById) continue;
+      const row = await this.prisma.thread.create({
+        data: {
+          familyId: created.id,
+          entityId: mapped(entityIds, thread.entityId),
+          storyId: mapped(storyIds, thread.storyId),
+          title: str(thread.title),
+          openedById,
+          crystallizedStoryId: mapped(storyIds, thread.crystallizedStoryId),
+          messageCount: num(thread.messageCount) ?? 0,
+          createdAt: date(thread.createdAt) ?? new Date(),
+          lastMessageAt: date(thread.lastMessageAt) ?? date(thread.createdAt) ?? new Date(),
+        },
+      });
+      threadIds.set(str(thread.id) ?? row.id, row.id);
+      threads += 1;
+    }
+
+    for (const message of asArray(data.messages)) {
+      const threadId = mapped(threadIds, message.threadId);
+      const authorId = mapped(memberIds, message.authorId);
+      if (!threadId || !authorId) continue;
+      await this.prisma.message.create({
+        data: {
+          threadId,
+          familyId: created.id,
+          authorId,
+          narratorId: mapped(memberIds, message.narratorId),
+          body: str(message.body) ?? '',
+          isQuestion: message.isQuestion === true,
+          createdAt: date(message.createdAt) ?? new Date(),
+        },
+      });
+      messages += 1;
+    }
+
+    // Format v1 : chaque conversation redevient un fil de un ou deux messages,
+    // exactement comme l'a fait la migration de la base.
     for (const conversation of asArray(data.conversations)) {
       const storyId = mapped(storyIds, conversation.storyId);
       const questionerId = mapped(memberIds, conversation.questionerId);
       if (!storyId || !questionerId) continue;
-      await this.prisma.conversation.create({
+
+      const questionAt = date(conversation.createdAt) ?? new Date();
+      const responseText = str(conversation.responseText);
+      const answeredAt = date(conversation.answeredAt) ?? questionAt;
+
+      const thread = await this.prisma.thread.create({
         data: {
           familyId: created.id,
           storyId,
-          questionerId,
-          responderId: mapped(memberIds, conversation.responderId),
-          questionText: str(conversation.questionText) ?? '',
-          responseText: str(conversation.responseText),
-          status: str(conversation.status) ?? 'pending',
-          createdAt: date(conversation.createdAt) ?? new Date(),
-          answeredAt: date(conversation.answeredAt),
+          openedById: questionerId,
+          crystallizedStoryId: mapped(storyIds, conversation.convertedToStoryId),
+          messageCount: responseText ? 2 : 1,
+          createdAt: questionAt,
+          lastMessageAt: responseText ? answeredAt : questionAt,
         },
       });
-      conversations += 1;
+      threads += 1;
+
+      await this.prisma.message.create({
+        data: {
+          threadId: thread.id,
+          familyId: created.id,
+          authorId: questionerId,
+          body: str(conversation.questionText) ?? '',
+          isQuestion: true,
+          createdAt: questionAt,
+        },
+      });
+      messages += 1;
+
+      if (responseText) {
+        await this.prisma.message.create({
+          data: {
+            threadId: thread.id,
+            familyId: created.id,
+            authorId: mapped(memberIds, conversation.responderId) ?? questionerId,
+            body: responseText,
+            createdAt: answeredAt,
+          },
+        });
+        messages += 1;
+      }
     }
 
     let traditions = 0;
@@ -186,7 +263,8 @@ export class ImportService {
         recits: storyIds.size,
         entites: entityIds.size,
         passages,
-        conversations,
+        fils: threads,
+        messages,
         traditions,
       },
     };

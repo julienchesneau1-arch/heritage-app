@@ -137,6 +137,43 @@ Texte : "${storyContent.slice(0, 500)}"`;
 
     return response ?? fallback;
   }
+
+  /**
+   * Opération autorisée : ASSEMBLER ce qu'une famille a dit dans un fil.
+   *
+   * Le mot compte. Le modèle ne résume pas — résumer, c'est décider de ce
+   * qui mérite d'être gardé. Il met bout à bout, en prose continue, ce qui
+   * a été dit, sans rien ajouter, sans conclure, sans interpréter. Le
+   * résultat est un BROUILLON : il n'entre dans la mémoire de la famille
+   * qu'après relecture par un humain, exactement comme une transcription
+   * (§3.5).
+   *
+   * Sans clé API, le repli n'est pas une dégradation : c'est le fil lui-même,
+   * ligne à ligne, avec le nom de chacun. Moins fluide, tout aussi vrai.
+   */
+  async assembleThread(transcript: string, fallback: string): Promise<string> {
+    const prompt = `Voici ce que des membres d'une famille se sont dit dans une discussion, ligne par ligne.
+
+Assemble ces propos en un texte suivi, à la troisième personne, qui ne contient RIEN d'autre que ce qui a été dit.
+Interdits absolus :
+- n'ajoute aucun fait, aucune date, aucun lieu, aucun nom qui ne soit pas dans le texte ;
+- n'invente aucune transition qui suppose un lien de cause à effet non exprimé ;
+- ne conclus pas, ne commente pas, ne prête aucun sentiment à personne ;
+- si deux personnes se contredisent, garde les deux versions.
+
+Discussion :
+${transcript.slice(0, 4000)}`;
+
+    const response = await this.generateVerified({
+      prompt,
+      maxTokens: 700,
+      temperature: 0.2,
+      verify: (text) => text.length >= 20 && constitutionEmotionFilter(text),
+      fallback,
+    });
+
+    return response ?? fallback;
+  }
 }
 
 function parseEntities(output: string): Array<{ name: string; type: string }> | null {

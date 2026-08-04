@@ -1,9 +1,10 @@
-import type { Conversation, Entity, Member, Prisma, PrismaClient, Story } from '@prisma/client';
+import type { Entity, Member, Prisma, PrismaClient, Story } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
 import { store as defaultStore, type KeyValueStore } from '@/lib/redis';
 import { constitutionEmotionFilter } from '@/lib/constitution';
 import { LLMOperatorService, llmOperator as defaultLlm } from './llm-operator.service';
 import { ConservateurService, conservateur as defaultConservateur } from './conservateur.service';
+import { ThreadService, threadService as defaultThreads } from './thread.service';
 
 /**
  * PASSEUR SERVICE — §3.3.
@@ -28,14 +29,21 @@ import { ConservateurService, conservateur as defaultConservateur } from './cons
 export interface PasseurQuestion {
   text: string;
   justification: string;
-  storyId: string;
+  /** Le récit visé, quand la question en désigne un. */
+  storyId: string | null;
+  /** Le fil visé. Une question posée dans un fil n'a pas toujours de récit. */
+  threadId: string | null;
   ruleId: string;
   confidence: number; // 0-1
 }
 
+/** Ce sur quoi porte la question — c'est aussi la clé de « déjà posée ». */
+export function subjectOf(question: PasseurQuestion): string {
+  return question.threadId ?? question.storyId ?? 'sans-objet';
+}
+
 export type StoryWithEntities = Story & {
   linkedEntities: Entity[];
-  conversations: Conversation[];
 };
 
 export interface PasseurContext {
@@ -85,42 +93,6 @@ const YEAR_MS = 86_400_000 * 365.25;
 
 export const PASSEUR_RULES: PasseurRule[] = [
   {
-    /**
-     * Un membre de la famille a posé une question, et personne n'a répondu.
-     *
-     * C'est le vide informationnel le plus pur du produit : il n'a pas été
-     * déduit d'un texte, il a été formulé par quelqu'un. Sans cette règle,
-     * une question posée n'est visible qu'en rouvrant le récit exact sur
-     * lequel elle porte — autant dire qu'elle se perd.
-     */
-    id: 'UNANSWERED_QUESTION',
-    weight: 1.0,
-    take: 10,
-    where: () => ({ conversations: { some: { status: 'pending' } } }),
-    match(story, context) {
-      return story.conversations.some(
-        (conversation) =>
-          conversation.status === 'pending' && conversation.questionerId !== context.memberId,
-      );
-    },
-    draft(story, context) {
-      const pending = story.conversations.find(
-        (conversation) =>
-          conversation.status === 'pending' && conversation.questionerId !== context.memberId,
-      );
-      if (!pending) return null;
-
-      const asker = context.members.find((member) => member.id === pending.questionerId);
-      return {
-        text: `« ${pending.questionText} »`,
-        justification: `${asker?.name ?? 'Un membre de la famille'} a posé cette question sur « ${story.title} ». Elle est restée sans réponse.`,
-        storyId: story.id,
-        ruleId: 'UNANSWERED_QUESTION',
-        confidence: 0.95,
-      };
-    },
-  },
-  {
     id: 'TENSION_UNRESOLVED',
     weight: 1.0,
     take: 40,
@@ -141,6 +113,7 @@ export const PASSEUR_RULES: PasseurRule[] = [
         text: `« ${story.title} » raconte un fait sans en donner la raison. Quelqu'un connaît-il le reste ?`,
         justification: `Ce récit dit : « ${fragment} » — sans dire pourquoi.`,
         storyId: story.id,
+        threadId: null,
         ruleId: 'TENSION_UNRESOLVED',
         confidence: 0.8,
       };
@@ -189,6 +162,7 @@ export const PASSEUR_RULES: PasseurRule[] = [
         // rattaché : elle affirmait le contraire de son propre critère.
         justification: `${missing.name} n'apparaît pas dans ce récit, et n'en a pas donné sa version.`,
         storyId: story.id,
+        threadId: null,
         ruleId: 'MISSING_VIEWPOINT',
         confidence: 0.7,
       };
@@ -219,6 +193,7 @@ export const PASSEUR_RULES: PasseurRule[] = [
           ? `${story.views} lecture${story.views > 1 ? 's' : ''} enregistrée${story.views > 1 ? 's' : ''}, la dernière le ${story.lastViewedAt.toISOString().split('T')[0]}.`
           : `Aucune lecture enregistrée depuis la création de ce récit.`,
         storyId: story.id,
+        threadId: null,
         ruleId: 'RARE_PATRIMONY',
         confidence: 0.6,
       };
@@ -236,6 +211,7 @@ export const PASSEUR_RULES: PasseurRule[] = [
         text: `« ${story.title} » a été raconté il y a ${years} ans. Qu'est-ce qui a changé depuis ?`,
         justification: `Le temps a passé depuis la création de cette histoire (${years} ans).`,
         storyId: story.id,
+        threadId: null,
         ruleId: 'TEMPORAL_LINK',
         confidence: 0.5,
       };
@@ -252,6 +228,7 @@ export class PasseurService {
     private store: KeyValueStore = defaultStore,
     private llm: LLMOperatorService = defaultLlm,
     private conservateur: ConservateurService = defaultConservateur,
+    private threads: ThreadService = defaultThreads,
   ) {}
 
   async generateQuestion(
@@ -269,6 +246,17 @@ export class PasseurService {
     ]);
     const context: PasseurContext = { members, memberId, now };
 
+    // ── Avant toute règle : une question que quelqu'un a réellement posée ──
+    //
+    // Elle passe devant les règles déduites d'un texte, et c'est délibéré :
+    // c'est le seul vide informationnel que le produit n'a pas inféré. Depuis
+    // le fil, elle n'a plus besoin d'un récit pour exister — on peut demander
+    // « d'où venait ce vélo ? » sans que personne ait rédigé quoi que ce soit.
+    const posee = await this.unansweredQuestion(familyId, memberId);
+    if (posee && !(await this.wasAskedRecently(familyId, memberId, subjectOf(posee), posee.ruleId))) {
+      return this.remember(familyId, memberId, posee);
+    }
+
     // Une requête bornée par règle, en parallèle — jamais un scan du corpus.
     const perRule = await Promise.all(
       PASSEUR_RULES.map(async (rule) => ({
@@ -280,11 +268,7 @@ export class PasseurService {
             ...(muted.length > 0 ? { id: { notIn: muted } } : {}),
             ...rule.where(context),
           },
-          include: {
-            linkedEntities: true,
-            // Bornées elles aussi : une question en attente suffit à décrire le vide.
-            conversations: { where: { status: 'pending' }, orderBy: { createdAt: 'asc' }, take: 3 },
-          },
+          include: { linkedEntities: true },
           orderBy: { createdAt: 'desc' },
           take: rule.take,
         })) as StoryWithEntities[],
@@ -307,23 +291,58 @@ export class PasseurService {
     // vérifications coûteuses (store) ne portent que sur les meilleurs, pas
     // sur les cinquante autres.
     for (const candidate of drafts) {
-      if (await this.wasAskedRecently(familyId, memberId, candidate.storyId, candidate.ruleId)) continue;
+      if (await this.wasAskedRecently(familyId, memberId, subjectOf(candidate), candidate.ruleId)) continue;
       // Le Conservateur retire les sur-exposées des suggestions.
-      if (await this.conservateur.isOverexposed(candidate.storyId)) continue;
+      if (candidate.storyId && (await this.conservateur.isOverexposed(candidate.storyId))) continue;
 
-      const selected = await this.enrichSelected(candidate, perRule);
-
-      await this.store.setex(sessionKey(familyId, memberId), SESSION_TTL_SECONDS, selected.ruleId);
-      await this.store.setex(
-        askedKey(familyId, memberId, selected.storyId, selected.ruleId),
-        RECENT_QUESTION_TTL_SECONDS,
-        'true',
-      );
-
-      return selected;
+      return this.remember(familyId, memberId, await this.enrichSelected(candidate, perRule));
     }
 
     return null;
+  }
+
+  /**
+   * Un fil ouvert par une question, et personne n'a repris la parole.
+   * Le fil peut pendre à un récit, à une entité, ou à rien : la question
+   * existe indépendamment de ce qui a été rédigé.
+   */
+  private async unansweredQuestion(
+    familyId: string,
+    memberId: string,
+  ): Promise<PasseurQuestion | null> {
+    const [thread] = await this.threads.unanswered(familyId, memberId, 1);
+    const question = thread?.messages[0];
+    if (!thread || !question) return null;
+
+    const sujet = thread.story
+      ? `sur « ${thread.story.title} »`
+      : thread.entity
+        ? `à propos de ${thread.entity.name}`
+        : `à la famille`;
+
+    return {
+      text: `« ${question.body} »`,
+      justification: `${thread.openedBy.name} a posé cette question ${sujet}. Personne n'a encore repris la parole dans ce fil.`,
+      storyId: thread.storyId,
+      threadId: thread.id,
+      ruleId: 'UNANSWERED_QUESTION',
+      confidence: 0.95,
+    };
+  }
+
+  /** Parcimonie : une question par heure, et jamais deux fois la même. */
+  private async remember(
+    familyId: string,
+    memberId: string,
+    question: PasseurQuestion,
+  ): Promise<PasseurQuestion> {
+    await this.store.setex(sessionKey(familyId, memberId), SESSION_TTL_SECONDS, question.ruleId);
+    await this.store.setex(
+      askedKey(familyId, memberId, subjectOf(question), question.ruleId),
+      RECENT_QUESTION_TTL_SECONDS,
+      'true',
+    );
+    return question;
   }
 
   /** Un seul appel LLM par session, sur la seule question qui sera affichée. */
@@ -341,12 +360,12 @@ export class PasseurService {
   }
 
   /** Une question ignorée ne revient pas avant deux semaines. */
-  async markIgnored(familyId: string, memberId: string, storyId: string, ruleId: string): Promise<void> {
-    await this.store.setex(askedKey(familyId, memberId, storyId, ruleId), RECENT_QUESTION_TTL_SECONDS, 'true');
+  async markIgnored(familyId: string, memberId: string, subjectId: string, ruleId: string): Promise<void> {
+    await this.store.setex(askedKey(familyId, memberId, subjectId, ruleId), RECENT_QUESTION_TTL_SECONDS, 'true');
   }
 
-  private async wasAskedRecently(familyId: string, memberId: string, storyId: string, ruleId: string) {
-    return (await this.store.get(askedKey(familyId, memberId, storyId, ruleId))) === 'true';
+  private async wasAskedRecently(familyId: string, memberId: string, subjectId: string, ruleId: string) {
+    return (await this.store.get(askedKey(familyId, memberId, subjectId, ruleId))) === 'true';
   }
 }
 
@@ -404,8 +423,8 @@ function sessionKey(familyId: string, memberId: string) {
   return `passeur:${familyId}:${memberId}`;
 }
 
-function askedKey(familyId: string, memberId: string, storyId: string, ruleId: string) {
-  return `passeur:asked:${familyId}:${memberId}:${storyId}:${ruleId}`;
+function askedKey(familyId: string, memberId: string, subjectId: string, ruleId: string) {
+  return `passeur:asked:${familyId}:${memberId}:${subjectId}:${ruleId}`;
 }
 
 export const passeur = new PasseurService();

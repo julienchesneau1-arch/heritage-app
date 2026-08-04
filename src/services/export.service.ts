@@ -19,14 +19,14 @@ export class ExportService {
         stories: {
           include: {
             linkedEntities: { select: { id: true, name: true, type: true } },
-            conversations: true,
             archives: true,
           },
         },
         entities: true,
         archives: true,
         traditions: true,
-        conversations: true,
+        threads: true,
+        messages: { include: { marks: true } },
         passages: true,
         visibilityLogs: true,
       },
@@ -35,7 +35,10 @@ export class ExportService {
     if (!family) return null;
 
     return {
-      format: 'heritage-export/v1',
+      // v2 : `conversations` est devenu `threads` + `messages`. L'import
+      // relit les deux — une famille qui a exporté avant ce changement doit
+      // pouvoir restaurer (amendement 3).
+      format: 'heritage-export/v2',
       exportedAt: new Date().toISOString(),
       family: {
         id: family.id,
@@ -47,7 +50,8 @@ export class ExportService {
       entities: family.entities,
       archives: family.archives,
       traditions: family.traditions,
-      conversations: family.conversations,
+      threads: family.threads,
+      messages: family.messages,
       passages: family.passages,
       visibilityLogs: family.visibilityLogs,
       counts: {
@@ -56,7 +60,8 @@ export class ExportService {
         entities: family.entities.length,
         archives: family.archives.length,
         traditions: family.traditions.length,
-        conversations: family.conversations.length,
+        threads: family.threads.length,
+        messages: family.messages.length,
         passages: family.passages.length,
         visibilityLogs: family.visibilityLogs.length,
       },

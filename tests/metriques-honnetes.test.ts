@@ -15,13 +15,23 @@ const FAMILY = 'fam_1';
  * Ces tests fixent la règle : une mesure impossible vaut `null`, jamais 0.
  */
 
-function metricsWith(storiesCount: number, passages: Array<{ parentStoryId: string; childStoryId: string; latencyDays: number }>, conversations: Array<{ status: string; count: number }> = []) {
+function metricsWith(
+  storiesCount: number,
+  passages: Array<{ parentStoryId: string; childStoryId: string; latencyDays: number }>,
+  fils: { total?: number; repondus?: number; cristallises?: number } = {},
+) {
   const prisma = {
     story: { count: async () => storiesCount },
     passage: { findMany: async () => passages },
-    conversation: {
-      groupBy: async () => conversations.map((c) => ({ status: c.status, _count: { status: c.count } })),
+    thread: {
+      // Trois comptages distincts : on les distingue par leur clause.
+      count: async ({ where }: { where: Record<string, unknown> }) => {
+        if (where.messageCount) return fils.repondus ?? 0;
+        if (where.crystallizedStoryId) return fils.cristallises ?? 0;
+        return fils.total ?? 0;
+      },
     },
+    message: { count: async () => 0 },
   } as unknown as PrismaClient;
   return new MetricsService(prisma);
 }
@@ -58,16 +68,13 @@ describe('Taux de transmission — pas de verdict sans dossier', () => {
     expect(metrics.basisSufficient).toBe(true);
   });
 
-  it('n’invente pas un taux de conversion sans aucune question posée', async () => {
+  it('n’invente pas un taux de conversion sans aucun fil ouvert', async () => {
     const metrics = await metricsWith(10, []).transmission(FAMILY);
     expect(metrics.passeurConversion).toBeNull();
   });
 
-  it('mesure la conversion dès qu’une question existe', async () => {
-    const metrics = await metricsWith(10, [], [
-      { status: 'pending', count: 3 },
-      { status: 'converted', count: 1 },
-    ]).transmission(FAMILY);
+  it('mesure la conversion dès qu’un fil existe', async () => {
+    const metrics = await metricsWith(10, [], { total: 4, cristallises: 1 }).transmission(FAMILY);
     expect(metrics.passeurConversion).toBe(0.25);
   });
 });

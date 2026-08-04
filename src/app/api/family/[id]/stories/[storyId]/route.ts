@@ -22,11 +22,17 @@ export async function GET(
       author: { select: { id: true, name: true, isDeleted: true } },
       linkedEntities: true,
       archives: true,
-      conversations: {
+      threads: {
         orderBy: { createdAt: 'asc' },
         include: {
-          questioner: { select: { id: true, name: true } },
-          responder: { select: { id: true, name: true } },
+          openedBy: { select: { id: true, name: true } },
+          messages: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              author: { select: { id: true, name: true } },
+              narrator: { select: { id: true, name: true } },
+            },
+          },
         },
       },
       parentPassages: { include: { childStory: { select: { id: true, title: true } } } },
@@ -119,7 +125,12 @@ export async function DELETE(
     prisma.passage.deleteMany({
       where: { OR: [{ parentStoryId: story.id }, { childStoryId: story.id }] },
     }),
-    prisma.conversation.deleteMany({ where: { storyId: story.id } }),
+    // Les fils accrochés au récit partent en cascade ; ceux qui s'y sont
+    // cristallisés se détachent — la parole survit au récit.
+    prisma.thread.updateMany({
+      where: { crystallizedStoryId: story.id },
+      data: { crystallizedStoryId: null },
+    }),
     prisma.visibilityLog.deleteMany({ where: { storyId: story.id } }),
     prisma.archive.updateMany({ where: { storyId: story.id }, data: { storyId: null } }),
     prisma.story.delete({ where: { id: story.id } }),

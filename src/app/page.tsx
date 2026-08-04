@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { TriggerModelService } from '@/services/trigger-model.service';
-import { PasseurService } from '@/services/passeur.service';
+import { PasseurService, subjectOf, type PasseurQuestion } from '@/services/passeur.service';
 import { dismissSignal, ignorePasseur } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,13 @@ const passeurService = new PasseurService();
  * il ne reste que le nom de la famille. Une page vide est un résultat
  * valide : c'est la parcimonie, pas une panne.
  */
+/** Où l'on va pour répondre : le fil s'il existe, le récit sinon. */
+function lienVersLaQuestion(question: PasseurQuestion): string {
+  if (question.threadId && question.storyId) return `/recits/${question.storyId}#conversations`;
+  if (question.threadId) return `/fils/${question.threadId}`;
+  return `/recits/${question.storyId}#conversations`;
+}
+
 export default async function TodayPage() {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
@@ -46,15 +53,19 @@ export default async function TodayPage() {
                 nouveau récit : l'action première change avec la règle. */}
             {question.ruleId === 'UNANSWERED_QUESTION' ? (
               <>
-                <Link href={`/recits/${question.storyId}#conversations`} className="btn-primary">
+                {/* Une question posée dans un fil n'a pas toujours de récit :
+                    on renvoie vers le fil, qui existe toujours. */}
+                <Link href={lienVersLaQuestion(question)} className="btn-primary">
                   Répondre
                 </Link>
-                <Link
-                  href={`/recits/nouveau?parent=${question.storyId}&trigger=question`}
-                  className="btn"
-                >
-                  En faire un récit
-                </Link>
+                {question.storyId ? (
+                  <Link
+                    href={`/recits/nouveau?parent=${question.storyId}&trigger=question`}
+                    className="btn"
+                  >
+                    En faire un récit
+                  </Link>
+                ) : null}
               </>
             ) : (
               <>
@@ -64,13 +75,15 @@ export default async function TodayPage() {
                 >
                   Raconter la suite
                 </Link>
-                <Link href={`/recits/${question.storyId}`} className="btn">
-                  Lire l’histoire
-                </Link>
+                {question.storyId ? (
+                  <Link href={`/recits/${question.storyId}`} className="btn">
+                    Lire l’histoire
+                  </Link>
+                ) : null}
               </>
             )}
             <form action={ignorePasseur}>
-              <input type="hidden" name="storyId" value={question.storyId} />
+              <input type="hidden" name="subjectId" value={subjectOf(question)} />
               <input type="hidden" name="ruleId" value={question.ruleId} />
               <button type="submit" className="justification underline">
                 Ne plus me montrer

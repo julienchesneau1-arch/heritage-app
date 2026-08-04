@@ -28,8 +28,8 @@ export const createStorySchema = z.object({
   // Transmission explicite : ce récit naît d'un autre.
   parentStoryId: z.string().cuid().optional(),
   triggerType: z.enum(TRIGGER_TYPES).optional(),
-  // Un récit issu d'une conversation la clôt.
-  fromConversationId: z.string().cuid().optional(),
+  // Un récit né d'un fil : le fil devient sa provenance.
+  fromThreadId: z.string().cuid().optional(),
 });
 
 export type CreateStoryInput = z.infer<typeof createStorySchema>;
@@ -110,15 +110,21 @@ export const createTraditionSchema = z
     path: ['weekDay'],
   });
 
-export const createConversationSchema = z.object({
-  storyId: z.string().cuid(),
-  questionerId: z.string().cuid(),
-  questionText: z.string().min(3).max(500),
-});
-
-export const answerConversationSchema = z.object({
-  responderId: z.string().cuid(),
-  responseText: z.string().min(1).max(2000),
+/**
+ * Parler dans un fil. Rien n'est obligatoire au-delà du corps du message :
+ * c'est exactement ce que l'ancien `createConversationSchema` interdisait,
+ * puisqu'il exigeait un `storyId`.
+ */
+export const openThreadSchema = z.object({
+  authorId: z.string().cuid(),
+  narratorId: z.string().cuid().optional(),
+  body: z.string().trim().min(2).max(5000),
+  isQuestion: z.boolean().optional(),
+  title: z.string().trim().min(1).max(120).optional(),
+  // Au plus un ancrage — la base le vérifie aussi.
+  threadId: z.string().cuid().optional(),
+  entityId: z.string().cuid().optional(),
+  storyId: z.string().cuid().optional(),
 });
 
 export const createArchiveSchema = z.object({

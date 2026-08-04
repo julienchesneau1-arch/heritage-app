@@ -66,6 +66,7 @@ src/
 │   ├── brouillons/         Transcriptions à écouter et relire avant validation
 │   ├── veillee/            Trois récits à lire à voix haute, ensemble
 │   ├── recits/             Liste, lecture, création
+│   ├── fils/               Un fil de discussion, et sa cristallisation en récit
 │   ├── archives/           Photos, documents, enregistrements
 │   ├── traditions/         Rituels cycliques
 │   ├── graphe/             Graphe SVG déterministe (§5.3)
@@ -113,7 +114,7 @@ La Constitution interdit le score, le badge, la série et le flux infini (§6.1,
 
 C'est aussi ce qui donne enfin un usage au rappel patrimonial du Conservateur : l'amendement 5 lui interdit d'injecter un récit oublié dans le flux passif, mais la veillée est une demande explicite, pas une imposition.
 
-**Les questions en un geste** règlent l'autre exclusion : le plus jeune membre a sept ans et n'écrira pas dans un champ de texte. Quatre questions préécrites créent la même `Conversation` qu'une question rédigée. Ce n'est pas une suggestion — rien n'est classé ni poussé — c'est une saisie sans clavier.
+**Les questions en un geste** règlent l'autre exclusion : le plus jeune membre a sept ans et n'écrira pas dans un champ de texte. Quatre questions préécrites ouvrent le même fil qu'une question rédigée. Ce n'est pas une suggestion — rien n'est classé ni poussé — c'est une saisie sans clavier.
 
 ### Faire une place à toute la famille
 
@@ -190,6 +191,20 @@ Une question du Passeur a le droit de tomber à côté : c'est une question, la 
 
 Le même défaut avait une conséquence plus concrète : le seul filtre de plausibilité était « pas décédé ». Sur la famille de démonstration, l'application demandait à Lucas (né en 2019) son souvenir d'un déménagement de 1971, et à Emma son point de vue sur un événement daté du jour de sa naissance. `couldRememberFirsthand()` écarte qui n'était pas né, qui était déjà mort, et qui avait moins de cinq ans. Une date de naissance inconnue, en revanche, ne disqualifie personne.
 
+### Le fil : le livre devient la sortie, plus jamais l'entrée
+
+`Conversation` tenait en deux verrous. `storyId` était obligatoire — impossible de dire trois mots sur la montre de Robert tant que personne n'avait *rédigé* un récit. Et il n'y avait qu'un `responseText` : Jeanne ne pouvait pas corriger la réponse de Claire. La page blanche gardait l'entrée du produit.
+
+Un `Thread` s'accroche maintenant à une **entité**, à un récit, ou à rien. On parle à plusieurs, à peu de frais ; quand un fil a de la matière, il se **cristallise** en récit — brouillon assemblé par la machine, relu par un humain, avec ce qui a été dit affiché à côté et le fil conservé comme provenance. Même chaîne que pour une transcription, et pour la même raison : la machine assemble, elle ne décide pas de ce que la famille a voulu dire.
+
+Le graphe cesse d'être décoratif : chaque entité porte son fil, on parle de la montre sur la page de la montre.
+
+**Ce qu'on refuse d'emprunter aux salons de discussion** — et qui est testé, pas commenté : compteur de non-lus, présence et « est en train d'écrire », notification et `@everyone`, décompte de réactions. Et surtout l'affichage de l'inactivité : « personne n'a parlé depuis trois semaines » transforme un rythme familial normal en reproche. **Dix messages par mois, c'est une famille, pas un échec.** Le fil montre ce qu'il contient, jamais ce qui lui manque.
+
+Le « j'aime » est remplacé par des marques **informatives**, contraintes en base : « j'y étais », « je m'en souviens », « je ne savais pas ». Ce sont des faits, pas des avis — et « j'y étais » est précisément ce que le Passeur devinait faute de mieux. On affiche des noms, jamais des nombres.
+
+Un fil écrit avantage le clavier rapide : `Message` porte donc `narratorId` comme `Story`, et la page Transmission expose la part des messages dont le narrateur n'est pas le scribe.
+
 ### Le calendrier : l'occasion sans la notification
 
 Rien ne faisait ouvrir l'app un mardi de mars. La Constitution interdit notifications, séries et badges — à raison — et le produit se retrouvait en *pull* intégral : le Trigger Model calculait de vraies occasions datées et les tirait dans une page que personne n'avait ouverte.
@@ -232,6 +247,6 @@ Sprints 0 à 6 de la roadmap (§10) : schéma et seed, CRUD des récits, graphe 
 
 Sprint 7, fait : Service Worker (réseau d'abord, cache en secours, page hors-ligne), lien d'évitement clavier, page courante annoncée.
 
-Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, justifications du Passeur ramenées à ce qu'elles vérifient, liste des récits paginée et explicite sur ce qu'elle masque, calendrier familial iCalendar, intégration continue.
+Depuis : création de famille et gestion des membres, correction des récits, identité vérifiée pour supprimer avec liens révocables individuellement, restauration d'un export, pilote S3/R2, sourdine par membre au lieu d'une quarantaine globale, seuil de sur-exposition relatif à la taille du corpus, distorsion agrégée en base, recherche insensible aux accents, graphe centré, justifications du Passeur ramenées à ce qu'elles vérifient, liste des récits paginée et explicite sur ce qu'elle masque, calendrier familial iCalendar, fils de discussion ancrés aux entités et cristallisation en récit, intégration continue.
 
 Ouvert : transcription Whisper ; audit axe-core automatisé — les règles d'accessibilité de la §6.4 sont appliquées à la main, pas vérifiées par un outil. Le pilote S3 est écrit mais n'a pas pu être testé contre un vrai bucket depuis cet environnement.
