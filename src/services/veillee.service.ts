@@ -2,6 +2,7 @@ import type { PrismaClient, Story } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
 import { store as defaultStore, type KeyValueStore } from '@/lib/redis';
 import { ConservateurService, conservateur as defaultConservateur } from './conservateur.service';
+import { estVraimentPremier } from '@/lib/honnetete';
 
 /**
  * LA VEILLÉE — extension hors spec v1.0, assumée (§5.4).
@@ -120,7 +121,9 @@ export class VeilleeService {
     const rassemble = candidats[0];
     if (rassemble && rassemble._count.linkedEntities > 0) {
       const liens = rassemble._count.linkedEntities;
-      const exAequo = candidats[1]?._count.linkedEntities === liens;
+      // Amendement 6, clause 3 : on a demandé DEUX candidats pour pouvoir
+      // vérifier le superlatif avant de l'énoncer.
+      const exAequo = !estVraimentPremier(candidats.map((c) => c._count.linkedEntities));
 
       entries.push({
         storyId: rassemble.id,

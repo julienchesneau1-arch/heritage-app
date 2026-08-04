@@ -98,6 +98,7 @@ Chaque service est indépendant. Ils communiquent par la base, jamais entre eux 
 - **Amendement 1 — pas d'inférence émotionnelle.** Toute sortie LLM traverse `constitutionEmotionFilter`. Une sortie qui infère une émotion devient un fallback, même si la vérification propre à l'opération est passée. Les apostrophes typographiques ne permettent pas de contourner le filtre.
 - **Amendement 3 — la famille possède ses données.** `GET /api/family/:id/export` renvoie tout, sans traitement, sans filtre : archivés, quarantaine et journaux de visibilité compris.
 - **Amendement 5 — pas d'imposition algorithmique.** L'ordre d'affichage est chronologique partout. Le Conservateur ne peut qu'exclure des suggestions et documenter.
+- **Amendement 6 — le produit n'affirme que ce qu'il a vérifié.** `src/lib/honnetete.ts`. Une mesure impossible vaut `Mesure { mesurable: false }` et non 0 — et le type l'impose : le compilateur refuse qu'on lise `.valeur` sans traiter le cas. Une vue bornée dit ce qu'elle borne. Un superlatif se vérifie avant de s'énoncer. Rien de dérivé du présent n'est gravé dans ce qui sera mis en cache.
 - **Parcimonie.** Elle est appliquée dans les services, pas dans le CSS : `TriggerModelService` renvoie au plus un signal, `PasseurService` au plus une question par heure et par membre.
 
 ### Coût du Passeur

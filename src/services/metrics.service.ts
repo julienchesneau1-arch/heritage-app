@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
+import { connu, mesurer, type Mesure } from '@/lib/honnetete';
 
 /**
  * MÉTRIQUES — §9.
@@ -25,39 +26,38 @@ import { prisma as defaultPrisma } from '@/lib/prisma';
  */
 export const MIN_STORIES_FOR_RATE = 5;
 
+/**
+ * Ce que le produit sait de sa propre transmission.
+ *
+ * Les COMPTES sont des `number` : ils existent toujours, même à zéro —
+ * « zéro récit » est un fait. Les TAUX sont des `Mesure` : ils peuvent ne
+ * pas exister, et l'amendement 6 interdit de les rendre à zéro par défaut.
+ * Le type force l'appelant à traiter le cas ; c'est ce qui distingue une
+ * règle d'un vœu.
+ */
 export interface TransmissionMetrics {
   storiesCount: number;
   passagesCount: number;
-  /**
-   * Part des récits ayant engendré au moins un autre récit. 0-1.
-   * `null` quand le corpus est trop mince pour que le chiffre veuille dire
-   * quelque chose — jamais 0 par défaut.
-   */
-  transmissionRate: number | null;
-  /** true dès que le corpus permet à la mesure d'exprimer sa cible. */
-  basisSufficient: boolean;
-  /** passages / stories, tel qu'écrit littéralement dans la spec. 0-n, `null` sur corpus vide. */
-  rawPassageRatio: number | null;
+  /** Part des récits ayant engendré au moins un autre récit. */
+  transmissionRate: Mesure;
+  /** passages / stories, tel qu'écrit littéralement dans la spec. */
+  rawPassageRatio: Mesure;
   /** Latence médiane, en jours, entre un récit et celui qu'il engendre. */
-  medianLatencyDays: number | null;
-  /** Plus longue chaîne de transmission (nombre de récits). */
+  medianLatencyDays: Mesure;
+  /** Plus longue chaîne de transmission (nombre de récits). Un compte : toujours vrai. */
   maxChainDepth: number;
-  /** Fils ouverts, toutes ancres confondues. */
   threadsTotal: number;
-  /** Fils où quelqu'un a repris la parole après le premier message. */
   threadsAnswered: number;
-  /** Fils devenus un récit. */
   threadsCrystallized: number;
-  /** Part des fils devenus un récit. 0-1, ou `null` si aucun fil n'a été ouvert. */
-  passeurConversion: number | null;
+  /** Part des fils devenus un récit. */
+  passeurConversion: Mesure;
   /**
    * Part des messages dont le narrateur n'est pas le scribe.
    *
    * Un fil écrit avantage le clavier rapide : sans cette mesure, on ne
    * saurait pas si l'interface a fait taire ceux qui ne tapent pas.
-   * `null` tant qu'aucun message n'a été écrit.
    */
-  narratedShare: number | null;
+  narratedShare: Mesure;
 }
 
 export class MetricsService {
@@ -81,23 +81,24 @@ export class MetricsService {
     const distinctParents = new Set(passages.map((p) => p.parentStoryId));
     const latencies = passages.map((p) => p.latencyDays).sort((a, b) => a - b);
 
-    const basisSufficient = storiesCount >= MIN_STORIES_FOR_RATE;
-
     return {
       storiesCount,
       passagesCount: passages.length,
-      transmissionRate: basisSufficient ? distinctParents.size / storiesCount : null,
-      basisSufficient,
-      rawPassageRatio: storiesCount === 0 ? null : passages.length / storiesCount,
-      medianLatencyDays: median(latencies),
+      transmissionRate: mesurer(distinctParents.size, storiesCount, {
+        sujet: 'récit',
+        minimum: MIN_STORIES_FOR_RATE,
+      }),
+      rawPassageRatio: mesurer(passages.length, storiesCount, { sujet: 'récit' }),
+      medianLatencyDays: connu(
+        median(latencies),
+        'Aucun récit n’en a encore engendré un autre : il n’y a pas de délai à mesurer.',
+      ),
       maxChainDepth: longestChain(passages),
       threadsTotal,
       threadsAnswered,
       threadsCrystallized,
-      // Même principe : sans aucun fil ouvert, il n'y a pas un taux de
-      // conversion nul, il n'y a pas de taux du tout.
-      passeurConversion: threadsTotal === 0 ? null : threadsCrystallized / threadsTotal,
-      narratedShare: messagesTotal === 0 ? null : messagesNarrated / messagesTotal,
+      passeurConversion: mesurer(threadsCrystallized, threadsTotal, { sujet: 'fil' }),
+      narratedShare: mesurer(messagesNarrated, messagesTotal, { sujet: 'message' }),
     };
   }
 }

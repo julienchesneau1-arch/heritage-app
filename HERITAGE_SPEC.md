@@ -609,6 +609,20 @@ Ce ne sont pas des suggestions au sens du §6.1 : rien n'est recommandé, class�
 
 **Amendement 5 — Pas d'imposition algorithmique.** Le Conservateur ne modifie jamais l'ordre d'affichage par défaut (chronologique). Il peut seulement exclure une histoire sur-exposée des suggestions, et documenter.
 
+**Amendement 6 — Le produit n'affirme que ce qu'il a vérifié.** `src/lib/honnetete.ts`, testé par `tests/amendement-6.test.ts`.
+
+Les amendements 1, 3 et 5 interdisent d'inférer une **émotion**, de retenir les données d'une famille, d'imposer un ordre. Douze incidents relevés pendant l'implémentation relèvent d'un défaut qu'aucun d'eux ne couvrait : le produit affirmait un **fait** qu'il n'avait pas établi. Aucun ne plantait, aucun ne faisait échouer un test d'exécution. Ils ne se voient qu'en posant, pour chaque phrase affichée, deux questions : *sur quoi repose-t-elle, et que vaut-elle quand cette base est vide ?*
+
+**Clause 1 — Une mesure impossible ne vaut pas zéro.** `distorsion 0/100` sur une famille sans aucune lecture se lisait « mémoire parfaitement fidèle » ; `transmission 0 %` sur trois récits se lisait comme un échec. Dans les deux cas, la valeur par défaut d'un langage était présentée comme un résultat. Tout taux est désormais une `Mesure` — une union discriminée, donc **le compilateur refuse** qu'on lise `.valeur` sans avoir traité le cas non mesurable. Un `number | null` se rendait tel quel dans du JSX ; c'est ce qui distingue une règle d'un vœu. Les **comptes** restent des `number` : « zéro récit » est un fait, pas une inconnue. Et un vrai zéro sur une base suffisante s'affiche — la clause protège de l'ignorance, pas du mauvais résultat.
+
+**Clause 2 — Une vue bornée dit ce qu'elle borne.** Huit points sur un graphe laissaient croire que Robert n'apparaissait que dans huit récits alors qu'il y en avait quatorze. Toute liste tronquée, tout graphe limité, toute page paginée porte `divulguer()` — qui se tait quand rien n'est caché, car on ne meuble pas non plus.
+
+**Clause 3 — Un superlatif se vérifie avant de s'énoncer.** « C'est le récit qui relie le plus d'éléments » était affirmé même quand plusieurs en reliaient autant : le classement n'avait pas départagé, il avait rendu le premier venu. On demande donc toujours **un candidat de plus** que nécessaire, et on compare (`estVraimentPremier`). Même règle pour les justifications du Passeur : pas de comparatif sans avoir regardé les autres, pas de constat là où il n'y a qu'un marqueur lexical.
+
+**Clause 4 — Rien de dérivé du présent n'est gravé.** « Il y a 10 ans, Robert nous quittait », inscrit dans un flux iCalendar que l'agenda recopie, devient faux l'an prochain sans que personne ne s'en aperçoive. Tout texte mis en cache, exporté ou copié chez un tiers passe par `contientUnCalculPerissable()`. On publie la date de référence ; l'arithmétique reste au lecteur, qui la refait à chaque lecture — donc elle est juste à chaque lecture.
+
+**Corollaire de langage.** L'absence de signal n'est pas un signal. « Aucun passage douteux » alors qu'aucun indice de confiance n'existait était une réassurance fabriquée. Quand la base manque, on dit qu'elle manque.
+
 ### 8.2 Sécurité classique
 - HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Permissions-Policy` (géoloc/caméra/micro désactivés).
 - Cookies `HttpOnly`, `Secure` en production, `SameSite=Strict`.

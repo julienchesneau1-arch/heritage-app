@@ -4,6 +4,7 @@ import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
 import { threadService } from '@/services/thread.service';
 import { Fil, ChampDeParole } from '@/components/fil';
+import { divulguer } from '@/lib/honnetete';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,9 +86,13 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
             <p className="justification">
               Le graphe se lit de proche en proche : on part de quelqu’un, ou de quelque chose, et on
               suit les récits qui y mènent.
-              {entitiesTotal > entities.length
-                ? ` ${entities.length} éléments affichés sur ${entitiesTotal} — les plus reliés d’abord.`
-                : ''}
+              {' '}
+              {divulguer({
+                affiches: entities.length,
+                total: entitiesTotal,
+                unite: 'éléments',
+                ordre: 'les plus reliés d’abord',
+              })}
             </p>
             <ul className="divide-y divide-rule border-y border-rule">
               {entities.map((entity) => (
@@ -278,9 +283,13 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
       {storiesTotal > stories.length || neighboursHidden > 0 ? (
         <p className="justification">
           Cette vue est volontairement bornée pour rester lisible d’un coup d’œil.
-          {storiesTotal > stories.length
-            ? ` ${stories.length} récits affichés sur ${storiesTotal} — les plus récents.`
-            : ''}
+          {' '}
+          {divulguer({
+            affiches: stories.length,
+            total: storiesTotal,
+            unite: 'récits',
+            ordre: 'les plus récents',
+          })}
           {neighboursHidden > 0
             ? ` ${neighboursHidden} élément${neighboursHidden > 1 ? 's' : ''} lié${neighboursHidden > 1 ? 's' : ''} n’${neighboursHidden > 1 ? 'apparaissent' : 'apparaît'} pas ici.`
             : ''}{' '}

@@ -40,14 +40,14 @@ describe('Taux de transmission — pas de verdict sans dossier', () => {
   it('ne se prononce pas sur une famille de trois récits', async () => {
     // 0 % ici se lirait comme un échec. C'est un manque de matière.
     const metrics = await metricsWith(3, []).transmission(FAMILY);
-    expect(metrics.transmissionRate).toBeNull();
-    expect(metrics.basisSufficient).toBe(false);
+    expect(metrics.transmissionRate.mesurable).toBe(false);
+    expect(metrics.transmissionRate.mesurable).toBe(false);
   });
 
   it('ne se prononce pas sur une famille vide', async () => {
     const metrics = await metricsWith(0, []).transmission(FAMILY);
-    expect(metrics.transmissionRate).toBeNull();
-    expect(metrics.rawPassageRatio).toBeNull();
+    expect(metrics.transmissionRate.mesurable).toBe(false);
+    expect(metrics.rawPassageRatio.mesurable).toBe(false);
   });
 
   it('se prononce dès que la mesure peut exprimer sa cible', async () => {
@@ -57,25 +57,25 @@ describe('Taux de transmission — pas de verdict sans dossier', () => {
       { parentStoryId: 's1', childStoryId: 's2', latencyDays: 10 },
     ]).transmission(FAMILY);
 
-    expect(metrics.basisSufficient).toBe(true);
-    expect(metrics.transmissionRate).toBe(0.2);
+    expect(metrics.transmissionRate.mesurable).toBe(true);
+    expect(metrics.transmissionRate.mesurable && metrics.transmissionRate.valeur).toBe(0.2);
   });
 
   it('un vrai zéro sur un corpus suffisant reste un vrai zéro', async () => {
     // Dix récits, aucun passage : là, le constat est légitime.
     const metrics = await metricsWith(10, []).transmission(FAMILY);
-    expect(metrics.transmissionRate).toBe(0);
-    expect(metrics.basisSufficient).toBe(true);
+    expect(metrics.transmissionRate.mesurable && metrics.transmissionRate.valeur).toBe(0);
+    expect(metrics.transmissionRate.mesurable).toBe(true);
   });
 
   it('n’invente pas un taux de conversion sans aucun fil ouvert', async () => {
     const metrics = await metricsWith(10, []).transmission(FAMILY);
-    expect(metrics.passeurConversion).toBeNull();
+    expect(metrics.passeurConversion.mesurable).toBe(false);
   });
 
   it('mesure la conversion dès qu’un fil existe', async () => {
     const metrics = await metricsWith(10, [], { total: 4, cristallises: 1 }).transmission(FAMILY);
-    expect(metrics.passeurConversion).toBe(0.25);
+    expect(metrics.passeurConversion.mesurable && metrics.passeurConversion.valeur).toBe(0.25);
   });
 });
 

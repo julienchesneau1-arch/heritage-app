@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { familyEvents, toIcs, type CalendarSource } from '@/lib/calendar';
 import { FamilyService } from '@/services/family.service';
 import { constitutionEmotionFilter, isNonCoerciveLanguage } from '@/lib/constitution';
+import { contientUnCalculPerissable } from '@/lib/honnetete';
 
 const STAMP = new Date(Date.UTC(2026, 7, 3));
 
@@ -69,6 +70,15 @@ describe('Le calendrier n’affirme aucun calcul qui vieillira', () => {
   it('n’écrit jamais « il y a N ans » dans un flux que l’agenda met en cache', () => {
     const ics = toIcs(familyEvents(SOURCE, 2026), { calendarName: 'Martin', stamp: STAMP });
     expect(ics).not.toMatch(/il y a \d+ an/i);
+  });
+
+  it('ne grave aucun calcul périssable, quelle qu’en soit la tournure', () => {
+    // Amendement 6, clause 4 : le détecteur est partagé avec le reste du
+    // produit, pour que la règle ne se rejoue pas à la main ici.
+    for (const event of familyEvents(SOURCE, 2026)) {
+      expect(contientUnCalculPerissable(event.summary)).toBe(false);
+      expect(contientUnCalculPerissable(event.description)).toBe(false);
+    }
   });
 
   it('donne l’année de référence et laisse l’arithmétique au lecteur', () => {

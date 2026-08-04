@@ -25,16 +25,16 @@ describe('transmission_rate', () => {
       { parentStoryId: 's1', childStoryId: 's3', latencyDays: 40 },
     ]);
     const metrics = await service.transmission('fam_1');
-    expect(metrics.transmissionRate).toBe(0.125);
-    expect(metrics.rawPassageRatio).toBe(0.25);
+    expect(metrics.transmissionRate.mesurable && metrics.transmissionRate.valeur).toBe(0.125);
+    expect(metrics.rawPassageRatio.mesurable && metrics.rawPassageRatio.valeur).toBe(0.25);
   });
 
   it('ne se prononce pas sur une famille sans récit', async () => {
     // Anciennement 0 — ce qui se lisait comme un échec de transmission
     // alors qu'il n'y a simplement rien à transmettre encore.
     const metrics = await metricsWith(0, []).transmission('fam_1');
-    expect(metrics.transmissionRate).toBeNull();
-    expect(metrics.medianLatencyDays).toBeNull();
+    expect(metrics.transmissionRate.mesurable).toBe(false);
+    expect(metrics.medianLatencyDays.mesurable).toBe(false);
     expect(metrics.maxChainDepth).toBe(0);
   });
 
@@ -44,7 +44,8 @@ describe('transmission_rate', () => {
       { parentStoryId: 's2', childStoryId: 's3', latencyDays: 100 },
       { parentStoryId: 's3', childStoryId: 's4', latencyDays: 30 },
     ]);
-    expect((await service.transmission('fam_1')).medianLatencyDays).toBe(30);
+    const latence = (await service.transmission('fam_1')).medianLatencyDays;
+    expect(latence.mesurable && latence.valeur).toBe(30);
   });
 
   it('mesure la plus longue chaîne de transmission', async () => {

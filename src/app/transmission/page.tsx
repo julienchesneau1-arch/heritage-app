@@ -4,6 +4,7 @@ import { loadContext } from '@/lib/context';
 import { metricsService, MIN_STORIES_FOR_RATE } from '@/services/metrics.service';
 import { conservateur } from '@/services/conservateur.service';
 import { formatDateFr } from '@/lib/normalize';
+import { enPourcentage, raisonDe } from '@/lib/honnetete';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,22 +36,22 @@ export default async function TransmissionPage() {
       <h1 className="text-2xl">Transmission</h1>
 
       <section className="space-y-2">
-        {metrics.transmissionRate === null ? (
+        {!metrics.transmissionRate.mesurable ? (
           <>
             <p className="text-4xl">—</p>
             <p className="leading-relaxed">
               Trop tôt pour dire quoi que ce soit.
             </p>
             <p className="justification">
-              La famille compte {metrics.storiesCount} récit{metrics.storiesCount > 1 ? 's' : ''}. En
-              dessous de {MIN_STORIES_FOR_RATE}, cette mesure ne peut même pas exprimer sa propre cible
-              — viser « une histoire sur cinq » n’a pas de sens quand il y en a trois. Afficher un
-              pourcentage ici serait un verdict rendu sans dossier.
+              {metrics.transmissionRate.raison} En dessous de {MIN_STORIES_FOR_RATE} récits, cette
+              mesure ne peut même pas exprimer sa propre cible — viser « une histoire sur cinq » n’a
+              pas de sens quand il y en a trois. Afficher un pourcentage ici serait un verdict rendu
+              sans dossier.
             </p>
           </>
         ) : (
           <>
-            <p className="text-4xl">{percent(metrics.transmissionRate)}</p>
+            <p className="text-4xl">{enPourcentage(metrics.transmissionRate)}</p>
             <p className="leading-relaxed">des récits ont engendré au moins un autre récit.</p>
             <p className="justification">
               {metrics.passagesCount} passage{metrics.passagesCount > 1 ? 's' : ''} pour{' '}
@@ -66,12 +67,15 @@ export default async function TransmissionPage() {
         <dl className="space-y-2">
           <Row
             label="Latence médiane"
-            value={metrics.medianLatencyDays === null ? '—' : `${metrics.medianLatencyDays} jours`}
-            note={
-              metrics.medianLatencyDays === null
-                ? 'Aucun récit n’en a encore engendré un autre.'
-                : 'Temps écoulé entre un récit et celui qu’il a suscité.'
+            value={
+              metrics.medianLatencyDays.mesurable
+                ? `${metrics.medianLatencyDays.valeur} jours`
+                : '—'
             }
+            note={raisonDe(
+              metrics.medianLatencyDays,
+              'Temps écoulé entre un récit et celui qu’il a suscité.',
+            )}
           />
           <Row
             label="Plus longue chaîne"
@@ -89,15 +93,22 @@ export default async function TransmissionPage() {
           <Row
             label="Fils devenus récit"
             value={
-              metrics.passeurConversion === null
-                ? '—'
-                : `${metrics.threadsCrystallized} / ${metrics.threadsTotal}`
+              metrics.passeurConversion.mesurable
+                ? `${metrics.threadsCrystallized} / ${metrics.threadsTotal}`
+                : '—'
             }
-            note={
-              metrics.passeurConversion === null
-                ? 'Aucun fil n’a encore été ouvert : il n’y a pas un taux nul, il n’y a pas de taux.'
-                : 'Fils de discussion qui se sont cristallisés en récit.'
-            }
+            note={raisonDe(
+              metrics.passeurConversion,
+              'Fils de discussion qui se sont cristallisés en récit.',
+            )}
+          />
+          <Row
+            label="La voix, pas le clavier"
+            value={enPourcentage(metrics.narratedShare)}
+            note={raisonDe(
+              metrics.narratedShare,
+              'Part des messages notés par quelqu’un d’autre que celui qui parle. Un fil écrit avantage le clavier rapide ; cette mesure dit de combien.',
+            )}
           />
         </dl>
       </section>
