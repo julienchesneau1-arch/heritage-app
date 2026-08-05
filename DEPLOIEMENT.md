@@ -329,3 +329,27 @@ autonome de Next (`output: 'standalone'`, 43 Mo), le démarrage en
 `/api/sante` dans ses trois états. Le `Dockerfile` et le `docker-compose.yml`
 sont écrits mais **restent à éprouver au premier déploiement** — prévoir une
 première mise en ligne accompagnée, pas un `up -d` lancé et oublié.
+
+---
+
+## Tout faire d'un coup
+
+`installer-a-cote.sh` enchaîne les étapes 3, 4 et le branchement du proxy,
+sur un serveur qui héberge déjà autre chose :
+
+```bash
+DOMAINE=memoire.votredomaine.fr ./installer-a-cote.sh
+```
+
+Il génère les secrets manquants **sans jamais remplacer un secret existant**
+— écraser `FAMILY_TOKEN_SECRET` déconnecterait toutes les familles d'un coup
+et invaliderait tous les liens personnels déjà distribués. Il peut donc être
+relancé sans rien casser.
+
+Il s'arrête au premier doute, et dit ce qui a été écrit jusque-là. Il détecte
+nginx ou Caddy, écrit un **fichier de vhost séparé**, teste la configuration
+**avant** de recharger, et retire ce qu'il vient d'ajouter si le test échoue —
+une faute de syntaxe dans un fichier neuf ferait échouer le rechargement de
+toute la configuration, donc de l'application existante aussi. Si le proxy
+tourne dans Docker, il ne devine pas : il affiche la marche à suivre et
+s'arrête.
