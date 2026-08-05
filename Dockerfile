@@ -56,4 +56,17 @@ USER heritage
 EXPOSE 3000
 
 # Les migrations s'appliquent avant que le serveur n'accepte une requête.
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node server.js"]
+#
+# ⚠ On appelle le fichier de la CLI DIRECTEMENT, et non `node_modules/.bin/prisma`.
+#
+# `.bin/prisma` est un LIEN SYMBOLIQUE que npm crée dans `node_modules/.bin/`,
+# et cet étage ne copie que `prisma`, `@prisma` et `.prisma` — jamais `.bin/`.
+# Dans l'image finale, `node_modules/.bin/prisma` n'existe donc pas : le
+# conteneur sortait sur « not found » AVANT d'atteindre `node server.js`.
+# De l'extérieur cela se voyait comme une application qui ne répond pas,
+# sans erreur applicative — la panne la plus coûteuse à diagnostiquer.
+#
+# Constaté en reproduisant l'ensemble copié à l'identique hors Docker :
+#   sh: node_modules/.bin/prisma: not found
+#   node node_modules/prisma/build/index.js --version  →  prisma 5.22.0
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && exec node server.js"]
