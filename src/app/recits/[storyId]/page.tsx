@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
-import { formatDateFr } from '@/lib/normalize';
+import { dateDuRecit, formatDateFr } from '@/lib/normalize';
 import { ONE_TAP_QUESTIONS } from '@/lib/questions';
 import { conservateur } from '@/services/conservateur.service';
 import { AudioRecorder } from '@/components/AudioRecorder';
@@ -95,7 +95,7 @@ export default async function StoryPage({
           {story.narrator
             ? `Raconté par ${story.narrator.isDeleted ? 'Membre anonymisé' : story.narrator.name}, noté par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`
             : `Par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`}{' '}
-          · {formatDateFr(story.eventDate ?? story.createdAt)} · {story.structureType} · {story.tone}
+          · {dateDuRecit(story)} · {story.structureType} · {story.tone}
         </p>
         {/* Provenance : la famille doit toujours savoir quel texte a été
             proposé par une machine, et par qui il a été vérifié. */}

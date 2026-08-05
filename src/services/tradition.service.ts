@@ -84,7 +84,12 @@ export class TraditionService {
       },
       data: {
         isAsleep: true,
-        sleepReason: `Non relevée depuis ${SLEEP_AFTER_MISSED_YEARS} ans.`,
+        // « Non relevée depuis 3 ans » disait à une famille qu'elle avait
+        // failli — la §6.2 interdit exactement cette tournure. Le sujet de
+        // la phrase est désormais l'APPLICATION, qui rend compte de sa
+        // propre décision : c'est elle qui cesse de proposer, et elle le
+        // dit. Une tradition qui s'arrête n'est pas un échec.
+        sleepReason: `L’application a cessé de la proposer après ${SLEEP_AFTER_MISSED_YEARS} ans sans occasion notée.`,
       },
     });
     return result.count;

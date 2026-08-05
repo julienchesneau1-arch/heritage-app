@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
-import { metricsService, MIN_STORIES_FOR_RATE } from '@/services/metrics.service';
+import { metricsService } from '@/services/metrics.service';
 import { conservateur } from '@/services/conservateur.service';
 import { formatDateFr } from '@/lib/normalize';
 import { enPourcentage, raisonDe } from '@/lib/honnetete';
@@ -9,17 +9,33 @@ import { enPourcentage, raisonDe } from '@/lib/honnetete';
 export const dynamic = 'force-dynamic';
 
 /**
- * « Transmission » — §9.
+ * CE QUE L'APPLICATION FAIT DE VOTRE MÉMOIRE — reddition de comptes.
  *
- * La page dit ce que le produit mesure sur lui-même, y compris ce qui
- * l'accuse. Elle doit surtout dire ce qu'il **ne mesure pas**.
+ * ── Ce que cette page a cessé d'être ──
  *
- * Un zéro affiché à la place d'une mesure impossible est un mensonge : sur
- * une famille sans lecture enregistrée, « distorsion 0/100 » se lit
- * « mémoire parfaitement fidèle » alors qu'on n'a rien pu regarder. Sur une
- * famille de trois récits, « transmission 0 % » se lit comme un échec alors
- * que c'est un manque de matière. Ici, l'absence de mesure s'écrit « — »,
- * et la raison est donnée.
+ * Elle s'appelait « Transmission » et s'ouvrait sur « 23 % » en corps 4xl :
+ * la part des récits ayant engendré un autre récit, avec une cible V1 de
+ * 20 % (§9.1). C'était MON tableau de bord, servi à la famille comme un
+ * bulletin scolaire. La §12 interdit le score, et pour une raison que la
+ * §9 ne dit pas : une famille ne peut rien faire d'un pourcentage, sinon
+ * écrire pour le faire monter — c'est-à-dire l'optimisation d'engagement
+ * que la même ligne interdit. Le taux de transmission, la latence médiane,
+ * la profondeur de chaîne et la conversion des fils n'ont pas disparu :
+ * ils sont dans `/api/family/:id/metrics` et dans l'export (amendement 3),
+ * où ils mesurent le PRODUIT, ce qu'ils ont toujours été.
+ *
+ * ── Ce qu'elle reste, et qui est dû ──
+ *
+ * Ce que l'algorithme écarte, met en sourdine ou n'a jamais remontré. La
+ * §6.3 donne à la famille le contrôle, l'Annexe A point 5 lui garantit
+ * qu'aucun récit ne devient inaccessible par effet d'algorithme : ni l'une
+ * ni l'autre ne tient si le produit ne dit pas ce qu'il fait. Cette
+ * reddition-là n'est pas un score — c'est une comptabilité que le produit
+ * rend de lui-même, y compris quand elle l'accuse.
+ *
+ * Et un zéro n'y vaut jamais pour une mesure : sans lecture enregistrée,
+ * « distorsion 0/100 » se lirait « mémoire parfaitement fidèle » alors
+ * qu'on n'a rien pu regarder (amendement 6, clause 1).
  */
 export default async function TransmissionPage() {
   const context = await loadContext();
@@ -33,88 +49,15 @@ export default async function TransmissionPage() {
 
   return (
     <div className="space-y-10">
-      <h1 className="text-2xl">Transmission</h1>
+      <h1 className="text-2xl">Ce que l’application fait de votre mémoire</h1>
 
-      <section className="space-y-2">
-        {!metrics.transmissionRate.mesurable ? (
-          <>
-            <p className="text-4xl">—</p>
-            <p className="leading-relaxed">
-              Trop tôt pour dire quoi que ce soit.
-            </p>
-            <p className="justification">
-              {metrics.transmissionRate.raison} En dessous de {MIN_STORIES_FOR_RATE} récits, cette
-              mesure ne peut même pas exprimer sa propre cible — viser « une histoire sur cinq » n’a
-              pas de sens quand il y en a trois. Afficher un pourcentage ici serait un verdict rendu
-              sans dossier.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-4xl">{enPourcentage(metrics.transmissionRate)}</p>
-            <p className="leading-relaxed">des récits ont engendré au moins un autre récit.</p>
-            <p className="justification">
-              {metrics.passagesCount} passage{metrics.passagesCount > 1 ? 's' : ''} pour{' '}
-              {metrics.storiesCount} récits. C’est la seule métrique qui engage le produit : une
-              histoire doit pouvoir en engendrer une autre.
-            </p>
-          </>
-        )}
-      </section>
+      <p className="leading-relaxed">
+        Cette application choisit ce qu’elle vous montre, et ce choix exclut le reste. Voici ce
+        qu’elle écarte, ce qu’elle tait, et ce qu’elle n’a jamais remontré.
+      </p>
 
       <section className="space-y-3 border-t border-rule pt-6">
-        <h2 className="section-label">Chaînes</h2>
-        <dl className="space-y-2">
-          <Row
-            label="Latence médiane"
-            value={
-              metrics.medianLatencyDays.mesurable
-                ? `${metrics.medianLatencyDays.valeur} jours`
-                : '—'
-            }
-            note={raisonDe(
-              metrics.medianLatencyDays,
-              'Temps écoulé entre un récit et celui qu’il a suscité.',
-            )}
-          />
-          <Row
-            label="Plus longue chaîne"
-            value={
-              metrics.maxChainDepth === 0
-                ? '—'
-                : `${metrics.maxChainDepth} récit${metrics.maxChainDepth > 1 ? 's' : ''}`
-            }
-            note={
-              metrics.maxChainDepth === 0
-                ? 'Aucune suite de transmissions pour l’instant.'
-                : 'Profondeur maximale d’une suite de transmissions.'
-            }
-          />
-          <Row
-            label="Fils devenus récit"
-            value={
-              metrics.passeurConversion.mesurable
-                ? `${metrics.threadsCrystallized} / ${metrics.threadsTotal}`
-                : '—'
-            }
-            note={raisonDe(
-              metrics.passeurConversion,
-              'Fils de discussion qui se sont cristallisés en récit.',
-            )}
-          />
-          <Row
-            label="La voix, pas le clavier"
-            value={enPourcentage(metrics.narratedShare)}
-            note={raisonDe(
-              metrics.narratedShare,
-              'Part des messages notés par quelqu’un d’autre que celui qui parle. Un fil écrit avantage le clavier rapide ; cette mesure dit de combien.',
-            )}
-          />
-        </dl>
-      </section>
-
-      <section className="space-y-3 border-t border-rule pt-6">
-        <h2 className="section-label">Ce que l’algorithme fait à votre mémoire</h2>
+        <h2 className="section-label">Ce que l’algorithme écarte</h2>
 
         {report.impressions === 0 ? (
           <p className="justification">
@@ -155,6 +98,24 @@ export default async function TransmissionPage() {
         </dl>
       </section>
 
+      {/* Ce chiffre-ci n'est pas une note donnée à la famille : il mesure un
+          biais que la FORME du produit introduit. Un fil écrit avantage le
+          clavier rapide, et sans cette ligne on ne saurait pas si l'interface
+          a fait taire ceux qui ne tapent pas. Il reste donc ici. */}
+      <section className="space-y-3 border-t border-rule pt-6">
+        <h2 className="section-label">Ce que la forme du produit fait à la parole</h2>
+        <dl className="space-y-2">
+          <Row
+            label="La voix, pas le clavier"
+            value={enPourcentage(metrics.narratedShare)}
+            note={raisonDe(
+              metrics.narratedShare,
+              'Part des messages notés par quelqu’un d’autre que celui qui parle. Un fil écrit avantage le clavier rapide ; cette mesure dit de combien.',
+            )}
+          />
+        </dl>
+      </section>
+
       {forgotten.length > 0 ? (
         <section className="space-y-3 border-t border-rule pt-6">
           <h2 className="section-label">Rappel patrimonial</h2>
@@ -177,6 +138,17 @@ export default async function TransmissionPage() {
           </ul>
         </section>
       ) : null}
+
+      {/* Retirer un chiffre sans le dire serait le retirer deux fois. */}
+      <section className="space-y-3 border-t border-rule pt-6">
+        <h2 className="section-label">Ce qui ne figure plus ici</h2>
+        <p className="justification">
+          Cette page affichait en grand la part de vos récits qui en avaient suscité d’autres, et
+          le seuil qu’il aurait fallu franchir. C’était une note donnée à une famille sur sa façon
+          de se souvenir, et rien n’en découlait qu’on puisse faire de bonne foi. Ces chiffres
+          mesurent l’application, pas vous : ils restent dans l’export, qui vous appartient.
+        </p>
+      </section>
     </div>
   );
 }
@@ -191,8 +163,4 @@ function Row({ label, value, note }: { label: string; value: string; note: strin
       <dd className="text-lg tabular-nums">{value}</dd>
     </div>
   );
-}
-
-function percent(ratio: number): string {
-  return `${Math.round(ratio * 100)} %`;
 }

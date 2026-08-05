@@ -277,6 +277,24 @@ Un agenda recopie ce flux chez son fournisseur : les noms et les titres y sorten
 
 **On peut en sortir sans sortir de la mémoire.** L'accord d'une famille n'est pas celui de chacun de ses membres : une case, sur la page Famille, retire du flux la naissance et le décès d'une personne, qui reste partout ailleurs dans l'application. Le retrait est filtré dans la requête SQL, pas au moment de fabriquer les lignes — aucun appelant futur ne peut l'oublier. Il ne réécrit pas les textes des autres : un prénom cité dans la description d'une tradition y demeure, ces mots appartiennent à qui les a écrits.
 
+### Une passe de retrait : ce qui est parti, et pourquoi
+
+Toutes les relectures précédentes cherchaient ce qui manquait. Celle-ci cherche ce qui doit **partir**, avec une seule question par écran : qu'est-ce que la famille perd si on l'enlève ?
+
+Deux règles du document n'étaient appliquées qu'à l'endroit où elles avaient été écrites, alors qu'elles sont générales.
+
+**Le score.** La page « Transmission » s'ouvrait sur « 23 % » en corps 4xl, avec l'objectif de 20 %. C'était mon tableau de bord, servi à une famille comme un bulletin scolaire — et une famille ne peut rien faire d'un pourcentage sinon écrire pour le faire monter, c'est-à-dire exactement l'optimisation d'engagement que le même paragraphe interdit. Les chiffres n'ont pas disparu : ils sont dans l'API et dans l'export, où ils mesurent **le produit**. Ce qui reste dû — ce que l'algorithme écarte, tait, n'a jamais remontré — devient « Ce que l'application fait de votre mémoire » et descend au pied de page, à côté d'« Exporter la mémoire ». Même nature, même fréquence. La page nomme ce qu'elle a cessé d'afficher : retirer un chiffre sans le dire serait le retirer deux fois.
+
+Deux scores plus discrets sont partis avec : « relevée 3 fois » sur chaque tradition, et « a engendré 2 récits » dans l'index. La chaîne de transmission reste **sur le récit**, où le document la demande — « né de X, a engendré Y », des liens qu'on suit. Réduite à un nombre dans une liste triée, la même information devient une colonne de classement.
+
+**L'inactivité.** « Personne n'a parlé depuis trois semaines » est interdit dans le fil depuis le début. Les traditions affichaient « dernière fois le 15 octobre 2024 » : sur une tradition annuelle, onze mois sur douze, cette ligne dit à une famille qu'elle est en retard sur elle-même. Et une tradition endormie portait « Non relevée depuis 3 ans » — c'est l'application qui a cessé de la proposer, c'est donc à elle de le dire. Cette phrase-là étant **stockée en base**, corriger le code ne suffisait pas : une migration réécrit les lignes existantes, sans toucher aux raisons qu'un membre a saisies lui-même.
+
+**Une date qu'on ne connaît pas.** Deux pages affichaient `eventDate ?? createdAt` : sans étiquette, à la même place, « La montre arrêtée · 3 janvier 2026 » se lit comme la date de l'histoire alors que c'est le jour où quelqu'un l'a tapée. On ne cache pas cette date, on la **nomme** : « noté le 3 janvier 2026 ».
+
+**Ce qui a survécu à la question, contre mon pronostic.** J'avais annoncé que la veillée, le graphe et les traditions n'y survivraient pas. Deux des trois tiennent. La veillée est le plus fort producteur de transmissions du produit et la seule page qui se termine en disant de refermer l'application. Le graphe n'est plus décoratif depuis que chaque entité porte son fil : c'est la porte, on parle de la montre de Robert sur la page de la montre de Robert. Les traditions gardent leur page parce qu'« endormir » est un verbe que le produit doit avoir — une tradition qui s'arrête n'est pas un échec. Ce sont leurs compteurs qui étaient de trop, pas elles.
+
+La barre de navigation passe de neuf entrées à huit, et `tests/retrait.test.ts` refuse désormais une neuvième sans retrait en échange.
+
 ### Une liste bornée qui dit qu'elle l'est
 
 « Récits » chargeait le corpus entier, sans limite : cinq mille récits dans une page. Elle est paginée par 50 — et elle l'annonce (« Récits 51 à 63 sur 63 »), faute de quoi elle retomberait dans le défaut que le graphe avait déjà corrigé.

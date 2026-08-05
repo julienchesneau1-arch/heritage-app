@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { veilleeService } from '@/services/veillee.service';
 import { conservateur } from '@/services/conservateur.service';
-import { formatDateFr } from '@/lib/normalize';
+import { dateDuRecit } from '@/lib/normalize';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,7 +104,7 @@ export default async function VeilleePage({ searchParams }: { searchParams: { et
         <h1 className="text-3xl leading-tight">{story.title}</h1>
         <p className="justification">
           Par {story.author.isDeleted ? 'Auteur anonymisé' : story.author.name} ·{' '}
-          {formatDateFr(story.eventDate ?? story.createdAt)}
+          {dateDuRecit(story)}
         </p>
         {/* Pourquoi ce récit-là, et pas un autre. */}
         <p className="justification">{justification}</p>

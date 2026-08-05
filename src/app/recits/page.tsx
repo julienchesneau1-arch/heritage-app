@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
-import { formatDateFr, normalizeName } from '@/lib/normalize';
+import { dateDuRecit, normalizeName } from '@/lib/normalize';
 import { STRUCTURE_TYPES } from '@/lib/structure-types';
 
 export const dynamic = 'force-dynamic';
@@ -48,10 +48,10 @@ export default async function StoriesPage({
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: {
-        author: { select: { name: true, isDeleted: true } },
-        _count: { select: { parentPassages: true, threads: true } },
-      },
+      // `_count` chargeait les passages et les fils de chaque récit pour une
+      // colonne de classement qui n'existe plus. Deux sous-requêtes par
+      // ligne, cinquante lignes par page, pour rien.
+      include: { author: { select: { name: true, isDeleted: true } } },
     }),
     prisma.story.count({ where: { ...filters, ...(includeArchived ? {} : { archived: false }) } }),
     // Ce que le filtre écarte silencieusement. Sans ce compte, « aucun récit
@@ -135,10 +135,14 @@ export default async function StoriesPage({
                 <span className="text-lg leading-snug">{story.title}</span>
                 <span className="justification block">
                   {story.author.isDeleted ? 'Auteur anonymisé' : story.author.name} ·{' '}
-                  {formatDateFr(story.createdAt)} · {story.structureType}
-                  {story._count.parentPassages > 0
-                    ? ` · a engendré ${story._count.parentPassages} récit${story._count.parentPassages > 1 ? 's' : ''}`
-                    : ''}
+                  {dateDuRecit(story)} · {story.structureType}
+                  {/* « a engendré 2 récits » a quitté cette liste. La §5.2
+                      demande la chaîne de transmission SUR LE RÉCIT — « né de
+                      X, a engendré Y », des liens qu'on suit. Réduite à un
+                      nombre dans un index trié, la même information devient
+                      une colonne de classement : un récit qui en vaudrait
+                      deux. La §12 interdit le score, et la primitive du
+                      produit est la moins bien placée pour y déroger. */}
                   {story.archived ? ' · archivé' : ''}
                   {story.quarantined ? ' · en quarantaine' : ''}
                 </span>

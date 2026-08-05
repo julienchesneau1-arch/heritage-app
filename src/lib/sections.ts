@@ -57,13 +57,24 @@ export const SECTIONS: Section[] = [
     utile: (i) => i.recits > 0,
     role: 'Tout ce qui a été gardé, composé pour le papier — avec ce qui manque.',
   },
-  {
-    href: '/transmission',
-    label: 'Transmission',
-    utile: (i) => i.recits > 0,
-    role: 'Ce que l’application sait mesurer, et ce qu’elle ne sait pas.',
-  },
 ];
+
+/**
+ * Ce qui a QUITTÉ cette liste, et pourquoi.
+ *
+ * « Transmission » y figurait. C'était la page de mes chiffres, servie à la
+ * famille comme un bulletin : « 23 % des récits ont engendré au moins un
+ * autre récit », en corps 4xl, avec une cible V1 de 20 % (§9.1). La §12
+ * interdit le score — et une famille ne peut rien faire d'un pourcentage,
+ * sinon écrire pour le faire monter, ce qui est exactement l'optimisation
+ * d'engagement que la même ligne interdit.
+ *
+ * Ce que cette page contient d'obligatoire — ce que l'algorithme écarte,
+ * met en sourdine, n'a jamais remontré — reste dû à la famille (§6.3,
+ * Annexe A point 5). Elle est donc descendue au PIED de page, à côté
+ * d'« Exporter la mémoire » : c'est le même genre de chose, la reddition
+ * de comptes, et ce n'est pas un lieu où l'on passe tous les jours.
+ */
 
 export const INVENTAIRE_VIDE: Inventaire = {
   recits: 0,

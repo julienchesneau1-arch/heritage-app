@@ -42,12 +42,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main id="contenu" className="flex-1 py-8">
             {children}
           </main>
-          <footer className="border-t border-rule py-6">
-            {/* §6.3 : « Exporter » est visible dans le pied de chaque page. */}
+          <footer className="flex flex-wrap gap-x-6 gap-y-2 border-t border-rule py-6">
+            {/* §6.3 : « Exporter » est visible dans le pied de chaque page.
+                À côté, la reddition de comptes — ce que l'algorithme écarte
+                (§6.3, Annexe A point 5). Deux liens de même nature : ce que
+                la famille possède, et ce que le produit en fait. Aucun des
+                deux n'est un lieu où l'on passe tous les jours, et aucun
+                n'a donc sa place dans la navigation du haut. */}
             {context ? (
-              <a href={`/api/family/${context.family.id}/export`} className="justification underline">
-                Exporter la mémoire
-              </a>
+              <>
+                <a href={`/api/family/${context.family.id}/export`} className="justification underline">
+                  Exporter la mémoire
+                </a>
+                <a href="/transmission" className="justification underline">
+                  Ce que l’application fait de votre mémoire
+                </a>
+              </>
             ) : null}
           </footer>
         </div>

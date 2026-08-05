@@ -2,12 +2,38 @@ import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
 import { traditionService } from '@/services/tradition.service';
-import { formatDateFr } from '@/lib/normalize';
+import { moisJourEnClair } from '@/lib/normalize';
 import { createTradition, traditionAction } from '@/app/actions';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * LES TRADITIONS — et ce qu'on a cessé d'en dire.
+ *
+ * Chaque ligne portait « relevée 3 fois · dernière fois 15 octobre 2024 ».
+ * Deux chiffres, deux fautes :
+ *
+ *  - Un COMPTE d'accomplissements est un score, et la §12 l'interdit sans
+ *    exception. Une tarte aux poires faite huit fois ne vaut pas mieux
+ *    qu'une faite deux fois.
+ *  - Une DATE DE DERNIÈRE FOIS est l'affichage de l'inactivité, que le fil
+ *    interdit déjà dans les mêmes termes : « personne n'a parlé depuis
+ *    trois semaines » transforme un rythme familial normal en reproche.
+ *    Sur une tradition annuelle c'est pire — onze mois sur douze, la ligne
+ *    dit à la famille qu'elle est en retard sur elle-même.
+ *
+ * Cette règle avait été écrite pour le fil et n'en était jamais sortie.
+ * `activationCount` et `lastActivatedAt` restent en base : ils servent au
+ * Trigger Model à ne pas proposer deux fois la même tradition le même jour.
+ * Ils ne sont simplement plus montrés — ce sont des rouages, pas un bilan.
+ *
+ * Ce qui reste : ce qu'est la tradition, quand elle revient, si elle dort.
+ * « Endormir » est le seul verbe qui compte ici — une tradition qui s'arrête
+ * n'est pas un échec, et le produit doit avoir un mot pour le dire.
+ */
+
 const WEEK_DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+
 
 export default async function TraditionsPage() {
   const context = await loadContext();
@@ -33,13 +59,10 @@ export default async function TraditionsPage() {
               <p className="leading-relaxed">{tradition.description}</p>
               <p className="justification">
                 {tradition.periodicity === 'annual' && tradition.monthDay
-                  ? `Chaque année, le ${tradition.monthDay}`
+                  ? `Chaque année, ${moisJourEnClair(tradition.monthDay)}`
                   : tradition.periodicity === 'weekly' && tradition.weekDay !== null
                     ? `Chaque ${WEEK_DAYS[tradition.weekDay]}`
                     : 'Chaque mois'}
-                {' · '}
-                relevée {tradition.activationCount} fois
-                {tradition.lastActivatedAt ? ` · dernière fois ${formatDateFr(tradition.lastActivatedAt)}` : ''}
                 {tradition.isAsleep ? ` · endormie (${tradition.sleepReason ?? 'sans raison notée'})` : ''}
               </p>
 

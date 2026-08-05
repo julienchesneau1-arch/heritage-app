@@ -737,6 +737,18 @@ Le seuil de `MIN_STORIES_FOR_RATE = 5` n'est pas arbitraire : la cible V1 est «
 
 **Erreur de fait corrigée au passage.** Un récit jamais relu était compté comme « non relu depuis douze mois » quelle que soit sa date de création : un récit écrit la veille était donc déclaré patrimoine en péril. C'était faux, et cela remplissait la première place de la veillée avec des nouveautés. La condition exige désormais que le récit **existe** depuis douze mois pour avoir pu être oublié pendant douze mois.
 
+### 9.0 bis Ces chiffres mesurent le produit — ils ne notent pas la famille
+
+La §9.0 a rendu ces mesures honnêtes. Elle n'a pas posé la question suivante : **à qui sont-elles destinées ?**
+
+La page « Transmission » s'ouvrait sur « 23 % », en corps 4xl, avec l'objectif de 20 % de la §9.1 juste dessous. C'est un bulletin. La §12 interdit le score sans exception, et pour une raison que la §9 ne dit pas : **une famille ne peut rien faire d'un pourcentage, sinon écrire pour le faire monter** — c'est-à-dire l'optimisation d'engagement que la même ligne interdit. Le produit demandait à des gens de bien se souvenir, et les notait.
+
+`transmission_rate`, `medianLatencyDays`, `maxChainDepth` et `passeur_conversion` restent définis, calculés et testés. Ils vivent dans `/api/family/:id/metrics` et dans l'export (amendement 3), où ils mesurent **le produit** — ce qu'ils ont toujours été. Ils ne sont plus servis comme un tableau de bord.
+
+**Ce qui reste dû à la famille, et qui n'est pas un score** : ce que l'algorithme écarte, met en sourdine, sur-expose, n'a jamais remontré. La §6.3 donne le contrôle à l'utilisateur et l'Annexe A point 5 lui garantit qu'aucun récit ne devient inaccessible par effet d'algorithme — ni l'une ni l'autre ne tient si le produit ne dit pas ce qu'il fait. La page devient donc « Ce que l'application fait de votre mémoire », et descend au **pied de page**, à côté d'« Exporter la mémoire » : même nature — la reddition de comptes — et même fréquence de consultation. Elle nomme aussi ce qu'elle a cessé d'afficher : retirer un chiffre sans le dire serait le retirer deux fois.
+
+Une mesure y demeure : `narrated_share`, la part des messages notés par quelqu'un d'autre que celui qui parle. Elle ne note pas la famille, elle mesure un **biais que la forme du produit introduit** — un fil écrit avantage le clavier rapide. Elle appartient à la même colonne que la distorsion.
+
 ### 9.1 North Star
 
 ```
@@ -839,7 +851,9 @@ lettre-non-envoyee
 - Ne pas utiliser de machine à états complexe pour les rôles utilisateurs. Utiliser des signaux comportementaux.
 - Ne pas ajouter de « feed » ou « timeline » infini. C'est contraire à la parcimonie.
 - Ne pas envoyer de notifications push. Jamais.
-- Ne pas utiliser de « like » ni de score. Pas d'optimisation d'engagement.
+- Ne pas utiliser de « like » ni de score. Pas d'optimisation d'engagement. **Étendu** : cette ligne n'était appliquée qu'au fil, là où elle avait été écrite. Une passe de retrait a trouvé trois manquements ailleurs — le taux de transmission servi en corps 4xl avec sa cible (§9.0 bis), « relevée 3 fois » sur chaque tradition, « a engendré 2 récits » dans l'index des récits. La §5.2 demande la chaîne de transmission **sur le récit** — « né de X, a engendré Y », des liens qu'on suit ; réduite à un nombre dans une liste triée, la même information devient une colonne de classement. `tests/retrait.test.ts` applique la règle à toutes les pages, et aux phrases que les services écrivent en base.
+- Ne pas afficher l'inactivité. **Ajouté**, et pour la même raison : la règle existait pour le fil (« personne n'a parlé depuis trois semaines » transforme un rythme familial normal en reproche) et n'en était jamais sortie. Les traditions affichaient « dernière fois le 15 octobre 2024 » — sur une tradition annuelle, onze mois sur douze, cette ligne dit à une famille qu'elle est en retard sur elle-même. `activationCount` et `lastActivatedAt` restent en base : le Trigger Model en a besoin. Ils ne sont plus montrés — ce sont des rouages, pas un bilan. Seule exception, nommée : le « Rappel patrimonial », où le produit s'accuse lui-même (Annexe A point 5).
+- Ne pas faire porter à la famille la responsabilité d'une décision du produit. `Tradition.sleepReason` valait « Non relevée depuis 3 ans » — la §6.2 interdit précisément cette tournure. Le sujet de la phrase est désormais l'application, qui cesse de proposer et le dit. Comme cette phrase est **stockée**, corriger le code ne suffisait pas : la migration `20260805090000_retrait` réécrit les lignes existantes, et ne touche pas les raisons saisies à la main par un membre — ce sont ses mots (§2.1).
 - Ne pas stocker de données externes (GPS, contacts, calendrier) **captées par le produit**. Un fichier apporté, relu et coché par une personne relève de la saisie utilisateur : voir l'amendement de la §3.1.
 
 ---
