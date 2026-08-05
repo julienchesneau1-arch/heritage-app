@@ -7,6 +7,123 @@ et le plus simple à tenir.
 
 ---
 
+## ⚠ Cohabiter avec une application déjà en ligne
+
+**Le VPS visé héberge déjà ASSEMBLAGES / savore. Il doit rester en ligne.**
+C'est la contrainte qui gouverne tout ce document, et elle a demandé de
+changer le kit de déploiement, pas seulement d'écrire une consigne.
+
+### Où était le danger
+
+Pas dans une commande de suppression : dans le `docker-compose.yml`. Il
+réclamait les ports **80 et 443** en dur. Sur une machine où un proxy les
+occupe déjà, deux issues, toutes deux mauvaises : le démarrage échoue, ou —
+au redémarrage suivant de l'autre proxy — Héritage prend sa place et le site
+existant tombe. C'est le mode de panne normal de deux piles qui s'ignorent.
+
+### Ce qui rend la collision impossible
+
+| Garde-fou | Ce qu'il empêche |
+|---|---|
+| `name: heritage` dans le compose | Le nom du projet ne dépend plus du dossier. Conteneurs, volumes et réseau portent tous le préfixe `heritage_`. `docker compose` ne voit **que** les siens. |
+| `ports: 127.0.0.1:8081:3000` | L'application n'écoute que sur la boucle locale. Aucun port public réclamé, aucune règle de pare-feu à changer. Sans le préfixe `127.0.0.1:`, Docker ouvrirait le port sur toutes les interfaces **et percerait UFW au passage**. |
+| Le proxy Caddy est sous `profiles: ['autonome']` | `docker compose up -d` ne le démarre **jamais**. Il faut l'écrire en toutes lettres, et cette commande ne vaut que pour une machine vierge. |
+| `./preflight.sh` | Lit l'état de la machine sans rien modifier, et refuse de donner son feu vert si un port est pris — ou s'il n'a pas pu vérifier. |
+
+### La marche à suivre sur ce VPS
+
+```bash
+# 1. Un dossier À PART. Jamais dans celui d'ASSEMBLAGES.
+sudo mkdir -p /opt/heritage && sudo chown "$USER" /opt/heritage
+git clone <url-du-dépôt> /opt/heritage && cd /opt/heritage
+
+# 2. Les secrets (voir l'étape 3 plus bas), puis la vérification.
+./preflight.sh          # doit finir par « PRÊT — avec cohabitation »
+
+# 3. Démarrer — SANS le profil autonome.
+docker compose up -d --build
+curl http://127.0.0.1:8081/api/sante        # {"statut":"ok"}
+```
+
+À ce stade Héritage tourne et **n'est joignable que depuis la machine**.
+ASSEMBLAGES n'a rien vu passer. Reste à lui ajouter une porte d'entrée.
+
+### Brancher le proxy déjà en place
+
+**Si c'est nginx sur l'hôte** — un fichier neuf, on ne touche à aucun autre :
+
+```bash
+sudo tee /etc/nginx/sites-available/heritage >/dev/null <<'EOF'
+server {
+    server_name memoire.example.fr;
+    client_max_body_size 100M;          # les photos et les enregistrements
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+sudo ln -s /etc/nginx/sites-available/heritage /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx   # reload, pas restart
+sudo certbot --nginx -d memoire.example.fr     # n'affecte que ce vhost
+```
+
+`nginx -t` avant le rechargement : une erreur de syntaxe dans un fichier
+neuf ferait échouer le rechargement **de toute la configuration**, donc
+d'ASSEMBLAGES aussi. `reload` et non `restart` : les connexions en cours ne
+sont pas coupées.
+
+**Si c'est Caddy sur l'hôte** — une entrée ajoutée au `/etc/caddy/Caddyfile`
+existant, sans toucher aux blocs déjà présents :
+
+```caddyfile
+memoire.example.fr {
+	encode gzip
+	reverse_proxy 127.0.0.1:8081
+}
+```
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+```
+
+**Si le proxy d'ASSEMBLAGES tourne dans Docker**, il ne joindra pas
+`127.0.0.1` de l'hôte. Rattacher Héritage à son réseau, sans le modifier —
+un fichier d'appoint, que Compose lit en plus du principal :
+
+```yaml
+# docker-compose.override.yml — non versionné, propre à ce serveur
+services:
+  app:
+    networks: [default, partage]
+networks:
+  partage:
+    external: true
+    name: <nom-du-réseau-d-assemblages>    # docker network ls
+```
+
+Le proxy vise alors `http://heritage-app-1:3000`. `external: true` est
+essentiel : il dit à Compose d'**utiliser** ce réseau, jamais de le créer ni
+de le supprimer.
+
+### Les commandes à ne jamais lancer sur ce serveur
+
+```bash
+docker system prune -a        # détruit les images d'ASSEMBLAGES aussi
+docker volume prune           # DÉTRUIT DES DONNÉES, toutes applications confondues
+docker compose down -v        # -v supprime les volumes du projet courant
+docker compose down           # depuis le mauvais dossier : arrête l'autre app
+```
+
+Pour arrêter Héritage et lui seul, depuis `/opt/heritage` :
+`docker compose stop`. Le `name: heritage` garantit la portée, mais la
+règle la plus sûre reste de vérifier `pwd` avant toute commande Docker.
+
+---
+
 ## Quel hébergement Hostinger
 
 > **L'hébergement mutualisé ne convient pas.** Il exécute PHP derrière Apache
@@ -54,7 +171,12 @@ casse. C'est délibéré, et c'est ce qui permet de tenir le coût près de zér
 
 ## Installation
 
-### 1. Préparer le serveur
+> Cette section décrit un **serveur neuf**. Sur le VPS qui héberge déjà
+> ASSEMBLAGES, sauter l'étape 1 en entier — le serveur est préparé, SSH est
+> configuré, le pare-feu est en place — et suivre « Cohabiter » ci-dessus
+> pour les étapes 4 et suivantes.
+
+### 1. Préparer le serveur — machine neuve uniquement
 
 ```bash
 ssh root@<ip-du-vps>
@@ -64,6 +186,11 @@ sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/;s/^#\?PasswordAuthentication
 systemctl restart ssh
 ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
 ```
+
+> **Ne pas rejouer ces lignes sur le VPS d'ASSEMBLAGES.** `sed` sur
+> `sshd_config` et `ufw --force enable` réécrivent une configuration qui
+> fonctionne déjà ; au mieux c'est redondant, au pire une session SSH se
+> ferme derrière vous.
 
 ### 2. Pointer le domaine
 
@@ -95,15 +222,35 @@ chmod 600 .env
 > journalise la cause exacte et **rend 500 sur toutes les requêtes**. Le
 > serveur démarre, mais il ne sert rien.
 
+Ajouter `PORT_LOCAL=8081` à ce `.env` si le port par défaut est déjà pris —
+`./preflight.sh` le dit.
+
 ### 4. Démarrer
+
+```bash
+./preflight.sh                 # d'abord : il ne modifie rien, et il peut dire STOP
+```
+
+**Sur un serveur qui héberge déjà autre chose** — le cas de ce VPS :
 
 ```bash
 docker compose up -d --build
 docker compose logs -f app     # les migrations s'appliquent au démarrage
+curl http://127.0.0.1:8081/api/sante        # {"statut":"ok"}
 ```
 
-Vérifier : `curl https://<votre-domaine>/api/sante` doit rendre
-`{"statut":"ok"}`. Tout autre résultat est décrit dans la réponse.
+Puis brancher le proxy en place (section « Cohabiter »). L'application
+n'est pas encore joignable de l'extérieur, et c'est normal.
+
+**Sur une machine vierge**, et seulement là, Héritage peut porter son propre
+proxy TLS :
+
+```bash
+docker compose --profile autonome up -d --build
+curl https://<votre-domaine>/api/sante
+```
+
+Tout autre résultat que `{"statut":"ok"}` est décrit dans la réponse.
 
 ### 5. Fonder la première famille
 
@@ -161,6 +308,11 @@ peut partir avec.
 ```bash
 cd /opt/heritage && git pull && docker compose up -d --build
 ```
+
+`cd /opt/heritage` d'abord, toujours : `docker compose` agit sur le projet
+du répertoire courant. Le `name: heritage` du compose limite la portée aux
+conteneurs d'Héritage, mais la vérification du `pwd` reste la garantie qui
+ne dépend de rien.
 
 Les migrations Prisma s'appliquent au démarrage du conteneur, avant que le
 serveur n'accepte une requête.

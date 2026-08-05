@@ -8,6 +8,40 @@
 # Redis est absent volontairement : il ne sert qu'à partager les compteurs
 # entre plusieurs instances. Avec une seule, le store mémoire suffit et
 # l'application le dit au démarrage.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# COHABITATION — ce fichier ne peut pas prendre la place d'une autre app.
+# ─────────────────────────────────────────────────────────────────────────
+#
+# Ce VPS héberge déjà une application en production. La version précédente
+# de ce fichier réclamait les ports 80 et 443 en dur : sur une machine où un
+# proxy les occupe déjà, `docker compose up` aurait soit échoué, soit — au
+# redémarrage suivant de l'autre proxy — pris sa place et mis le site
+# existant hors ligne. Ce n'est pas une hypothèse, c'est le mode de panne
+# normal de deux piles qui s'ignorent.
+#
+# Trois garde-fous, dans l'ordre où ils agissent :
+#
+#  1. `name: heritage` fige le nom du projet. Sans lui, Compose le déduit du
+#     nom du DOSSIER : conteneurs, volumes et réseau changeraient de nom
+#     selon l'endroit où le dépôt a été cloné, et un `docker compose down`
+#     lancé depuis le mauvais répertoire deviendrait imprévisible. Ici, tout
+#     porte le préfixe `heritage_` et rien d'autre n'y répond.
+#
+#  2. Par défaut, l'application n'écoute que sur `127.0.0.1`. Elle n'est
+#     joignable QUE depuis la machine elle-même — donc par le proxy qui
+#     tourne déjà. Aucun port public n'est réclamé, aucune règle de
+#     pare-feu à changer, et rien à retirer à l'application existante.
+#
+#  3. Le proxy Caddy de ce fichier est derrière un PROFIL. Il ne démarre
+#     jamais sans qu'on le demande explicitement
+#     (`docker compose --profile autonome up -d`), et cette commande n'a de
+#     sens que sur une machine vierge. Sur ce VPS-ci : ne pas l'utiliser.
+#
+# `./preflight.sh` vérifie tout cela avant de démarrer quoi que ce soit, et
+# refuse de continuer si les ports sont déjà pris.
+
+name: heritage
 
 services:
   db:
@@ -46,8 +80,12 @@ services:
     volumes:
       # Les photos et les enregistrements survivent au redéploiement.
       - archives:/data
-    expose:
-      - '3000'
+    # Sur la BOUCLE LOCALE uniquement. `127.0.0.1:` en tête n'est pas
+    # décoratif : sans ce préfixe, Docker ouvre le port sur toutes les
+    # interfaces ET perce le pare-feu au passage. Ici, seul le proxy déjà
+    # installé sur la machine peut joindre l'application.
+    ports:
+      - '127.0.0.1:${PORT_LOCAL:-8081}:3000'
     # Next journalise l'erreur de secret manquant au démarrage mais continue
     # de servir. Sans cette sonde, un déploiement dont la clé manque serait
     # déclaré sain et n'échouerait qu'à la première visite d'une famille.
@@ -59,7 +97,15 @@ services:
       start_period: 40s
 
   # TLS automatique, sans configuration ni renouvellement à surveiller.
+  #
+  # ⚠ POUR UNE MACHINE VIERGE SEULEMENT. Ce service réclame les ports 80 et
+  # 443 ; sur un VPS qui sert déjà un site, il entrerait en conflit avec le
+  # proxy en place. Le profil `autonome` le met hors du chemin par défaut :
+  # `docker compose up -d` ne le démarre pas, et il faut l'écrire en toutes
+  # lettres pour l'obtenir. Sur un serveur déjà occupé, la bonne réponse est
+  # d'ajouter un vhost au proxy existant — voir DEPLOIEMENT.md.
   proxy:
+    profiles: ['autonome']
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
