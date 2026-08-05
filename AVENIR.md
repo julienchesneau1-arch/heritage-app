@@ -238,20 +238,30 @@ C'est la version la plus sobre possible, et c'est la seule que la
 Constitution autorise. Un produit de mémoire qui n'a rien pour la mort n'a
 pas fini de répondre à sa propre question.
 
-### 4. La succession du lien
+### 4. La succession du lien — correction de ce que j'ai écrit plus haut
 
-**Le constat.** `Family.tokenVersion` permet de faire tourner le lien
-familial. Mais qui le fait tourner dans trente ans ? Le produit promet
-cinquante ans de mémoire et n'a aucune réponse à « le fondateur n'est plus
-là ».
+**Ce que j'avais écrit, et qui était faux.** J'avais annoncé que le produit
+n'a « aucune réponse à *le fondateur n'est plus là* », et proposé de désigner
+un second porteur. J'ai vérifié dans le code avant de vous le dire de vive
+voix : **le mécanisme existe déjà.** `rotateFamilyLink()` exige une identité
+vérifiée — c'est-à-dire un lien personnel — et **tout** membre qui en détient
+un peut faire tourner le lien familial. Il n'y a pas un porteur, il y en a
+autant que de liens personnels distribués.
 
-**Ce que ce serait.** Un second porteur désigné, avec identité vérifiée, qui
-peut faire tourner le lien et distribuer les nouveaux. Deux clés au lieu
-d'une, et la famille sait où sont les deux.
+**Ce qui manque réellement, et c'est plus petit.** Personne ne le sait. La
+page Famille présente le lien personnel comme ce qui « autorise à supprimer
+ses propres récits ». Elle ne dit nulle part que **distribuer les liens
+personnels EST le plan de succession** — que tant qu'une seule personne en a
+un, la famille a un point de défaillance unique, et qu'à trois elle n'en a
+plus.
 
-**Pourquoi.** §4.1 assume qu'il n'y a pas de mot de passe : le lien **est**
-le secret. Un secret sans succession est un secret perdu. Ce n'est pas une
-fonctionnalité, c'est la condition pour que la promesse tienne.
+**Ce que je ferais donc.** Une phrase, sur `/famille`, à côté de la liste des
+liens. Pas une fonctionnalité : une information qui manque.
+
+**Pourquoi ça compte quand même.** §4.1 assume qu'il n'y a pas de mot de
+passe : le lien **est** le secret. Un secret dont une seule personne connaît
+la mécanique de renouvellement est un secret perdu le jour où cette personne
+n'est plus là. Le code répond déjà ; l'interface, non.
 
 ### 5. Le livre, décliné
 
