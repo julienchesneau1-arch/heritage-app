@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiOk } from '@/lib/errors';
 import { authorizeFamily } from '@/lib/session';
-import { clientIp, LIMITS, rateLimit } from '@/lib/rate-limit';
+import { LIMITS, rateLimit, limiteParIp } from '@/lib/rate-limit';
 import { TriggerModelService } from '@/services/trigger-model.service';
 import { PasseurService } from '@/services/passeur.service';
 import { prisma } from '@/lib/prisma';
@@ -13,11 +13,13 @@ const passeur = new PasseurService();
 
 /** GET /api/family/:id/home → { signal, passeur } — au plus un de chaque (§5.1). */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  // §8.2 : 100 req/min par IP, sur TOUTES les routes de l’API.
+  const trop = await limiteParIp(request);
+  if (trop) return trop;
+
   const familyId = params.id;
   if (!(await authorizeFamily(request, familyId))) return apiError('FORBIDDEN');
 
-  const ipLimit = await rateLimit(`ip:${clientIp(request)}`, LIMITS.perIp.limit, LIMITS.perIp.window);
-  if (!ipLimit.allowed) return apiError('RATE_LIMITED');
 
   const memberId = request.nextUrl.searchParams.get('memberId');
   if (!memberId) return apiError('INVALID_INPUT', 'memberId requis');

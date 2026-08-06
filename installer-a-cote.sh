@@ -128,6 +128,11 @@ ajouter_si_absent FAMILY_TOKEN_SECRET "$(openssl rand -hex 32)"
 ajouter_si_absent TRANSCRIPTION_WORKER_SECRET "$(openssl rand -hex 24)"
 # Ceux-ci ne sont pas des secrets : « généré » serait faux.
 ajouter_si_absent PORT_LOCAL "$PORT_LOCAL" 'enregistré'
+# L'application n'écoute que sur 127.0.0.1 et nginx est devant : les
+# en-têtes d'adresse deviennent dignes de confiance, et la limite de débit
+# de la §8.2 peut enfin distinguer les visiteurs. Sans ce réglage, elle les
+# compte tous ensemble — plus strict, jamais plus permissif.
+ajouter_si_absent TRUST_PROXY 1 'enregistré'
 
 # Le domaine, lui, DOIT suivre l'argument : après un premier essai avec un
 # mauvais nom, `ajouter_si_absent` aurait gardé le mauvais indéfiniment.

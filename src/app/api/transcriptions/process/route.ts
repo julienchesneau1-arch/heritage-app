@@ -1,3 +1,4 @@
+import { limiteParIp } from '@/lib/rate-limit';
 import { NextRequest } from 'next/server';
 import { transcriptionService } from '@/services/transcription.service';
 import { apiError, apiOk } from '@/lib/errors';
@@ -16,6 +17,10 @@ export const maxDuration = 300;
  * Protégée par un secret partagé : cette route déclenche des appels facturés.
  */
 export async function POST(request: NextRequest) {
+  // §8.2 : 100 req/min par IP, sur TOUTES les routes de l’API.
+  const trop = await limiteParIp(request);
+  if (trop) return trop;
+
   const secret = process.env.TRANSCRIPTION_WORKER_SECRET;
   if (!secret) return apiError('FORBIDDEN', 'TRANSCRIPTION_WORKER_SECRET non configuré.');
 

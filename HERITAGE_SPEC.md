@@ -789,7 +789,24 @@ Objectif V1 : > 20 %.
 | — | Narrateur ≠ scribe (§2.3), stockage et affichage des archives (§2.4), taille du texte | fait |
 | — | Onboarding (§2.4), correction (§2.5), sourdine par membre (§2.6), recherche (§2.7), pilote S3 (§2.8), identité (§4.1), graphe centré (§5.3), restauration, CI | fait |
 | — | Transcription vérifiée par l'humain (§3.5) | fait |
-| 7 | Audit axe-core automatisé | ouvert |
+| 7 | Audit axe-core automatisé | fait |
+
+### 10.1 Ce que la roadmap ne disait pas
+
+Deux lignes de la checklist de l'Annexe C étaient fausses, chacune dans un
+sens différent, et c'est la seconde qui coûte le plus cher :
+
+- « Audit axe-core automatisé » était **décoché alors que c'était fait**.
+  Une case vide finit par être refaite, c'est le moindre mal.
+- « Rate limiting actif sur les routes API » était **cochée alors que deux
+  routes sur dix-neuf l'appliquaient**. Une case cochée qui déborde de ce
+  qu'elle recouvre est bien pire : on ne revient jamais regarder une ligne
+  déjà cochée.
+
+Et le limiteur lui-même ne limitait rien : `clientIp` lisait la valeur de
+gauche de `X-Forwarded-For`, celle que le client envoie. Mesuré — 120
+requêtes avec une adresse inventée à chaque fois, 120 servies. La §8.2
+était appliquée à la lettre, et contournable par une ligne d'en-tête.
 
 ---
 
@@ -826,10 +843,10 @@ lettre-non-envoyee
 - [x] Schéma Prisma validé (`prisma validate`)
 - [x] Migrations testées sur base vierge
 - [x] Seed « Famille Martin » chargeable
-- [x] Rate limiting actif sur les routes API
+- [x] Rate limiting actif sur **toutes** les routes API (une seule exemption nommée : `/api/sante`, la sonde de l'orchestrateur), et l'adresse du client n'est crue que derrière un proxy déclaré (`TRUST_PROXY`)
 - [x] Filtre émotionnel actif sur les sorties LLM
 - [x] Export JSON testé
-- [x] Isolation cross-family vérifiée (403)
+- [x] Isolation cross-family vérifiée en lecture ET en écriture (`outils/etancheite.mjs`, deux familles réelles)
 - [x] Pas de données personnelles sensibles en base
 - [x] Variables d'environnement documentées (`.env.example`)
 - [x] README d'installation < 10 minutes
@@ -840,7 +857,7 @@ lettre-non-envoyee
 - [x] Identité vérifiée exigée pour supprimer ; liens révocables individuellement
 - [x] Restauration d'un export
 - [x] Intégration continue (`.github/workflows/ci.yml`)
-- [ ] Accessibilité : audit axe-core automatisé
+- [x] Accessibilité : audit axe-core automatisé (`outils/accessibilite.mjs`, 18 pages, 0 violation) et navigation au clavier pressée pour de vrai (`outils/clavier.mjs`)
 - [x] Upload binaire des archives, servi sous authentification
 - [x] Taille du texte réglable par appareil
 

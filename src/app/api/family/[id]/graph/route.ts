@@ -1,3 +1,4 @@
+import { limiteParIp } from '@/lib/rate-limit';
 import { NextRequest } from 'next/server';
 import { apiError, apiOk } from '@/lib/errors';
 import { authorizeFamily } from '@/lib/session';
@@ -11,6 +12,10 @@ export const dynamic = 'force-dynamic';
  * Aucun lien inféré : le graphe ne montre que ce que la famille a dit.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  // §8.2 : 100 req/min par IP, sur TOUTES les routes de l’API.
+  const trop = await limiteParIp(request);
+  if (trop) return trop;
+
   if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const [entities, stories, passages] = await Promise.all([

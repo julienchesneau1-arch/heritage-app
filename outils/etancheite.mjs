@@ -37,6 +37,29 @@ const sign = (p) => createHmac('sha256', process.env.FAMILY_TOKEN_SECRET).update
 const prisma = new PrismaClient();
 
 const resultats = [];
+/**
+ * Toutes les requêtes de ce fichier partent de la MÊME IP, et la §8.2
+ * limite à 100 par minute. Sans compter ce qu'on a déjà dépensé, la rafale
+ * de la fin donne un chiffre incompréhensible — et elle a fini par
+ * empoisonner le dernier contrôle du fichier, qui a reçu un 429.
+ */
+let requetesEmises = 0;
+
+/**
+ * Une adresse propre à cette exécution.
+ *
+ * Sans elle, toutes les requêtes du fichier tombent dans le même seau que
+ * celles de l'exécution précédente : au deuxième lancement dans la même
+ * minute, la moitié des contrôles recevaient un 429 et se déclaraient en
+ * échec. Un outil qui ne peut pas être relancé deux fois de suite finit
+ * par ne plus être lancé du tout.
+ *
+ * `X-Real-IP` n'est cru que si `TRUST_PROXY=1` — c'est tout l'objet de la
+ * correction de `clientIp`. Sans ce réglage, le seau reste commun et la
+ * section 8 le dit au lieu de rendre un chiffre faux.
+ */
+const MON_ADRESSE = `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
+const ENTETE_ADRESSE = { 'X-Real-IP': MON_ADRESSE };
 function verifier(nom, condition, detail = '') {
   resultats.push([nom, condition]);
   console.log(`${condition ? '✓' : '✗'} ${nom}${detail ? ` — ${detail}` : ''}`);
@@ -106,7 +129,11 @@ try {
     let corps = '';
     let statut = 0;
     try {
-      const reponse = await fetch(BASE + url, { headers: { Cookie: COOKIE_A }, redirect: 'manual' });
+      requetesEmises += 1;
+      const reponse = await fetch(BASE + url, {
+        headers: { Cookie: COOKIE_A, ...ENTETE_ADRESSE },
+        redirect: 'manual',
+      });
       statut = reponse.status;
       corps = await reponse.text();
     } catch (error) {
@@ -156,9 +183,10 @@ try {
   const muter = async (nom, url, methode, corpsEnvoye) => {
     let statut = 0;
     try {
+      requetesEmises += 1;
       const reponse = await fetch(BASE + url, {
         method: methode,
-        headers: { Cookie: COOKIE_A, 'Content-Type': 'application/json' },
+        headers: { Cookie: COOKIE_A, 'Content-Type': 'application/json', ...ENTETE_ADRESSE },
         body: corpsEnvoye ? JSON.stringify(corpsEnvoye) : undefined,
         redirect: 'manual',
       });
@@ -250,7 +278,8 @@ try {
     let corps = '';
     let statut = 0;
     try {
-      const reponse = await fetch(BASE + url, { redirect: 'manual' });
+      requetesEmises += 1;
+      const reponse = await fetch(BASE + url, { headers: ENTETE_ADRESSE, redirect: 'manual' });
       statut = reponse.status;
       corps = await reponse.text();
     } catch (error) {
@@ -259,11 +288,11 @@ try {
     verifier(`anonyme : ${nom}`, !corps.includes(SECRET_B), `HTTP ${statut}`);
   }
 
-  console.log('\n── 7. Le contrôle vérifie-t-il quelque chose ? ──');
+  console.log('\n── 8. Le contrôle vérifie-t-il quelque chose ? ──');
   // Sans cette ligne, un `fetch` cassé rendrait tout vert : chaque réponse
   // serait vide, donc sans secret, donc « étanche ».
   const chezSoi = await fetch(`${BASE}/api/family/${B.famille.id}/export`, {
-    headers: { Cookie: cookieDe(B.famille, B.membre) },
+    headers: { Cookie: cookieDe(B.famille, B.membre), ...ENTETE_ADRESSE },
   });
   const contenu = await chezSoi.text();
   verifier(
@@ -271,6 +300,80 @@ try {
     chezSoi.status === 200 && contenu.includes(SECRET_B),
     `HTTP ${chezSoi.status}, ${contenu.length} octets`,
   );
+
+  // ── 8. LA LIMITE PAR IP (§8.2), EN DERNIER ──
+  //
+  // Elle vient après tout le reste : la rafale sature le quota, et le
+  // contrôle placé derrière recevait un 429 au lieu de sa réponse. Un
+  // contrôle qui casse le suivant ne mesure plus rien.
+  //
+  // Chaque exécution prend une adresse à elle, sans quoi deux lancements
+  // dans la même minute se marcheraient dessus — c'est exactement ce qui
+  // s'est produit au premier essai, et j'ai cru un instant que la limite
+  // était cassée.
+  //
+  // Cela suppose `TRUST_PROXY=1` : sans lui, l'application ignore
+  // délibérément les en-têtes d'adresse (voir `clientIp`). On le DIT plutôt
+  // que de rendre un chiffre incompréhensible.
+  {
+    const COOKIE_B = cookieDe(B.famille, B.membre);
+    // Distincte de celle de la campagne : les 40 requêtes déjà émises ne
+    // doivent pas décaler la bascule qu'on cherche à situer.
+    const monAdresse = `198.51.100.${Math.floor(Math.random() * 250) + 1}9`;
+    const frapper = async (entetes) => {
+      const reponse = await fetch(`${BASE}/api/family/${B.famille.id}/stories`, {
+        headers: { Cookie: COOKIE_B, ...entetes },
+        redirect: 'manual',
+      });
+      await reponse.arrayBuffer();
+      return reponse.status;
+    };
+
+    const distingue = (await frapper({ 'X-Real-IP': monAdresse })) === 200;
+    if (!distingue) {
+      console.log('↷ limite par IP — sautée : la première requête ne passe pas');
+    } else {
+      let servis = 1;
+      let refuses = 0;
+      for (let i = 0; i < 139; i++) {
+        const code = await frapper({ 'X-Real-IP': monAdresse });
+        if (code === 200) servis += 1;
+        if (code === 429) refuses += 1;
+      }
+      const applique = refuses > 0;
+      verifier(
+        'au-delà de la limite, la route répond 429',
+        applique,
+        applique ? `${servis} servies, ${refuses} refusées` : 'aucun refus — TRUST_PROXY est-il posé ?',
+      );
+      if (applique) {
+        verifier(
+          'la bascule tombe sur les 100 requêtes annoncées par la §8.2',
+          servis >= 95 && servis <= 105,
+          `${servis} servies`,
+        );
+
+        // ── LE CONTOURNEMENT QUI MARCHAIT ──
+        //
+        // `clientIp` lisait `X-Forwarded-For` et prenait la valeur de
+        // GAUCHE, c'est-à-dire celle que le CLIENT envoie. Mesuré avant
+        // correction : 120 requêtes avec une adresse inventée à chaque
+        // fois, 120 servies. La limite était appliquée à la lettre et ne
+        // protégeait de rien.
+        let servisAvecFaux = 0;
+        for (let i = 0; i < 130; i++) {
+          const faux = `10.0.0.${Math.floor(Math.random() * 250)}`;
+          if ((await frapper({ 'X-Forwarded-For': faux })) === 200) servisAvecFaux += 1;
+        }
+        verifier(
+          'inventer son adresse ne rend pas la limite inopérante',
+          servisAvecFaux <= 105,
+          `${servisAvecFaux} servies sur 130 avec une adresse différente à chaque appel`,
+        );
+      }
+    }
+  }
+
 } finally {
   for (const f of [A.famille.id, B.famille.id]) {
     await prisma.$transaction([

@@ -8,5 +8,11 @@
 		-Server
 	}
 
-	reverse_proxy app:3000
+	reverse_proxy app:3000 {
+		# `X-Real-IP` est l'en-tête que l'application exige pour distinguer les
+		# visiteurs (§8.2). Caddy ne le pose pas de lui-même ; sans cette
+		# ligne, `TRUST_PROXY=1` n'aurait aucun effet et tout le monde
+		# partagerait un seul compteur.
+		header_up X-Real-IP {remote_host}
+	}
 }

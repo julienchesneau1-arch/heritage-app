@@ -1,3 +1,4 @@
+import { limiteParIp } from '@/lib/rate-limit';
 import { NextRequest } from 'next/server';
 import { apiError, apiOk } from '@/lib/errors';
 import { authorizeFamily } from '@/lib/session';
@@ -9,6 +10,10 @@ export const dynamic = 'force-dynamic';
 
 /** GET — les fils de la famille, du plus récemment nourri au plus ancien. */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  // §8.2 : 100 req/min par IP, sur TOUTES les routes de l’API.
+  const trop = await limiteParIp(request);
+  if (trop) return trop;
+
   if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const take = Math.min(100, Number(request.nextUrl.searchParams.get('take') ?? 50) || 50);
@@ -36,6 +41,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
  * du produit tient dans ce contrat.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  // §8.2 : 100 req/min par IP, sur TOUTES les routes de l’API.
+  const trop = await limiteParIp(request);
+  if (trop) return trop;
+
   if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const { data, errors } = parseOrNull(openThreadSchema, await request.json().catch(() => null));

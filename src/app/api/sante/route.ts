@@ -18,7 +18,23 @@ export const dynamic = 'force-dynamic';
  * Elle ne divulgue rien : ni version, ni nom de famille, ni compte de
  * récits. Cette route est publique.
  */
+/*
+ * ── LA SEULE ROUTE QUI N'EST PAS LIMITÉE, ET POURQUOI ──
+ *
+ * La §8.2 demande 100 req/min par IP sur les routes de l'API. Celle-ci en
+ * est exemptée délibérément : c'est la sonde que l'orchestrateur interroge,
+ * et il l'interroge depuis une IP unique, sans arrêt. La limiter reviendrait
+ * à lui répondre 429 aux heures chargées — c'est-à-dire à lui faire
+ * redémarrer un conteneur en bonne santé au moment précis où il sert le
+ * plus de monde. Le remède serait la panne.
+ *
+ * Elle ne coûte rien à servir et ne divulgue rien : deux conditions sans
+ * lesquelles cette exemption ne tiendrait pas.
+ * `tests/rate-limit.test.ts` la nomme comme exception, pour qu'elle reste
+ * un choix et non un oubli.
+ */
 export async function GET() {
+
   try {
     assertProductionSecrets();
   } catch (error) {

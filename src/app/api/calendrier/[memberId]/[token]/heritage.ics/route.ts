@@ -1,3 +1,4 @@
+import { limiteParIp } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { verifyMemberToken } from '@/lib/session';
 import { familyEvents, toIcs } from '@/lib/calendar';
@@ -17,9 +18,13 @@ export const dynamic = 'force-dynamic';
  * est recopié dans Google ou Apple, et ce qu'on y met, on le leur donne.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { memberId: string; token: string } },
 ) {
+  // §8.2 : 100 req/min par IP, sur TOUTES les routes de l’API.
+  const trop = await limiteParIp(request);
+  if (trop) return trop;
+
   const member = await prisma.member.findUnique({
     where: { id: params.memberId },
     select: { id: true, familyId: true, isDeleted: true, tokenVersion: true },

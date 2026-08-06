@@ -1,3 +1,4 @@
+import { limiteParIp } from '@/lib/rate-limit';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { apiError, apiOk } from '@/lib/errors';
@@ -17,6 +18,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; traditionId: string } },
 ) {
+  // §8.2 : 100 req/min par IP, sur TOUTES les routes de l’API.
+  const trop = await limiteParIp(request);
+  if (trop) return trop;
+
   if (!(await authorizeFamily(request, params.id))) return apiError('FORBIDDEN');
 
   const { data, errors } = parseOrNull(patchSchema, await request.json().catch(() => null));

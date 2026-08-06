@@ -54,6 +54,11 @@ démarré.
 - **Aucune page d'erreur ni de 404 en français.** Base coupée, la famille
   lisait « Application error: a server-side exception has occurred », sans
   un mot sur ce qu'il advenait de ses récits.
+- **La limite de débit ne limitait rien.** `clientIp` lisait la valeur de
+  gauche de `X-Forwarded-For` — celle que le client envoie. 120 requêtes
+  avec une adresse inventée à chaque fois : 120 servies, sur une limite
+  annoncée à 100 par minute. Et elle n'était posée que sur 2 routes sur 19,
+  pendant que la checklist du document cochait la ligne comme faite.
 - `00-premier-jour.webp` **montrait le sélecteur d'identité** : la capture
   était prise sans cookie de membre, et `/` redirige alors vers `/qui`.
 
