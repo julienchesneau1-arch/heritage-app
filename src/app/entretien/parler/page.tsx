@@ -114,6 +114,12 @@ export default async function ParlerPage({
         <input type="hidden" name="relecteurId" value={relecteur.id} />
         <input type="hidden" name="question" value={question.texte} />
         <input type="hidden" name="passees" value={passees.join(',')} />
+        {/* Invisible à l'œil, bien réel pour un lecteur d'écran : un champ sans
+            nom s'annonce « champ de fichier », et rien d'autre. `sr-only` cache
+            à la vue, pas à l'assistance. */}
+        <label htmlFor="audio" className="sr-only">
+          Enregistrement de votre réponse
+        </label>
         <input id="audio" type="file" name="audio" accept="audio/*" className="sr-only" />
 
         <AudioRecorder inputId="audio" />

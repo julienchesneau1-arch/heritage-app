@@ -183,11 +183,17 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
         <p className="justification">Aucun récit actif ne mentionne cette entité.</p>
       ) : (
         <div className="overflow-x-auto">
+          {/* `role="img"` déclarait l'image ATOMIQUE alors qu'elle contient
+              des liens : un lecteur d'écran annonçait « image », puis
+              trouvait des contrôles à l'intérieur — axe-core le nomme
+              `nested-interactive`, et c'est un vrai piège de navigation.
+              On retire le rôle : les liens redeviennent ce qu'ils sont, et
+              le résumé passe dans un texte visible juste dessous, lisible
+              par tout le monde plutôt que par les seuls lecteurs d'écran. */}
           <svg
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
             className="h-auto w-full max-w-full"
-            role="img"
-            aria-label={`${selected.name} : ${stories.length} récits affichés sur ${storiesTotal}, ${neighbourList.length} éléments liés.`}
+            aria-labelledby="resume-graphe"
           >
             {stories.map((story) => {
               const position = storyPositions.get(story.id)!;
@@ -275,6 +281,15 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
           </svg>
         </div>
       )}
+
+      {/* Le résumé que portait `aria-label` sur le SVG. Visible pour tout le
+          monde : ce qu'on jugeait utile de dire à un lecteur d'écran l'est
+          tout autant pour qui regarde une image de vingt points. */}
+      <p id="resume-graphe" className="justification">
+        {selected.name} : {stories.length} récit{stories.length > 1 ? 's' : ''} affiché
+        {stories.length > 1 ? 's' : ''} sur {storiesTotal}, {neighbourList.length} élément
+        {neighbourList.length > 1 ? 's' : ''} lié{neighbourList.length > 1 ? 's' : ''}.
+      </p>
 
       <p className="justification">
         Bleu : personne · marron : lieu · orange : objet · rouge : récit. Les traits sont des liens

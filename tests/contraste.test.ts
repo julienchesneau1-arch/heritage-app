@@ -121,3 +121,27 @@ describe('Les polices sont servies par l’application, jamais par un tiers', ()
     for (const bloc of blocs) expect(bloc).toMatch(/font-display: swap/);
   });
 });
+
+describe('Aucune opacité ne vient défaire un contraste mesuré', () => {
+  /**
+   * Le défaut trouvé par axe-core, et que ce fichier ne voyait pas.
+   *
+   * `text-muted` mesure 4,84:1 sur crème. La barre de navigation lui
+   * appliquait `opacity-80` : à l'écran, 3,28:1. Je mesurais le JETON,
+   * l'écran affichait le jeton MULTIPLIÉ par une opacité — c'est
+   * exactement le piège que j'avais reproché à la maquette.
+   *
+   * Une couleur pleine, jamais une opacité : la rampe en compte neuf, il
+   * y en a toujours une qui convient.
+   */
+  const SOURCES = ['src/components/Nav.tsx', 'src/app/page.tsx', 'src/app/layout.tsx'];
+
+  it.each(SOURCES)('%s n’atténue aucun texte par opacité', (chemin) => {
+    const code = readFileSync(join(process.cwd(), chemin), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '');
+    // `opacity-*` sur du texte. Les formes décoratives, elles, ont le droit
+    // — elles ne portent aucun mot (`/50`, `/60` sur un fond).
+    expect(code).not.toMatch(/\bopacity-(?!100\b)\d{1,2}\b/);
+  });
+});

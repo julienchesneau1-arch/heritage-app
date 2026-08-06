@@ -72,10 +72,8 @@ export function Nav({
         // Lu par les lecteurs d'écran, et souligné pour tout le monde :
         // la couleur seule ne dirait rien à qui ne la perçoit pas.
         aria-current={current ? 'page' : undefined}
-        className={`py-2 font-sans text-base hover:opacity-100 ${
-          current
-            ? 'font-semibold underline decoration-2 underline-offset-[6px]'
-            : 'opacity-80'
+        className={`py-2 font-sans text-base ${
+          current ? 'font-semibold underline decoration-2 underline-offset-[6px]' : ''
         } ${surAplat ? 'text-accent-100' : current ? 'text-ink' : 'text-muted'}`}
       >
         {page.label}
@@ -119,9 +117,7 @@ export function Nav({
           href="/"
           aria-current={pathname === '/' ? 'page' : undefined}
           className={`py-2 font-sans text-base ${
-            pathname === '/'
-              ? 'font-semibold underline decoration-2 underline-offset-[6px]'
-              : 'opacity-80'
+            pathname === '/' ? 'font-semibold underline decoration-2 underline-offset-[6px]' : ''
           } ${surAplat ? 'text-accent-100' : pathname === '/' ? 'text-ink' : 'text-muted'}`}
         >
           Aujourd’hui
