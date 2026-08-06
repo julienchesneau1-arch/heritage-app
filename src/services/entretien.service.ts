@@ -3,6 +3,7 @@ import { prisma as defaultPrisma } from '@/lib/prisma';
 import { PasseurService, passeur as defaultPasseur } from './passeur.service';
 import { ReserveService, reserveService as defaultReserves } from './reserve.service';
 import { constitutionEmotionFilter, isNonCoerciveLanguage } from '@/lib/constitution';
+import { ACTEURS } from '@/lib/deces';
 
 /**
  * L'ENTRETIEN — une question à la fois, à voix haute.
@@ -85,7 +86,14 @@ export class EntretienService {
    */
   async relecteursPossibles(familyId: string, quiParleId: string) {
     return this.prisma.member.findMany({
-      where: { familyId, isDeleted: false, id: { not: quiParleId } },
+      // ── UN MORT NE PEUT PAS RELIRE ──
+      //
+      // Ce filtre ne portait que sur `isDeleted` — « retiré de la famille ».
+      // Un défunt n'est pas retiré : il est toujours là. L'écran proposait
+      // donc une grand-mère morte comme relectrice de l'enregistrement
+      // qu'on venait de faire sur elle. Voir `src/lib/deces.ts` : il cesse
+      // d'être un acteur, il reste un sujet.
+      where: { familyId, ...ACTEURS, id: { not: quiParleId } },
       select: { id: true, name: true, generation: true },
       orderBy: [{ generation: 'asc' }, { name: 'asc' }],
     });

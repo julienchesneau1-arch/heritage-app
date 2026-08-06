@@ -106,7 +106,16 @@ export default async function StoryPage({
           {story.narrator
             ? `Raconté par ${story.narrator.isDeleted ? 'Membre anonymisé' : story.narrator.name}, noté par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`
             : `Par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`}{' '}
-          · {dateDuRecit(story)} · {story.structureType} · {story.tone}
+          {/* ── DEUX MOTS RETIRÉS, ET C'EST LA PARCIMONIE ──
+              Cette ligne imprimait `maison-demenagement · factuel` sous le
+              titre de chaque récit. Ce sont des étiquettes de CLASSEMENT :
+              elles servent au filtre de la liste et au Passeur, pas à
+              quelqu'un qui vient lire l'histoire de sa grand-mère.
+              Annexe A point 2 : « montrer le minimum nécessaire, jamais le
+              maximum possible. » Rien n'est perdu — le type reste dans le
+              filtre de « Récits », dans l'API et dans l'export. Il cesse
+              seulement d'être imprimé là où il n'aide personne. */}
+          · {dateDuRecit(story)}
         </p>
         {/* Provenance : la famille doit toujours savoir quel texte a été
             proposé par une machine, et par qui il a été vérifié. */}
@@ -120,6 +129,63 @@ export default async function StoryPage({
       </header>
 
       <div className="lire whitespace-pre-wrap pt-2">{story.content}</div>
+
+      {/* ══ LA PRIMITIVE, ENFIN À SA PLACE ══
+          Annexe A, point 1 : « une histoire doit pouvoir engendrer une autre
+          histoire. » C'est LA primitive du produit, et elle vivait en bas de
+          page, dans une rangée d'outils, entre « Archiver » et « Corriger ».
+          Elle avait exactement le poids visuel d'une opération de rangement.
+
+          Elle remonte ici, contre le texte, à l'endroit où l'on vient de
+          finir de lire — c'est-à-dire au seul moment où quelqu'un se dit
+          « ça me rappelle que… ». La filiation déjà nouée se lit dans le
+          même bloc : d'où vient ce récit, et ce qu'il a fait naître.
+
+          Ce qui n'y est PAS : aucun compte, aucun taux, aucune incitation.
+          La §12 interdit le score, et l'ancien « a engendré 2 récits » a été
+          retiré de la liste pour cette raison. On montre les liens qu'on
+          peut suivre, pas leur nombre. */}
+      <section className="carte space-y-4">
+        {story.childPassages.length > 0 ? (
+          <p className="justification">
+            Né de{' '}
+            {story.childPassages.map((passage, index) => (
+              <span key={passage.id}>
+                {index > 0 ? ', ' : ''}
+                <Link href={`/recits/${passage.parentStory.id}`} className="underline">
+                  {passage.parentStory.title}
+                </Link>
+              </span>
+            ))}
+            .
+          </p>
+        ) : null}
+
+        <Link
+          href={`/recits/nouveau?parent=${story.id}&trigger=manual`}
+          className="btn-primary w-full text-base"
+        >
+          Raconter la suite
+        </Link>
+        <p className="justification">
+          {story.parentPassages.length > 0
+            ? 'Un récit en a déjà fait naître un autre. C’est ce lien-là que la mémoire d’une famille transmet — pas le nombre de récits.'
+            : 'Ce récit vous en rappelle un autre ? Écrivez-le ici : les deux resteront liés, et c’est ce lien qui fait la transmission.'}
+        </p>
+
+        {story.parentPassages.length > 0 ? (
+          <ul className="space-y-1">
+            {story.parentPassages.map((passage) => (
+              <li key={passage.id} className="justification">
+                A fait naître{' '}
+                <Link href={`/recits/${passage.childStory.id}`} className="underline">
+                  {passage.childStory.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
 
       {story.archives.length > 0 ? (
         <section className="space-y-4">
@@ -212,28 +278,6 @@ export default async function StoryPage({
         </p>
       ) : null}
 
-      {story.childPassages.length > 0 || story.parentPassages.length > 0 ? (
-        <section className="space-y-2 border-t border-rule pt-6">
-          <h2 className="section-label">Transmission</h2>
-          {story.childPassages.map((passage) => (
-            <p key={passage.id} className="justification">
-              Né de{' '}
-              <Link href={`/recits/${passage.parentStory.id}`} className="underline">
-                {passage.parentStory.title}
-              </Link>{' '}
-              · {passage.latencyDays} jours plus tard · déclencheur : {passage.triggerType}
-            </p>
-          ))}
-          {story.parentPassages.map((passage) => (
-            <p key={passage.id} className="justification">
-              A engendré{' '}
-              <Link href={`/recits/${passage.childStory.id}`} className="underline">
-                {passage.childStory.title}
-              </Link>
-            </p>
-          ))}
-        </section>
-      ) : null}
 
       <section id="conversations" className="space-y-4 border-t border-rule pt-6">
         <h2 className="section-label">Le fil</h2>
@@ -293,10 +337,6 @@ export default async function StoryPage({
             {story.archived ? 'Désarchiver' : 'Archiver'}
           </button>
         </form>
-
-        <Link href={`/recits/nouveau?parent=${story.id}&trigger=manual`} className="btn">
-          Raconter la suite
-        </Link>
 
         {peutCorriger ? (
           <Link href={`/recits/${story.id}/modifier`} className="btn">

@@ -52,6 +52,8 @@ export interface NouvelleReserve {
 }
 
 export interface ReserveVisible {
+  /** Qui l'a demandé n'est plus là pour la retirer. */
+  decede?: boolean;
   id: string;
   /** Le nom de qui l'a posée. Une demande anonyme n'engage personne. */
   parQui: string;
@@ -156,7 +158,11 @@ export class ReserveService {
 
     const reserves = await this.prisma.reserve.findMany({
       where: { familyId, entityId, portee: 'portee', demande: { not: null } },
-      select: { id: true, demande: true, member: { select: { name: true, isDeleted: true } } },
+      select: {
+        id: true,
+        demande: true,
+        member: { select: { name: true, isDeleted: true, deathDate: true } },
+      },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -165,6 +171,21 @@ export class ReserveService {
       // §2.1 règle 1 : un membre retiré est anonymisé partout, sans exception.
       parQui: r.member.isDeleted ? 'Membre anonymisé' : r.member.name,
       demande: r.demande!,
+      /*
+       * ── LA DEMANDE D'UN MORT NE S'ÉTEINT PAS ──
+       *
+       * Une demande portée s'adressait à la famille : « ne parlez pas de
+       * cela ». La mort de qui l'a formulée ne la retire pas — au
+       * contraire, elle la rend définitive, puisque personne ne peut plus
+       * la lever. La §2.6 interdit de décider à la place d'un autre ; on ne
+       * décide pas davantage à la place de quelqu'un qui ne peut plus
+       * parler.
+       *
+       * L'écran doit le DIRE, sinon la demande se lit comme une conversation
+       * encore ouverte — on croirait pouvoir aller demander à Jeanne si elle
+       * a changé d'avis.
+       */
+      decede: (r.member.deathDate ?? null) !== null,
     }));
   }
 }

@@ -59,7 +59,7 @@ relire d'abord.
 | Lignes de code applicatif | 14 554 |
 | Lignes de tests | 6 048 |
 | Lignes de documentation | 4 584 |
-| Tests, tous verts | **588**, en 29 fichiers |
+| Tests, tous verts | **604**, en 30 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
@@ -622,7 +622,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**588 tests, 29 fichiers, tous verts**, plus huit outils de mesure qui
+**604 tests, 30 fichiers, tous verts**, plus huit outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
@@ -786,6 +786,15 @@ par omission.
   on le fabrique pour l'imprimer. Le chiffre est affiché à chaque passage
   plutôt que caché derrière une coche : c'est lui qui dira, un jour, qu'il
   faut trancher.
+
+- **Le produit ne savait pas ce qu'était la mort.** Le modèle portait
+  `deathDate` depuis le premier jour ; il ne servait qu'au calendrier et à
+  deux détails. Conséquence, active dans la démo par défaut — où le
+  grand-père est mort en 2014 : l'écran de l'entretien le proposait comme
+  RELECTEUR de l'enregistrement qu'on venait de faire sur lui. Les filtres
+  ne portaient que sur `isDeleted`, « retiré de la famille » ; un défunt
+  n'est pas retiré. Doctrine posée dans `src/lib/deces.ts` : **il cesse
+  d'être un acteur, il reste un sujet.**
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.

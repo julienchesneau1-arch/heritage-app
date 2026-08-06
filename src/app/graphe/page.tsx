@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { threadService } from '@/services/thread.service';
 import { Fil, ChampDeParole } from '@/components/fil';
 import { reserveService } from '@/services/reserve.service';
+import { DECES } from '@/lib/deces';
 import { divulguer } from '@/lib/honnetete';
 
 export const dynamic = 'force-dynamic';
@@ -406,6 +407,13 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
               <p key={demande.id} className="font-sans text-base leading-relaxed text-sauge-900">
                 <strong>{demande.parQui}</strong> a demandé qu’on ne parle pas de cela.
                 <span className="mt-1 block">« {demande.demande} »</span>
+                {/* Sans cette ligne, la demande se lit comme une conversation
+                    encore ouverte — on croirait pouvoir aller demander à
+                    Jeanne si elle a changé d'avis. Sa mort ne retire pas sa
+                    demande : elle la rend définitive. */}
+                {demande.decede ? (
+                  <span className="mt-1 block">{DECES.reserveMaintenue}</span>
+                ) : null}
               </p>
             ))}
             <p className="font-sans text-base text-sauge-800">

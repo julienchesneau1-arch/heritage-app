@@ -1,10 +1,19 @@
 import { prisma } from './prisma';
 import { currentFamilyId, currentIdentity, type IdentityLevel } from './session';
+import { peutAgir } from './deces';
 
 export interface ContextMember {
   id: string;
   name: string;
   generation: number;
+  /**
+   * Présente pour que chaque écran puisse trancher lui-même entre les deux
+   * rôles. `members` garde TOUT LE MONDE, morts compris : « je note ce que
+   * ma grand-mère racontait » est précisément ce qu'on vient faire ici après
+   * une mort. Ce sont les écrans où il faut AGIR — prendre une identité,
+   * relire un enregistrement — qui écartent. Voir `src/lib/deces.ts`.
+   */
+  deathDate: Date | null;
 }
 
 /**
@@ -61,12 +70,29 @@ export async function loadContext(): Promise<AppContext | null> {
 
   const members = await prisma.member.findMany({
     where: { familyId: family.id, isDeleted: false },
-    select: { id: true, name: true, generation: true },
+    select: { id: true, name: true, generation: true, deathDate: true },
     orderBy: [{ generation: 'asc' }, { name: 'asc' }],
   });
 
   const identity = currentIdentity();
-  const member = identity ? (members.find((m) => m.id === identity.memberId) ?? null) : null;
+  /*
+   * ── UNE SESSION OUVERTE NE SURVIT PAS AU DÉCÈS ──
+   *
+   * `members` garde tout le monde, morts compris — c'est voulu : on note
+   * encore ce qu'ils racontaient. Mais le membre COURANT, celui au nom de
+   * qui l'application agit, doit pouvoir agir. `/qui` ne propose plus un
+   * défunt et son lien personnel n'ouvre plus de session ; il restait ce
+   * troisième chemin, le plus discret — un cookie posé avant la mort.
+   *
+   * Trouvé en regardant une capture d'écran, pas en relisant le code : la
+   * page d'un récit affichait « Qui parle : Robert Martin (moi) » alors
+   * que Robert était marqué décédé deux écrans plus loin.
+   *
+   * La session retombe simplement sur « Qui êtes-vous ? ». Rien n'est
+   * détruit, et corriger la date en `/famille` rend tout.
+   */
+  const candidat = identity ? (members.find((m) => m.id === identity.memberId) ?? null) : null;
+  const member = candidat && peutAgir(candidat) ? candidat : null;
 
   return {
     family,

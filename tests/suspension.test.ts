@@ -180,7 +180,25 @@ describe('L’application porte la demande, elle ne l’impose jamais', () => {
 
   it('ne relance jamais l’auteur ni ne compte les demandes en attente', () => {
     // Ni minuteur, ni « 2 demandes en attente » : ce serait une pression.
-    expect(PAGE).not.toMatch(/en attente depuis|rappel|relance|demandes? en attente/i);
+    //
+    // Le motif contenait `rappel` tout court. Il a fini par refuser une
+    // phrase qui n'a rien à voir avec la pression — « Ce récit vous en
+    // rappelle un autre ? », posée sous le texte pour inviter à raconter la
+    // suite. Un garde trop large finit par interdire du français ordinaire,
+    // et on le désarme alors pour de mauvaises raisons.
+    //
+    // Il vise donc maintenant ce qu'il voulait dire : le décompte, le
+    // minuteur, la relance, l'injonction. Plus étroit sur les mots, aussi
+    // strict sur le fond.
+    expect(PAGE).not.toMatch(
+      /en attente depuis|\brelances?\b|demandes? en attente|rappelez[- ]|relancer l|n.oubliez pas/i,
+    );
+    // Et le NOMBRE de demandes ne s'affiche jamais. Attention à la nuance :
+    // `demandes.length > 0` est une condition — parfaitement légitime, c'est
+    // elle qui décide de montrer la section. Ce qui est interdit, c'est de
+    // RENDRE le chiffre. Mon premier motif confondait les deux et refusait
+    // le garde lui-même.
+    expect(PAGE).not.toMatch(/\{\s*demandes\.length\s*\}/);
   });
 
   it('exige une identité prouvée pour suspendre, comme pour supprimer', () => {

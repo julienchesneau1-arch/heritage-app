@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { familyService } from '@/services/family.service';
 import { addMember, removeMember, revokeMemberLink, rotateFamilyLink, updateMember } from '@/app/actions';
 import { signFamilyToken } from '@/lib/session';
+import { DECES, estDecede } from '@/lib/deces';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,6 +103,19 @@ export default async function FamilyPage({
                   {member.role ? ` · ${member.role}` : ''}
                 </span>
               </p>
+
+              {/* ── DIT UNE FOIS, SANS EMPHASE ──
+                  Ni bougie, ni « en mémoire de ». La §12 interdit
+                  l'inférence émotionnelle : le produit ne sait pas ce que
+                  cette mort fait à cette famille. Il constate une date et en
+                  tire des conséquences pratiques — que la famille a le droit
+                  de connaître, puisqu'elles changent ce que l'application
+                  propose. Voir `src/lib/deces.ts`. */}
+              {estDecede(member) ? (
+                <p className="justification">
+                  <strong>{DECES.mention}</strong> {DECES.consequence}
+                </p>
+              ) : null}
 
               <details>
                 <summary className="justification cursor-pointer py-2 underline">

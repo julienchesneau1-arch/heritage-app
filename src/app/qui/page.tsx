@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { chooseMember, setReadingSize } from '../actions';
 import { currentReadingSize, READING_LABELS, READING_SIZES } from '@/lib/reading';
+import { peutAgir } from '@/lib/deces';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,9 +23,15 @@ export default async function WhoPage() {
         Cette information reste dans votre navigateur. Elle sert à savoir à qui le Passeur s’adresse.
       </p>
 
+      {/* ── ON NE PEUT PAS DEVENIR QUELQU'UN QUI EST MORT ──
+          Cette liste servait à dire « qui consulte ». Un défunt n'y a pas
+          sa place : prendre son identité, c'est prendre le droit de
+          supprimer ses récits en son nom. Il reste partout ailleurs — sur
+          la page Famille, comme narrateur, dans ses propres récits.
+          Voir `src/lib/deces.ts`. */}
       <form action={chooseMember} className="space-y-2">
         <ul className="space-y-2">
-          {context.members.map((member) => (
+          {context.members.filter(peutAgir).map((member) => (
             <li key={member.id}>
               <button
                 type="submit"

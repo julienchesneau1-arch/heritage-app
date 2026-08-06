@@ -59,6 +59,10 @@ démarré.
   avec une adresse inventée à chaque fois : 120 servies, sur une limite
   annoncée à 100 par minute. Et elle n'était posée que sur 2 routes sur 19,
   pendant que la checklist du document cochait la ligne comme faite.
+- **Le produit proposait un mort comme relecteur.** Dans la démo par
+  défaut, le grand-père est décédé en 2014 ; l'écran de l'entretien
+  l'offrait pour relire l'enregistrement qu'on venait de faire sur lui.
+  Les filtres ne portaient que sur `isDeleted` — « retiré de la famille ».
 - `00-premier-jour.webp` **montrait le sélecteur d'identité** : la capture
   était prise sans cookie de membre, et `/` redirige alors vers `/qui`.
 

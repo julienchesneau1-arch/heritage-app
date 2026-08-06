@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { estDecede } from '@/lib/deces';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
@@ -80,11 +81,20 @@ export default async function NewStoryPage({
             className="champ"
           >
             <option value="">{context.member.name} — je raconte moi-même</option>
+            {/* ── LE DÉFUNT RESTE NARRATEUR, ET C'EST ESSENTIEL ──
+                Après une mort, « je note ce que ma grand-mère racontait »
+                est exactement ce qu'on vient faire ici. Lui retirer ce rôle
+                viderait le produit de son objet. Il cesse d'être un acteur
+                — plus de relecture, plus d'identité — il reste un sujet.
+                Voir `src/lib/deces.ts`. */}
             {context.members
               .filter((member) => member.id !== context.member!.id)
               .map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.name} — je note ce qu’il ou elle raconte
+                  {member.name} —{' '}
+                  {estDecede(member)
+                    ? 'je note ce qu’il ou elle racontait'
+                    : 'je note ce qu’il ou elle raconte'}
                 </option>
               ))}
           </select>

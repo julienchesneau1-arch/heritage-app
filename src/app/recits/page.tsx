@@ -143,8 +143,12 @@ export default async function StoriesPage({
               >
                 <span className="block text-lg leading-snug">{story.title}</span>
                 <span className="justification block">
+                  {/* Le type de structure ne s'imprime plus sur chaque
+                      carte : c'est une étiquette de classement, utile au
+                      filtre ci-dessus et au Passeur, muette pour qui
+                      cherche un souvenir. Annexe A point 2. */}
                   {story.author.isDeleted ? 'Auteur anonymisé' : story.author.name} ·{' '}
-                  {dateDuRecit(story)} · {story.structureType}
+                  {dateDuRecit(story)}
                   {/* « a engendré 2 récits » a quitté cette liste. La §5.2
                       demande la chaîne de transmission SUR LE RÉCIT — « né de
                       X, a engendré Y », des liens qu'on suit. Réduite à un

@@ -146,12 +146,30 @@ C'est la même faute à chaque fois, et c'est celle contre laquelle ce
 produit est écrit : **affirmer ce qu'on n'a pas établi**. Elle ne se trouve
 pas en relisant. Elle se trouve en mesurant.
 
-### B6. Ce que je ne ferai pas sans vous le demander
+### B6. Trois décisions prises, et pourquoi
 
-- Toucher à l'audio d'un récit (« Écouter Robert le raconter ») : c'est
-  une fonctionnalité nouvelle, pas de l'habillage.
+**La mort.** Le produit ne savait pas ce que c'était. Doctrine :
+*il cesse d'être un acteur, il reste un sujet* (`src/lib/deces.ts`).
+Il n'est plus proposé comme relecteur, on ne peut plus prendre son
+identité, son lien personnel n'ouvre plus de session, une session déjà
+ouverte retombe sur « Qui êtes-vous ? ». Il reste NARRATEUR — « je note ce
+que ma grand-mère racontait » est l'objet même du produit après une mort —
+ses récits restent, et sa demande portée devient définitive puisque
+personne ne peut plus la lever.
+
+**La parcimonie.** Le type de structure ne s'imprime plus sur chaque récit :
+`maison-demenagement · factuel` est du vocabulaire de classement, muet pour
+qui vient lire l'histoire de sa grand-mère. Il reste dans le filtre, dans
+l'API et dans l'export. Retirer l'affichage n'est pas retirer la donnée.
+
+**La primitive.** « Raconter la suite » vivait en bas de page entre
+« Archiver » et « Corriger ». Elle remonte contre le texte, en geste
+principal, avec la filiation dans le même bloc — sans aucun compte, la §12
+interdisant le score.
+
+Ce que je ne ferai toujours pas sans vous le demander :
+- Toucher à l'audio d'un récit (« Écouter Robert le raconter »).
 - Étendre les marques aux récits : décision de modèle.
-- Réduire les 33 types de structure : j'ai un soupçon, pas une donnée.
 
 ---
 
