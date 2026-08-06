@@ -779,8 +779,13 @@ par omission.
   maintenant 36 ms : `story.count` avec `linkedEntities: { some }`
   parcourait les 5 000 récits de la famille pour en compter 42. Le compte
   et la liste partent désormais de l'entité, dans une seule requête.
-  Le livre pèse 6,9 Mo de HTML pour 5 000 récits — c'est le seul chemin
-  sans borne du produit, et c'est voulu : un livre ne se pagine pas.
+  Le livre pèse 6,9 Mo de HTML pour 5 000 récits et met environ une
+  seconde à se composer. C'est le seul chemin SANS BORNE du produit, et
+  c'est voulu : un livre ne se pagine pas. Il a son propre seuil dans
+  l'outil — non parce qu'il est lent, mais parce qu'on ne le parcourt pas,
+  on le fabrique pour l'imprimer. Le chiffre est affiché à chaque passage
+  plutôt que caché derrière une coche : c'est lui qui dira, un jour, qu'il
+  faut trancher.
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.
