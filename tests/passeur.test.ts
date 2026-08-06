@@ -95,6 +95,9 @@ function buildService(
     // Rien n'est mis en sourdine par ce membre dans ces scénarios.
     storyMute: { findMany: async () => [] },
     thread: { findMany: async () => fils },
+    // Le Passeur consulte les réserves de celui à qui il s'adresse : sans
+    // ce modèle, le faux client n'est plus un faux client complet.
+    reserve: { findMany: async () => [] },
   } as unknown as PrismaClient;
 
   return new PasseurService(
@@ -237,6 +240,7 @@ describe('PasseurService — une question que quelqu’un a réellement posée',
       member: { findMany: async () => MEMBERS },
       visibilityLog: { groupBy: async () => [] },
       storyMute: { findMany: async () => [] },
+      reserve: { findMany: async () => [] },
       thread: {
         findMany: async ({ where }: { where: Record<string, unknown> }) => {
           recu = where;

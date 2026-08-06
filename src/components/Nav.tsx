@@ -45,8 +45,8 @@ export function Nav({
   // devient inatteignable.
   if (pathname.startsWith('/entretien/parler')) {
     return (
-      <header className="border-b border-rule pt-6 pb-2">
-        <Link href="/" className="text-2xl tracking-tight">
+      <header className="aplat bg-accent-800 py-4">
+        <Link href="/" className="font-titre text-[22px] text-accent-100">
           Héritage
         </Link>
       </header>
@@ -55,6 +55,13 @@ export function Nav({
 
   const ouvertes = SECTIONS.filter((page) => page.utile(inv));
   const repliees = SECTIONS.filter((page) => !page.utile(inv));
+
+  /**
+   * Le premier jour, la barre est posée sur l'aplat terre cuite de la page :
+   * un bandeau crème au-dessus d'un aplat couperait l'écran en deux. Elle
+   * prend donc la teinte la plus foncée de la même rampe.
+   */
+  const surAplat = pathname === '/' && inv.recits === 0 && inv.fils === 0;
 
   const lien = (page: Section) => {
     const current = pathname.startsWith(page.href);
@@ -65,9 +72,11 @@ export function Nav({
         // Lu par les lecteurs d'écran, et souligné pour tout le monde :
         // la couleur seule ne dirait rien à qui ne la perçoit pas.
         aria-current={current ? 'page' : undefined}
-        className={`py-2 font-sans text-sm hover:text-ink ${
-          current ? 'text-ink underline underline-offset-4' : 'text-muted'
-        }`}
+        className={`py-2 font-sans text-base hover:opacity-100 ${
+          current
+            ? 'font-semibold underline decoration-2 underline-offset-[6px]'
+            : 'opacity-80'
+        } ${surAplat ? 'text-accent-100' : current ? 'text-ink' : 'text-muted'}`}
       >
         {page.label}
       </Link>
@@ -75,17 +84,26 @@ export function Nav({
   };
 
   return (
-    <header className="border-b border-rule pt-6">
+    <header className={`aplat pt-5 ${surAplat ? 'bg-accent-800' : 'border-b border-rule'}`}>
       <div className="flex items-baseline justify-between gap-4">
-        <Link href="/" className="text-2xl tracking-tight">
+        <Link
+          href="/"
+          className={`font-titre text-[22px] ${surAplat ? 'text-accent-100' : 'text-ink'}`}
+        >
           Héritage
         </Link>
         {member ? (
-          <span className="flex items-center gap-3">
-            <Link href="/famille" className="justification underline">
+          <span className="flex items-center gap-4">
+            <Link
+              href="/famille"
+              className={`font-sans text-base underline ${surAplat ? 'text-accent-200' : 'text-muted'}`}
+            >
               Famille
             </Link>
-            <Link href="/qui" className="justification underline">
+            <Link
+              href="/qui"
+              className={`font-sans text-base underline ${surAplat ? 'text-accent-200' : 'text-muted'}`}
+            >
               {member.name}
             </Link>
           </span>
@@ -96,35 +114,57 @@ export function Nav({
         ) : null}
       </div>
 
-      <nav aria-label="Sections" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2">
+      <nav aria-label="Sections" className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 pb-3">
         <Link
           href="/"
           aria-current={pathname === '/' ? 'page' : undefined}
-          className={`py-2 font-sans text-sm hover:text-ink ${
-            pathname === '/' ? 'text-ink underline underline-offset-4' : 'text-muted'
-          }`}
+          className={`py-2 font-sans text-base ${
+            pathname === '/'
+              ? 'font-semibold underline decoration-2 underline-offset-[6px]'
+              : 'opacity-80'
+          } ${surAplat ? 'text-accent-100' : pathname === '/' ? 'text-ink' : 'text-muted'}`}
         >
           Aujourd’hui
         </Link>
 
         {ouvertes.map(lien)}
 
-        <Link href="/recits/nouveau" className="py-2 font-sans text-sm text-accent hover:underline">
+        {/* « Raconter » reste un LIEN sur le premier jour : en bouton, il
+            rivaliserait avec le champ de saisie et renverrait vers un
+            formulaire complet — c'est-à-dire vers la page blanche que cet
+            écran a été construit pour éviter. Ailleurs, il est un bouton. */}
+        <Link
+          href="/recits/nouveau"
+          className={
+            surAplat
+              ? 'py-2 font-sans text-base font-semibold text-accent-200 underline'
+              : 'btn-primary ml-auto text-base'
+          }
+        >
           Raconter
         </Link>
 
         {repliees.length > 0 ? (
           <details className="w-full">
-            <summary className="cursor-pointer py-2 font-sans text-sm text-muted hover:text-ink">
+            <summary
+              className={`cursor-pointer py-2 font-sans text-base ${
+                surAplat ? 'text-accent-200' : 'text-muted'
+              }`}
+            >
               Tout le reste
             </summary>
-            <ul className="space-y-2 py-2">
+            <ul className="space-y-3 py-2">
               {repliees.map((page) => (
                 <li key={page.href}>
-                  <Link href={page.href} className="font-sans text-sm underline">
+                  <Link
+                    href={page.href}
+                    className={`font-sans text-base underline ${surAplat ? 'text-accent-100' : ''}`}
+                  >
                     {page.label}
                   </Link>
-                  <span className="justification block">{page.role}</span>
+                  <span className={surAplat ? 'justification-claire block' : 'justification block'}>
+                    {page.role}
+                  </span>
                 </li>
               ))}
             </ul>

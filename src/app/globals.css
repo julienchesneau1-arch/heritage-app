@@ -2,22 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────
+   LES POLICES, AUTO-HÉBERGÉES.
+
+   La direction de design les chargeait depuis Google Fonts. Rendu sans
+   accès réseau, le titre retombait sur `system-ui` : toute l'identité
+   typographique disparaissait SANS QUE ÇA SE VOIE, ce qui est le pire cas.
+   L'application est une PWA avec Service Worker et page hors-ligne — une
+   police distante n'est pas un arbitrage esthétique, c'est une régression.
+
+   Sous-ensemble latin seulement : le français y tient en entier, et
+   `latin-ext` doublerait le poids pour des caractères qu'on n'écrit pas.
+   79 Ko au total, servis depuis le même domaine.
+
+   `font-display: swap` : le texte s'affiche tout de suite dans la police
+   de repli et bascule ensuite. Une mémoire familiale ne fait pas attendre
+   quelqu'un devant un écran blanc.
+   ───────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Caprasimo';
+  src: url('/polices/caprasimo-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Figtree';
+  src: url('/polices/figtree-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Figtree';
+  src: url('/polices/figtree-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Figtree';
+  src: url('/polices/figtree-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   html {
-    /* §6.4 : 16px minimum sur mobile. */
+    /* §6.4 : 16 px minimum. Plancher, jamais valeur cible. */
     font-size: 16px;
   }
 
   body {
-    @apply bg-paper text-ink font-serif antialiased;
+    @apply bg-paper text-ink font-sans antialiased;
   }
 
-  /* Contraste vérifié : ink #1c1917 sur paper #faf8f4 ≈ 15.6:1,
-     muted #6b6864 sur paper ≈ 5.3:1, accent #7c4a2d sur paper ≈ 7.2:1.
-     Tous au-dessus du seuil 4.5:1 (§6.4). */
+  /* Les titres portent la police d'affichage. Elle n'a qu'une graisse :
+     on ne demande donc jamais `font-bold` dessus, ce qui produirait une
+     graisse synthétique, épaisse et sale. */
+  h1, h2, h3 {
+    @apply font-titre font-normal;
+    text-wrap: balance;
+  }
+
+  /* Contrastes MESURÉS (WCAG 2.1), pas estimés :
+       ink #201e1d sur paper #f5ead8 ......... 13,95:1
+       muted #6b655e sur paper ............... 4,84:1
+       accent-100 sur accent-700 (aplat) ..... 6,21:1
+       neutre-100 sur neutre-900 (veillée) ... 12,89:1
+       accent-800 sur accent-300 (carte) ..... 6,85:1
+     Le gris de la direction d'origine était un mélange à 55 %, soit
+     3,57:1 — sous le seuil. Voir redesign/REVUE_2A.md. */
 
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-accent;
+    @apply outline-2 outline-offset-2 outline-accent-700;
   }
 }
 
@@ -27,20 +90,64 @@
     @apply inline-flex min-h-[44px] min-w-[44px] items-center justify-center;
   }
 
+  /* Boutons en pilule, remplis. Le contour seul est l'action secondaire. */
   .btn {
-    @apply tap rounded-sm border border-rule px-4 text-sm font-sans text-ink transition-colors hover:bg-rule/40;
+    @apply tap rounded-lg border border-divider px-5 text-base font-sans font-semibold text-ink transition-colors hover:bg-neutre-200;
   }
 
   .btn-primary {
-    @apply tap rounded-sm bg-accent px-4 text-sm font-sans text-paper transition-opacity hover:opacity-90;
+    @apply tap rounded-lg bg-accent-700 px-5 text-base font-sans font-semibold text-accent-100 transition-opacity hover:opacity-90;
   }
 
+  /* Sur un aplat foncé, un bouton clair — l'inverse serait illisible. */
+  .btn-clair {
+    @apply tap rounded-lg bg-neutre-100 px-5 text-base font-sans font-semibold text-accent-900 transition-opacity hover:opacity-90;
+  }
+
+  .btn-contour-clair {
+    @apply tap rounded-lg border border-accent-200 px-5 text-base font-sans font-semibold text-accent-100 transition-colors hover:bg-white/10;
+  }
+
+  /* La carte : le contenu qu'on manipule, posé sur l'aplat. */
+  .carte {
+    @apply rounded-lg bg-neutre-100 p-6 text-ink shadow-md;
+  }
+
+  .champ {
+    @apply min-h-[44px] w-full rounded-md border border-divider bg-neutre-100 px-4 font-sans text-base text-ink;
+  }
+
+  /* LA JUSTIFICATION — le composant le plus important du produit.
+     Elle ne décore pas : elle porte la reddition de comptes. 16 px, jamais
+     moins : c'est le texte explicatif dont dépend le lecteur le plus âgé. */
   .justification {
-    @apply font-sans text-xs leading-relaxed text-muted;
+    @apply font-sans text-base leading-relaxed text-muted;
+  }
+
+  /* Sur un aplat, la justification change de couleur, jamais de taille. */
+  .justification-claire {
+    @apply font-sans text-base leading-relaxed text-accent-200;
   }
 
   .section-label {
-    @apply font-sans text-[0.68rem] uppercase tracking-[0.18em] text-muted;
+    @apply font-sans text-sm font-semibold uppercase tracking-[0.14em] text-muted;
+  }
+
+  /* Le corps de lecture : plus grand que l'interface, toujours. */
+  .lire {
+    @apply text-lg leading-[1.62];
+  }
+
+  /* L'aplat plein écran. Il déborde la colonne de lecture pour toucher les
+     bords, sinon ce n'est plus un aplat mais un encadré. */
+  .aplat {
+    @apply -mx-5 px-5;
+  }
+
+  /* La forme ronde du décor. `aria-hidden` obligatoire à l'usage : elle ne
+     dit rien, elle ne doit rien annoncer. */
+  .rond {
+    @apply pointer-events-none absolute rounded-full;
   }
 }
 

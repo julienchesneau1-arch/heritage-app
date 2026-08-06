@@ -85,13 +85,16 @@ export default async function StoryPage({
 
   return (
     <article className="space-y-8">
-      <header className="space-y-1">
-        <Link href="/recits" className="justification underline">
+      {/* Bandeau sauge : la lecture d'un récit n'est pas la même chose que
+          le reste de l'application, et la couleur le dit avant le texte. */}
+      <header className="aplat relative -mt-8 space-y-2 overflow-hidden bg-sauge-700 pb-8 pt-6">
+        <span aria-hidden="true" className="rond -right-12 -top-12 h-44 w-44 bg-sauge-600" />
+        <Link href="/recits" className="relative font-sans text-base text-sauge-200 underline">
           ← Récits
         </Link>
-        <h1 className="text-2xl leading-tight">{story.title}</h1>
+        <h1 className="relative text-[2.1rem] leading-[1.1] text-neutre-100">{story.title}</h1>
         {/* La voix d'abord, la plume ensuite. */}
-        <p className="justification">
+        <p className="relative font-sans text-base leading-relaxed text-sauge-200">
           {story.narrator
             ? `Raconté par ${story.narrator.isDeleted ? 'Membre anonymisé' : story.narrator.name}, noté par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`
             : `Par ${story.author.isDeleted ? 'Auteur anonymisé' : story.author.name}`}{' '}
@@ -100,7 +103,7 @@ export default async function StoryPage({
         {/* Provenance : la famille doit toujours savoir quel texte a été
             proposé par une machine, et par qui il a été vérifié. */}
         {story.transcriptionDraft?.validatedAt ? (
-          <p className="justification">
+          <p className="relative font-sans text-base leading-relaxed text-sauge-200">
             Transcrit automatiquement ({story.transcriptionDraft.model}), vérifié par{' '}
             {story.transcriptionDraft.validatedBy?.name ?? 'un membre'} le{' '}
             {formatDateFr(story.transcriptionDraft.validatedAt)}.
@@ -108,7 +111,7 @@ export default async function StoryPage({
         ) : null}
       </header>
 
-      <div className="whitespace-pre-wrap text-lg leading-relaxed">{story.content}</div>
+      <div className="lire whitespace-pre-wrap pt-2">{story.content}</div>
 
       {story.archives.length > 0 ? (
         <section className="space-y-4">

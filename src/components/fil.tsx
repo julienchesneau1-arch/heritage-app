@@ -180,8 +180,9 @@ export function ChampDeParole({
       <textarea
         id={champId}
         name="body"
-        rows={2}
-        className="w-full rounded-sm border border-rule bg-transparent p-2 font-sans text-sm"
+        rows={3}
+        placeholder="Une phrase, ou trois mots."
+        className="w-full rounded-md border border-divider bg-neutre-100 p-4 font-sans text-base leading-relaxed"
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -192,7 +193,7 @@ export function ChampDeParole({
           id={`${champId}-voix`}
           name="narratorId"
           defaultValue={memberId}
-          className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+          className="min-h-[44px] flex-1 rounded-md border border-divider bg-neutre-100 px-3 font-sans text-base"
         >
           {members.map((member) => (
             <option key={member.id} value={member.id}>
@@ -201,7 +202,7 @@ export function ChampDeParole({
           ))}
         </select>
 
-        <button type="submit" className="btn">
+        <button type="submit" className="btn-primary">
           Envoyer
         </button>
       </div>

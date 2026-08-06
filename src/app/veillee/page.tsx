@@ -96,28 +96,43 @@ export default async function VeilleePage({ searchParams }: { searchParams: { et
   }
 
   return (
-    <article className="space-y-8">
-      <header className="space-y-2">
-        <p className="section-label">
+    // Fond encre : on lit à voix haute, souvent le soir, le téléphone tenu
+    // à distance. L'aplat descend jusqu'au bas de l'écran.
+    <article className="aplat -mt-8 flex min-h-[85vh] flex-col gap-8 bg-neutre-900 pb-10 pt-6 text-neutre-200">
+      <header className="relative space-y-3 overflow-hidden">
+        <span aria-hidden="true" className="rond -right-20 -top-10 h-44 w-44 bg-sauge-800" />
+        {/* La position, pas une barre de progression : la veillée n'est pas
+            une tâche à finir, et son dernier écran dit exactement l'inverse. */}
+        <p className="relative font-sans text-sm font-semibold uppercase tracking-[0.14em] text-accent-400">
           {etape} sur {total}
         </p>
-        <h1 className="text-3xl leading-tight">{story.title}</h1>
-        <p className="justification">
+        <h1 className="relative text-[2.4rem] leading-[1.08] text-neutre-100">{story.title}</h1>
+        <p className="relative font-sans text-base text-neutre-300">
           Par {story.author.isDeleted ? 'Auteur anonymisé' : story.author.name} ·{' '}
           {dateDuRecit(story)}
         </p>
         {/* Pourquoi ce récit-là, et pas un autre. */}
-        <p className="justification">{justification}</p>
+        <p className="relative max-w-[34ch] font-sans text-base leading-relaxed text-neutre-300">
+          {justification}
+        </p>
       </header>
 
       {/* Corps de texte agrandi : on lit à voix haute, souvent le soir. */}
-      <div className="whitespace-pre-wrap text-xl leading-loose">{story.content}</div>
+      <div className="whitespace-pre-wrap text-[1.6rem] leading-[1.6] text-neutre-100">
+        {story.content}
+      </div>
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-rule pt-6">
-        <Link href={`/veillee?etape=${etape + 1}`} className="btn-primary">
+      <div className="mt-auto flex flex-col gap-3 pt-4">
+        <Link
+          href={`/veillee?etape=${etape + 1}`}
+          className="tap w-full rounded-lg bg-accent-400 px-5 text-base font-semibold text-accent-900"
+        >
           {etape === total ? 'Terminer' : 'Suivant'}
         </Link>
-        <Link href={`/recits/${story.id}`} className="btn">
+        <Link
+          href={`/recits/${story.id}`}
+          className="tap w-full rounded-lg border border-neutre-600 px-5 text-base font-semibold text-neutre-200"
+        >
           Ouvrir le récit
         </Link>
       </div>

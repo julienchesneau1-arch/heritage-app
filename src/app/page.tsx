@@ -49,32 +49,48 @@ export default async function TodayPage() {
 
   return (
     <div className="space-y-12">
-      <p className="text-xl leading-relaxed">
+      <p className="font-titre text-3xl leading-tight">
         La mémoire de la famille {context.family.name}.
       </p>
 
       {question ? (
-        <section aria-labelledby="passeur-title" className="space-y-3 border-t border-rule pt-6">
+        <section aria-labelledby="passeur-title" className="space-y-3 pt-2">
           <h2 id="passeur-title" className="section-label">
             Le Passeur
           </h2>
-          <p className="text-lg leading-relaxed">{question.text}</p>
-          {/* §6.2 : la justification est toujours visible. */}
-          <p className="justification">{question.justification}</p>
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+          {/* La carte est la seule chose colorée de cet écran : §6.1 n'admet
+              qu'une suggestion, elle a donc droit à toute l'attention — et
+              une seule couleur suffit à la donner. */}
+          <div className="relative space-y-4 overflow-hidden rounded-lg bg-accent-300 p-6 shadow-md">
+            <span
+              aria-hidden="true"
+              className="rond -right-20 -top-16 h-44 w-44 bg-accent-400/60"
+            />
+            <p className="relative font-titre text-2xl leading-snug text-accent-900">
+              {question.text}
+            </p>
+            {/* §6.2 : la justification est toujours visible. Sur ce fond
+                clair, elle prend le gris chaud mesuré à 5,01:1. */}
+            <p className="relative font-sans text-base leading-relaxed text-muted-chaud">
+              {question.justification}
+            </p>
+          <div className="relative flex flex-col gap-3 pt-1">
             {/* Une question posée par quelqu'un appelle une réponse, pas un
                 nouveau récit : l'action première change avec la règle. */}
             {question.ruleId === 'UNANSWERED_QUESTION' ? (
               <>
                 {/* Une question posée dans un fil n'a pas toujours de récit :
                     on renvoie vers le fil, qui existe toujours. */}
-                <Link href={lienVersLaQuestion(question)} className="btn-primary">
+                <Link
+                  href={lienVersLaQuestion(question)}
+                  className="tap w-full rounded-lg bg-accent-900 px-5 text-base font-semibold text-accent-100"
+                >
                   Répondre
                 </Link>
                 {question.storyId ? (
                   <Link
                     href={`/recits/nouveau?parent=${question.storyId}&trigger=question`}
-                    className="btn"
+                    className="tap w-full rounded-lg border border-accent-900 bg-accent-200 px-5 text-base font-semibold text-accent-900"
                   >
                     En faire un récit
                   </Link>
@@ -84,12 +100,15 @@ export default async function TodayPage() {
               <>
                 <Link
                   href={`/recits/nouveau?parent=${question.storyId}&trigger=passeur`}
-                  className="btn-primary"
+                  className="tap w-full rounded-lg bg-accent-900 px-5 text-base font-semibold text-accent-100"
                 >
                   Raconter la suite
                 </Link>
                 {question.storyId ? (
-                  <Link href={`/recits/${question.storyId}`} className="btn">
+                  <Link
+                    href={`/recits/${question.storyId}`}
+                    className="tap w-full rounded-lg border border-accent-900 bg-accent-200 px-5 text-base font-semibold text-accent-900"
+                  >
                     Lire l’histoire
                   </Link>
                 ) : null}
@@ -98,10 +117,12 @@ export default async function TodayPage() {
             <form action={ignorePasseur}>
               <input type="hidden" name="subjectId" value={subjectOf(question)} />
               <input type="hidden" name="ruleId" value={question.ruleId} />
-              <button type="submit" className="justification underline">
+              {/* §6.3 : jamais dans un menu, toujours à côté. */}
+              <button type="submit" className="font-sans text-base text-accent-900 underline">
                 Ne plus me montrer
               </button>
             </form>
+          </div>
           </div>
         </section>
       ) : null}

@@ -36,26 +36,41 @@ export function PremierJour({
   memberId: string | null;
 }) {
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <h1 className="text-2xl leading-snug">{PREMIER_JOUR.quoi(familyName)}</h1>
-        <p className="text-lg leading-relaxed">{PREMIER_JOUR.comment}</p>
-        <p className="justification">{PREMIER_JOUR.rassurance}</p>
+    // L'aplat terre cuite déborde la colonne et va toucher les bords : un
+    // bloc de couleur encadré de crème n'est plus un aplat, c'est une boîte.
+    // Il descend jusqu'en bas de l'écran — cet écran n'a rien d'autre à
+    // montrer, et un aplat qui s'arrête au milieu laisse une page inachevée.
+    <div className="aplat -mt-8 flex min-h-[70vh] flex-col bg-accent-700 pb-10">
+      <div className="relative space-y-5 overflow-hidden pt-8">
+        {/* Décor. Il ne dit rien, donc il ne doit rien annoncer. */}
+        <span
+          aria-hidden="true"
+          className="rond -right-16 -top-16 h-52 w-52 bg-sauge-600"
+        />
+        <h1 className="relative text-[2.4rem] leading-[1.08] text-accent-100">
+          {PREMIER_JOUR.quoi(familyName)}
+        </h1>
+        <p className="lire relative text-accent-100">{PREMIER_JOUR.comment}</p>
+        <p className="justification-claire relative">{PREMIER_JOUR.rassurance}</p>
       </div>
 
       {memberId ? (
-        <div className="space-y-4 border-t border-rule pt-6">
-          <ChampDeParole
-            members={members}
-            memberId={memberId}
-            retour="/"
-            label={PREMIER_JOUR.action}
-          />
+        <div className="mt-8 space-y-5">
+          {/* La carte crème posée sur l'aplat : le contenu qu'on manipule se
+              distingue du fond par la matière, pas par un filet. */}
+          <div className="carte">
+            <ChampDeParole
+              members={members}
+              memberId={memberId}
+              retour="/"
+              label={PREMIER_JOUR.action}
+            />
+          </div>
           {/* Une seule ACTION sur cet écran (§6.1), mais deux chemins pour y
               venir : celui qui commence quelque chose, et celui qui reprend
               ce qui existe déjà. Le second n'est pas un bouton — il ne
               rivalise pas avec le premier. */}
-          <p className="justification">
+          <p className="justification-claire">
             {PREMIER_JOUR.autreChemin}{' '}
             <Link href="/importer" className="underline">
               Reprendre une conversation existante

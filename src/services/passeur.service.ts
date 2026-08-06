@@ -5,7 +5,7 @@ import { constitutionEmotionFilter } from '@/lib/constitution';
 import { LLMOperatorService, llmOperator as defaultLlm } from './llm-operator.service';
 import { ConservateurService, conservateur as defaultConservateur } from './conservateur.service';
 import { ThreadService, threadService as defaultThreads } from './thread.service';
-import { ReserveService, reserveService as defaultReserves } from './reserve.service';
+import { ReserveService } from './reserve.service';
 
 /**
  * PASSEUR SERVICE — §3.3.
@@ -230,7 +230,14 @@ export class PasseurService {
     private llm: LLMOperatorService = defaultLlm,
     private conservateur: ConservateurService = defaultConservateur,
     private threads: ThreadService = defaultThreads,
-    private reserves: ReserveService = defaultReserves,
+    // Construit sur le prisma INJECTÉ, et non sur le client global.
+    //
+    // Avec le singleton, un `new PasseurService(fauxPrisma)` — c'est-à-dire
+    // tout test unitaire — atteignait quand même la vraie base par ce
+    // chemin-là. Quinze tests du Passeur se sont mis à exiger PostgreSQL
+    // sans que rien ne le dise. Une dépendance qui échappe à l'injection
+    // n'est pas une dépendance injectée.
+    private reserves: ReserveService = new ReserveService(prisma),
   ) {}
 
   async generateQuestion(

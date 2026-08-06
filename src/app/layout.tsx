@@ -42,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main id="contenu" className="flex-1 py-8">
             {children}
           </main>
-          <footer className="flex flex-wrap gap-x-6 gap-y-2 border-t border-rule py-6">
+          <footer className="mt-auto flex flex-wrap gap-x-6 gap-y-2 border-t border-rule py-6">
             {/* §6.3 : « Exporter » est visible dans le pied de chaque page.
                 À côté, la reddition de comptes — ce que l'algorithme écarte
                 (§6.3, Annexe A point 5). Deux liens de même nature : ce que
