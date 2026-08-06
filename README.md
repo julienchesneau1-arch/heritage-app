@@ -31,6 +31,11 @@ Lien familial : /f/cmsd7vodd0000jeoxqdli408g
 
 Ouvrir `http://localhost:3000/f/<cet-identifiant>`. Ce lien pose le cookie familial, puis demande qui consulte.
 
+**Vérifié le 6 août 2026**, en suivant ces lignes à la lettre dans un clone
+neuf et sur une base vierge : `npm install` 44 s, migration et seed 6 s,
+premier écran servi 22 s après `npm run dev`. Le lien familial rendu par le
+seed ouvre bien la mémoire.
+
 Pour une vraie famille, passer plutôt par **`/commencer`** : la page fonde une famille avec son premier membre, puis `/famille` permet d'ajouter les autres et de leur transmettre leur lien personnel.
 
 ### Sans Redis, sans OpenAI
@@ -41,6 +46,13 @@ Pour une vraie famille, passer plutôt par **`/commencer`** : la page fonde une 
 ---
 
 ## Commandes
+
+`npm run verifier` lance les onze contrôles qui s'exécutent contre
+l'application en marche — étanchéité entre familles, accessibilité,
+clavier, permissions du navigateur, livre imprimé, hors-ligne, démarrage,
+export/restauration, stockage S3, échelle et pannes. Ce qu'ils établissent,
+et surtout **ce qu'ils n'établissent pas**, est détaillé dans
+[`outils/README.md`](outils/README.md).
 
 | Commande | Effet |
 |---|---|
