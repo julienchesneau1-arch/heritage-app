@@ -64,7 +64,7 @@ relire d'abord.
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 8 (`outils/`), hors `npm test` |
+| Outils de mesure | 9 (`outils/`), hors `npm test` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -771,6 +771,16 @@ par omission.
   navigateur, corrigé en `microphone=(self)`, et vérifié jusqu'au bout —
   `outils/permissions.mjs` appuie sur « Enregistrer une voix » et compte
   les octets déposés dans le champ du formulaire.
+
+- **L'application n'avait jamais été mesurée qu'à six récits.** Elle promet
+  cinquante ans. `outils/echelle.mjs` fabrique une famille de 5 000 récits,
+  1 666 passages et 600 messages, mesure chaque page, puis l'efface. Tout
+  passe sous 900 ms — sauf le graphe, qui mettait **1,58 s** et qui met
+  maintenant 36 ms : `story.count` avec `linkedEntities: { some }`
+  parcourait les 5 000 récits de la famille pour en compter 42. Le compte
+  et la liste partent désormais de l'entité, dans une seule requête.
+  Le livre pèse 6,9 Mo de HTML pour 5 000 récits — c'est le seul chemin
+  sans borne du produit, et c'est voulu : un livre ne se pagine pas.
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.

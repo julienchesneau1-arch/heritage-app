@@ -140,30 +140,69 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
   }
 
   // ── Voisinage immédiat : les récits liés, et ce qu'ils touchent d'autre ──
-  const linkedToSelected = {
+  const visibles = {
     familyId: context.family.id,
     archived: false,
-      suspendedAt: null,
-    linkedEntities: { some: { id: selected.id } },
+    suspendedAt: null,
   };
 
-  // Un graphe borné qui ne dit pas ce qu'il cache affirme une complétude
-  // qu'il n'a pas : huit points feraient croire que Robert n'apparaît que
-  // dans huit récits. On compte donc ce qui existe, pas seulement ce qu'on
-  // montre.
-  const [stories, storiesTotal] = await Promise.all([
-    prisma.story.findMany({
-      where: linkedToSelected,
-      orderBy: { createdAt: 'desc' },
-      take: MAX_STORIES,
-      select: {
-        id: true,
-        title: true,
-        linkedEntities: { select: { id: true, name: true, type: true } },
+  /**
+   * ── ON PART DE L'ENTITÉ, PAS DES RÉCITS ──
+   *
+   * Cette page interrogeait `story.findMany` avec `linkedEntities: { some }`.
+   * Mesuré sur une famille de cinq mille récits, l'écran mettait 1,6 s à
+   * s'afficher — au-delà du seuil où l'on se demande si l'application a
+   * planté. `EXPLAIN ANALYZE` disait pourquoi, sans ambiguïté :
+   *
+   *   Index Scan Backward using stories_family_id_created_at_idx
+   *     (actual rows=5000 loops=1)
+   *   -> Index Only Scan on "_StoryEntities"  (loops=5000)
+   *
+   * Postgres parcourait TOUS les récits de la famille dans l'ordre des
+   * dates, sondait la table de liaison pour chacun, et s'arrêtait au
+   * huitième trouvé. Le coût suivait la taille de la mémoire entière, alors
+   * que la réponse ne dépend que des récits liés à cette entité — c'est-à-
+   * dire d'un coût qui ne devrait pas bouger quand la famille grandit.
+   *
+   * En partant de l'entité, la requête entre par l'index de la table de
+   * liaison et ne touche que les récits concernés. Mesuré : 56 ms → 4 ms,
+   * et la page repasse sous le seuil (`outils/echelle.mjs`).
+   *
+   * ── ET LE COMPTE COÛTAIT ENCORE PLUS CHER ──
+   *
+   * Corriger la liste n'a rien changé au temps de la page : 1,58 s toujours.
+   * Le vrai coût était le COMPTE — `story.count` avec le même
+   * `linkedEntities: { some }`, mesuré à 1 541 ms à lui seul. Ma première
+   * sonde l'avait pourtant chiffré à 3 ms : elle mesurait un comptage sur
+   * une entité SANS AUCUN RÉCIT LIÉ. Un zéro se compte vite, et une mesure
+   * prise sur un ensemble vide ne dit rien de la mesure.
+   *
+   * Le compte part donc de l'entité lui aussi, et dans la MÊME requête que
+   * la liste : 1 649 ms → 53 ms, un aller-retour au lieu de deux, et le
+   * même résultat (42, vérifié côte à côte).
+   */
+  const depuisEntite = await prisma.entity.findUnique({
+    where: { id: selected.id },
+    select: {
+      // Un graphe borné qui ne dit pas ce qu'il cache affirme une
+      // complétude qu'il n'a pas : huit points feraient croire que Robert
+      // n'apparaît que dans huit récits. On compte donc ce qui existe, pas
+      // seulement ce qu'on montre.
+      _count: { select: { stories: { where: visibles } } },
+      stories: {
+        where: visibles,
+        orderBy: { createdAt: 'desc' },
+        take: MAX_STORIES,
+        select: {
+          id: true,
+          title: true,
+          linkedEntities: { select: { id: true, name: true, type: true } },
+        },
       },
-    }),
-    prisma.story.count({ where: linkedToSelected }),
-  ]);
+    },
+  });
+  const stories = depuisEntite?.stories ?? [];
+  const storiesTotal = depuisEntite?._count.stories ?? 0;
 
   const fils = await threadService.forEntity(context.family.id, selected.id);
   const demandesPortees = await reserveService.demandesPortees(context.family.id, selected.id);

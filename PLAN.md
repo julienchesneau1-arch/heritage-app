@@ -116,6 +116,7 @@ tourner partout finit désactivé.
 | `possession.mts` | l'aller-retour export → restauration, base réelle | 29/29 |
 | `demarrage.mjs` | l'étage d'exécution rejoué, migrations + démarrage | 7/7 |
 | `permissions.mjs` | les en-têtes, le micro, l'enregistreur de bout en bout | 12/12 |
+| `echelle.mjs` | 5 000 récits fabriqués, mesurés, effacés | 12/12 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
