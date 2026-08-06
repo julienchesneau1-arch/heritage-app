@@ -19,8 +19,36 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          // Pas de géolocalisation, pas de micro sans action explicite : §3.1 entrées interdites.
-          { key: 'Permissions-Policy', value: 'geolocation=(), camera=(), microphone=()' },
+          /*
+           * ── `microphone=(self)` INTERDISAIT LE MICRO À L'APPLICATION ──
+           *
+           * Une liste vide ne veut pas dire « sur action explicite » : elle
+           * veut dire PERSONNE, l'origine elle-même comprise. En production,
+           * `navigator.mediaDevices.getUserMedia({ audio: true })` levait
+           * `NotAllowedError` avant que le navigateur ne demande quoi que ce
+           * soit à qui que ce soit.
+           *
+           * Conséquence : le mode entretien — un écran, une question, un
+           * bouton, tout le chemin construit POUR CEUX QUI N'ÉCRIVENT PAS —
+           * ne pouvait enregistrer aucun mot une fois déployé. Rien ne le
+           * signalait : le bouton s'affichait, on appuyait, il ne se passait
+           * rien. Le commentaire d'origine décrivait l'intention (« pas de
+           * micro sans action explicite ») ; l'en-tête, lui, disait autre
+           * chose, et c'est l'en-tête que le navigateur applique.
+           *
+           * `(self)` : la page peut demander le micro, et le navigateur
+           * demande alors à la personne. C'est bien « sur action explicite »,
+           * et cette fois c'est ce qui est écrit.
+           *
+           * La caméra reste fermée : les photos passent par un champ de
+           * fichier, qui ouvre l'appareil photo du téléphone sans passer par
+           * cette API. La géolocalisation n'est demandée nulle part — §3.1.
+           *
+           * Constaté en appelant `getUserMedia` dans un vrai navigateur, pas
+           * en relisant la chaîne : `NotAllowedError — Permission denied`,
+           * `document.featurePolicy.allowsFeature('microphone') === false`.
+           */
+          { key: 'Permissions-Policy', value: 'geolocation=(), camera=(), microphone=(self)' },
         ],
       },
     ];

@@ -59,12 +59,12 @@ relire d'abord.
 | Lignes de code applicatif | 14 554 |
 | Lignes de tests | 6 048 |
 | Lignes de documentation | 4 584 |
-| Tests, tous verts | **568**, en 28 fichiers |
+| Tests, tous verts | **572**, en 28 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 6 (`outils/`), hors `npm test` |
+| Outils de mesure | 8 (`outils/`), hors `npm test` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -622,7 +622,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**568 tests, 28 fichiers, tous verts**, plus six outils de mesure qui
+**572 tests, 28 fichiers, tous verts**, plus huit outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
@@ -729,10 +729,22 @@ par omission.
   navigateur.** L'architecture est testée, le découpage audio est testé, le
   consensus est testé — le chargement du modèle dans une vraie page, non.
   C'est aujourd'hui le plus gros inconnu du produit.
-- **L'image Docker n'avait jamais été construite** avant le déploiement
-  réel, Docker Hub étant bloqué par le proxy de l'environnement de
-  développement. C'est exactement là que la première panne est survenue.
-  `tests/image.test.ts` couvre désormais la classe de défaut, pas l'image.
+- **L'image Docker n'a toujours pas été construite**, et la raison que je
+  donnais était fausse. J'écrivais « Docker Hub est bloqué » ; le démon
+  Docker n'était simplement pas lancé. Une fois démarré, l'API des trois
+  registres répond — mais leurs CDN de blobs sont refusés par la politique
+  du relais, sur Docker Hub comme sur ghcr.io et public.ecr.aws. Le blocage
+  est réel, il ne porte pas là où je le disais, et aucun miroir n'y
+  changerait rien.
+
+  `outils/demarrage.mjs` fait ce qui en approche le plus, et va plus loin
+  qu'une simple construction : il RECONSTITUE le système de fichiers de
+  l'étage d'exécution en lisant les `COPY` du Dockerfile, puis exécute la
+  vraie `CMD` contre la vraie base. Le serveur démarre, `migrate deploy`
+  tourne sur une base DÉJÀ PEUPLÉE — le cas de production, pas celui d'un
+  `migrate reset` —, et le contrôle reproduit à l'identique la panne
+  d'origine si l'on remet `node_modules/.bin/prisma` :
+  `sh: 1: node_modules/.bin/prisma: not found`, code 127.
 - **Le livre et le hors-ligne se vérifient maintenant**, et ne se
   vérifiaient pas avant. `outils/hors-ecran.mjs` bascule le rendu en média
   `print`, produit un vrai PDF, et contrôle que le menu, la navigation et
@@ -751,6 +763,14 @@ par omission.
   plus un récit, l'auteur avait accepté, et une opération technique défaisait
   l'accord sans que personne l'ait décidé. L'export ignorait par ailleurs
   quatre modèles alors que son en-tête annonçait « TOUT ».
+
+- **Le micro était fermé à l'application elle-même**, et personne ne
+  l'avait vu. `Permissions-Policy: microphone=()` n'autorise personne,
+  l'origine comprise : le mode entretien ne pouvait enregistrer aucun mot
+  une fois déployé. Trouvé en appelant `getUserMedia` dans un vrai
+  navigateur, corrigé en `microphone=(self)`, et vérifié jusqu'au bout —
+  `outils/permissions.mjs` appuie sur « Enregistrer une voix » et compte
+  les octets déposés dans le champ du formulaire.
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.

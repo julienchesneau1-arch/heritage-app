@@ -114,6 +114,8 @@ tourner partout finit désactivé.
 | `stockage-s3.mts` | le pilote S3 contre un vrai serveur S3 | 10/10 |
 | `hors-ecran.mjs` | le livre imprimé, et le hors-ligne réseau coupé | 13/13 |
 | `possession.mts` | l'aller-retour export → restauration, base réelle | 29/29 |
+| `demarrage.mjs` | l'étage d'exécution rejoué, migrations + démarrage | 7/7 |
+| `permissions.mjs` | les en-têtes, le micro, l'enregistreur de bout en bout | 12/12 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 

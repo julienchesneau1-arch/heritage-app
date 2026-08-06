@@ -143,3 +143,51 @@ describe('La sauvegarde ne peut pas se déclarer faite sans l’être', () => {
     expect(purge).toBeGreaterThan(derniereCapture);
   });
 });
+
+describe('Le navigateur doit pouvoir donner le micro à l’application', () => {
+  /**
+   * `Permissions-Policy: microphone=()` n'autorise PERSONNE — l'origine
+   * elle-même comprise. Le commentaire d'à côté disait « pas de micro sans
+   * action explicite » ; l'en-tête disait autre chose, et c'est l'en-tête
+   * que le navigateur applique.
+   *
+   * Le mode entretien ne pouvait donc enregistrer aucun mot en production :
+   * le bouton s'affichait, on appuyait, il ne se passait rien. Aucune erreur
+   * applicative, aucun test rouge — le navigateur refusait avant de
+   * demander quoi que ce soit à qui que ce soit.
+   *
+   * Ce test lit une chaîne ; `outils/permissions.mjs` va jusqu'à appuyer
+   * sur le bouton et compter les octets déposés. Les deux sont nécessaires :
+   * l'outil trouve, ce test empêche de revenir en arrière sans le voir.
+   */
+  const CONFIG = readFileSync(join(process.cwd(), 'next.config.mjs'), 'utf8');
+  const POLITIQUE = CONFIG.match(/'Permissions-Policy',\s*value:\s*'([^']*)'/)?.[1] ?? '';
+
+  it('la politique de permissions est bien servie', () => {
+    expect(POLITIQUE).not.toBe('');
+  });
+
+  it('le micro est autorisé à l’origine, et à elle seule', () => {
+    expect(POLITIQUE).toMatch(/microphone=\(self\)/);
+    expect(POLITIQUE).not.toMatch(/microphone=\(\)/);
+    // `*` ouvrirait le micro à n'importe quel cadre embarqué.
+    expect(POLITIQUE).not.toMatch(/microphone=\*/);
+  });
+
+  it('la géolocalisation et la caméra restent fermées — §3.1', () => {
+    expect(POLITIQUE).toMatch(/geolocation=\(\)/);
+    expect(POLITIQUE).toMatch(/camera=\(\)/);
+  });
+
+  it('les autres en-têtes de sécurité sont là', () => {
+    for (const entete of [
+      'Strict-Transport-Security',
+      'X-Content-Type-Options',
+      'X-Frame-Options',
+      'Referrer-Policy',
+    ]) {
+      expect(CONFIG).toContain(entete);
+    }
+    expect(CONFIG).toMatch(/poweredByHeader:\s*false/);
+  });
+});
