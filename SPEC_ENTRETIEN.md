@@ -193,21 +193,80 @@ l'auteur ni le narrateur : elle ne peut pas le supprimer. Ce qu'elle peut :
 2. **Répondre.** Attacher son propre récit à celui-là. Et c'est la réponse
    constitutionnelle : dans une mémoire familiale, **on répond à une histoire
    par une autre histoire**. C'est la primitive elle-même.
-3. **S'y opposer** — et alors :
+3. **Demander la suspension** — et la demande ne suspend rien à elle seule.
 
-> **La suspension.** Le récit n'est ni détruit ni publié. Il devient
-> invisible à tous **sauf aux deux personnes concernées**, et il attend.
-> Sans minuteur. Sans relance. Sans « résolvez ce désaccord ».
->
-> Un récit suspendu trente ans est une issue acceptable. Un récit détruit,
-> ou publié de force, ne l'est pas.
+### La décision, et pourquoi j'ai changé d'avis
 
-**⚠ Décision ouverte.** C'est le seul point de ce document qui relève d'un
-choix de valeurs et non d'une déduction. Deux autres politiques existent :
-« l'auteur garde toujours » (le produit peut servir à exposer quelqu'un) ou
-« l'objection efface toujours » (le produit sert à faire taire). Je recommande
-la suspension parce qu'elle est la seule des trois qui ne trahisse personne.
-**À confirmer avant implémentation.**
+J'avais d'abord recommandé la **suspension automatique dès l'objection** :
+le récit devient invisible à tous sauf aux deux intéressés, et il attend.
+En la confrontant au reste du produit, elle ne tient pas. Trois objections,
+dont la dernière est décisive.
+
+**Elle contredit la §2.6, c'est-à-dire la phrase même dont je faisais
+découler tout le reste.**
+
+> « Un membre peut décider de ne plus voir un récit ; il ne peut pas décider
+> à la place des autres. »
+
+Une suspension déclenchée par l'objection est exactement cela : un membre
+décide, pour toute la famille, que ce récit ne se lit plus. Le fait qu'il
+survive en base ne change rien à ce que vivent les autres.
+
+**Elle est un veto avec des étapes en plus.** Si l'auteur ne cède jamais, le
+récit reste invisible pour toujours. Le résultat est identique à
+« l'objection efface toujours », habillé en neutralité — ce qui est pire,
+parce que ça se donne l'air d'un compromis.
+
+**Et elle rend le produit adjudicateur d'un conflit qu'il ne peut pas
+comprendre.** Une application ne sait pas qui a raison entre deux membres
+d'une famille, et prétendre le contraire est la même faute que d'afficher
+un chiffre qu'on n'a pas mesuré.
+
+### Ce qui est retenu : la suspension par accord, jamais par objection
+
+**Celui qui s'estime concerné demande. Seul l'auteur suspend.**
+
+L'application transmet la demande, nommément — on ne s'oppose pas
+anonymement — et fournit à l'auteur un geste qu'il n'avait pas.
+
+**Ce que cela ajoute réellement.** Aujourd'hui, un auteur qui veut
+accommoder quelqu'un n'a qu'une option : **supprimer**. C'est irréversible,
+et cela détruit les `Passage` attachés — donc la chaîne de transmission,
+c'est-à-dire la seule chose que le produit mesure. « Suspendre » lui donne
+un geste **plus doux que la suppression**, réversible, qui ne détruit rien.
+
+C'est donc une extension du droit de l'auteur **sur ses propres mots**
+(§2.1 règle 2 amendée), et non un droit nouveau sur les mots d'autrui.
+Aucune ligne de la Constitution n'est amendée.
+
+**Si l'auteur refuse**, il reste à celui qui a demandé : la sourdine, le
+déliement, la réserve portée, et la réponse. L'application a fait tout ce
+qu'elle peut légitimement faire — et elle le dit, plutôt que de faire
+semblant d'avoir un recours qu'elle n'a pas.
+
+**Si l'auteur est mort**, la demande reste sans réponse. Il n'existe aucun
+mécanisme pour consentir à la place de quelqu'un — voir §5.6.
+
+### Ce qu'un récit suspendu devient
+
+La frontière existe déjà dans le code, et je m'y range : **le livre filtre,
+l'export ne filtre rien.**
+
+| | Récit suspendu |
+|---|---|
+| Pages, recherche, Passeur, veillée, graphe | **absent** |
+| Le livre — un objet qui circule | **absent** |
+| L'export (`/api/family/:id/export`) | **présent**, marqué suspendu |
+| Ses `Passage` | **intacts** |
+
+C'est la distinction **possession / publication**, déjà appliquée aux récits
+archivés et mis en quarantaine : le livre les exclut (`archived: false,
+quarantined: false`), l'export les rend tous. L'amendement 3 dit que la
+famille possède ses données ; il ne dit pas que tout doit s'afficher.
+
+Un champ distinct de `quarantined`, qui appartient au Conservateur : mêler
+une décision humaine et une décision algorithmique dans le même champ
+empêcherait de savoir laquelle a agi.
 
 ### 5.5 La règle générale que j'en tire
 
@@ -320,14 +379,16 @@ champ, et on ne saurait plus laquelle a agi.
 
 ---
 
-## 9. Ce qu'il faut décider avant d'écrire une ligne
+## 9. Les deux décisions, tranchées
 
-1. **La politique du désaccord** (§5.4). Suspension sans vainqueur — ma
-   recommandation — ou l'une des deux autres.
-2. **Qui relit.** Désigné par la famille une fois pour toutes, ou choisi à
-   chaque entretien ? Je penche pour *désigné à chaque entretien par celui
-   qui le lance*, parce qu'un relecteur permanent devient un dépositaire de
-   tous les secrets de la maison sans que personne l'ait décidé.
+**1. La politique du désaccord.** Suspension **par accord de l'auteur**,
+jamais par objection. Voir §5.4 : la suspension automatique contredisait la
+§2.6, revenait à un veto déguisé, et faisait du produit l'arbitre d'un
+conflit qu'il ne peut pas comprendre.
 
-Le reste de ce document est déductible de la Constitution et n'appelle pas
-d'arbitrage.
+**2. Qui relit.** **Désigné à chaque entretien, par celui qui le lance.**
+Un relecteur permanent deviendrait le dépositaire de tous les secrets de la
+maison sans que personne l'ait décidé — et l'entretien suivant se ferait
+devant lui par défaut, ce qui n'est pas un consentement.
+
+Le reste de ce document est déductible de la Constitution.

@@ -83,6 +83,10 @@ model Member {
 
   transcriptionsRequested TranscriptionDraft[] @relation("Requester")
   transcriptionsValidated TranscriptionDraft[] @relation("Validator")
+  transcriptionsSpoken    TranscriptionDraft[] @relation("Speaker")
+  transcriptionsToReview  TranscriptionDraft[] @relation("Reviewer")
+
+  reserves Reserve[]
 
   @@index([familyId])
   @@map("members")
@@ -123,6 +127,26 @@ model Story {
   quarantined      Boolean   @default(false)
   quarantineReason String?   @map("quarantine_reason")
   archived         Boolean   @default(false)
+
+  // Suspension — décision HUMAINE, distincte de la quarantaine qui est
+  // celle du Conservateur. Les mêler dans un seul champ empêcherait de
+  // savoir laquelle a agi.
+  //
+  // Seul l'AUTEUR suspend, et seulement s'il y consent : quelqu'un qui
+  // s'estime concerné demande, l'auteur accorde ou non. Une suspension
+  // déclenchée par l'objection seule contredirait la §2.6 — « un membre
+  // peut décider de ne plus voir un récit ; il ne peut pas décider à la
+  // place des autres ».
+  //
+  // C'est donc un geste PLUS DOUX que la suppression, offert à l'auteur sur
+  // ses propres mots : réversible, et qui ne détruit aucun `Passage`.
+  //
+  // Le récit disparaît des pages et du livre — ce qui circule — mais reste
+  // dans l'export : la famille possède ses données (amendement 3), tout n'a
+  // pas à s'afficher.
+  suspendedAt      DateTime? @map("suspended_at")
+  /// Celui à la demande de qui l'auteur a suspendu. Jamais anonyme.
+  suspendedForId   String?   @map("suspended_for_id")
 
   // Métadonnées temporelles
   createdAt DateTime  @default(now()) @map("created_at")
@@ -167,8 +191,9 @@ model Entity {
 
   family  Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
   member  Member? @relation(fields: [memberId], references: [id])
-  stories Story[] @relation("StoryEntities")
-  threads Thread[]
+  stories  Story[] @relation("StoryEntities")
+  threads  Thread[]
+  reserves Reserve[]
 
   @@unique([familyId, normalizedName, type])
   @@map("entities")
@@ -388,6 +413,24 @@ model TranscriptionDraft {
   archiveId     String @unique @map("archive_id")
   requestedById String @map("requested_by_id")
 
+  // ─── Mode entretien ───
+  //
+  // Celui qui a PARLÉ. Le brouillon lui appartient : il peut le détruire
+  // entièrement après réécoute, sans justification, avant qu'il ne devienne
+  // quoi que ce soit. Jusqu'ici seul `validatedById` existait — le
+  // relecteur, pas la voix : celui qui parlait ne pouvait pas reprendre ce
+  // qu'il venait de dire.
+  spokenById String? @map("spoken_by_id")
+
+  // Le relecteur DÉSIGNÉ, dit à celui qui parle AVANT le premier
+  // enregistrement. Un relecteur permanent deviendrait le dépositaire de
+  // tous les secrets de la maison sans que personne l'ait décidé.
+  reviewerId String? @map("reviewer_id")
+
+  // La question posée, conservée telle quelle : un texte transcrit sans
+  // son énoncé est une réponse sans question.
+  promptText String? @map("prompt_text")
+
   // pending → ready → validated | discarded ; failed en cas d'erreur
   status String @default("pending")
 
@@ -425,6 +468,8 @@ model TranscriptionDraft {
   archive     Archive @relation(fields: [archiveId], references: [id], onDelete: Cascade)
   requestedBy Member  @relation("Requester", fields: [requestedById], references: [id])
   validatedBy Member? @relation("Validator", fields: [validatedById], references: [id])
+  spokenBy    Member? @relation("Speaker", fields: [spokenById], references: [id])
+  reviewer    Member? @relation("Reviewer", fields: [reviewerId], references: [id])
   story       Story?  @relation(fields: [storyId], references: [id])
 
   @@index([familyId, status])
@@ -451,6 +496,56 @@ model StoryMute {
   @@unique([storyId, memberId])
   @@index([familyId, memberId])
   @@map("story_mutes")
+}
+
+/// LA RÉSERVE — le droit de ne pas parler d'un sujet.
+///
+/// `StoryMute` répond à « je ne veux plus voir CE récit ». La réserve
+/// répond à ce qui vient avant : « ne me demande jamais rien sur CECI ».
+/// Le Passeur l'observe, dans l'entretien comme ailleurs.
+///
+/// ── Silencieuse par défaut, et c'est le point le plus important ──
+///
+/// Si l'application affichait « Jeanne a demandé qu'on ne parle pas de X »,
+/// elle apprendrait à toute la famille que X existe et que ça fait mal.
+/// La réserve peut être plus révélatrice que le récit. Seule l'intéressée
+/// décide de la porter à la famille ; le produit ne le décide jamais.
+///
+/// ── Ce qu'une réserve N'EST PAS ──
+///
+/// Elle ne s'impose pas aux autres. La §2.6 est claire : « un membre peut
+/// décider de ne plus voir un récit ; il ne peut pas décider à la place des
+/// autres. » Portée, elle est AFFICHÉE au moment où quelqu'un écrit sur le
+/// sujet — dans les mots de son auteur, jamais reformulés — puis
+/// l'application laisse faire. Elle porte la demande ; elle ne l'applique
+/// pas. Le jour où une machine impose le respect d'un souhait familial, ce
+/// n'est plus un acte de respect mais une règle qu'on contourne.
+///
+/// Aucune détection automatique de sensibilité n'existe et ne doit exister
+/// (amendement 1) : une réserve est toujours déclarée par un humain.
+model Reserve {
+  id       String @id @default(cuid())
+  familyId String @map("family_id")
+  memberId String @map("member_id")
+
+  /// Une entité de la mémoire, ou quelques mots libres. Jamais interprété.
+  entityId String? @map("entity_id")
+  sujet    String?
+
+  /// 'silencieuse' — personne d'autre ne la voit. Défaut, et le bon.
+  /// 'portee'      — visible au moment d'écrire, si l'intéressé l'a voulu.
+  portee String @default("silencieuse")
+
+  /// Ses mots à elle, s'il y en a. Affichés tels quels ou pas du tout.
+  demande String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  member Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  entity Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([familyId, memberId])
+  @@map("reserves")
 }
 
 // ─── VISIBILITY LOG (audit Conservateur) ───

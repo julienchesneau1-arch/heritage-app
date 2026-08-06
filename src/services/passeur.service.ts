@@ -5,6 +5,7 @@ import { constitutionEmotionFilter } from '@/lib/constitution';
 import { LLMOperatorService, llmOperator as defaultLlm } from './llm-operator.service';
 import { ConservateurService, conservateur as defaultConservateur } from './conservateur.service';
 import { ThreadService, threadService as defaultThreads } from './thread.service';
+import { ReserveService, reserveService as defaultReserves } from './reserve.service';
 
 /**
  * PASSEUR SERVICE — §3.3.
@@ -229,6 +230,7 @@ export class PasseurService {
     private llm: LLMOperatorService = defaultLlm,
     private conservateur: ConservateurService = defaultConservateur,
     private threads: ThreadService = defaultThreads,
+    private reserves: ReserveService = defaultReserves,
   ) {}
 
   async generateQuestion(
@@ -239,12 +241,25 @@ export class PasseurService {
     // Parcimonie : une question par session.
     if (await this.store.get(sessionKey(familyId, memberId))) return null;
 
-    const [members, muted] = await Promise.all([
+    const [members, muted, enReserve, recitsReserves] = await Promise.all([
       this.prisma.member.findMany({ where: { familyId, isDeleted: false } }),
       // Ce que CE membre a fait taire — pas ce que la famille a fait taire.
       this.conservateur.mutedStoryIds(familyId, memberId),
+      // Ce sur quoi CE membre a demandé qu'on ne l'interroge plus. La
+      // sourdine porte sur un récit déjà lu ; la réserve vient avant, et
+      // porte sur le sujet lui-même. Personne d'autre ne la connaît.
+      this.reserves.entitesEnReserve(familyId, memberId),
+      // Et les récits qui parlent de ce sujet : une question peut arriver
+      // par un fil accroché à un récit, sans passer par l'entité.
+      this.reserves.recitsEnReserve(familyId, memberId),
     ]);
     const context: PasseurContext = { members, memberId, now };
+
+    // Filtre posé DANS LA REQUÊTE, et non après le tri : un récit écarté
+    // par une réserve ne doit jamais entrer dans les candidats, sans quoi il
+    // suffirait d'un chemin oublié pour que la question revienne.
+    const horsReserve =
+      enReserve.size > 0 ? { linkedEntities: { none: { id: { in: [...enReserve] } } } } : {};
 
     // ── Avant toute règle : une question que quelqu'un a réellement posée ──
     //
@@ -252,7 +267,12 @@ export class PasseurService {
     // c'est le seul vide informationnel que le produit n'a pas inféré. Depuis
     // le fil, elle n'a plus besoin d'un récit pour exister — on peut demander
     // « d'où venait ce vélo ? » sans que personne ait rédigé quoi que ce soit.
-    const posee = await this.unansweredQuestion(familyId, memberId);
+    //
+    // La réserve s'applique ici aussi, et il faut y penser : ce chemin
+    // passe DEVANT les règles et ne verrait pas le filtre posé plus bas.
+    // Une question posée par un proche reste une question, et ne fait pas
+    // exception au silence demandé.
+    const posee = await this.unansweredQuestion(familyId, memberId, enReserve, recitsReserves);
     if (posee && !(await this.wasAskedRecently(familyId, memberId, subjectOf(posee), posee.ruleId))) {
       return this.remember(familyId, memberId, posee);
     }
@@ -266,6 +286,7 @@ export class PasseurService {
             familyId,
             archived: false,
             ...(muted.length > 0 ? { id: { notIn: muted } } : {}),
+            ...horsReserve,
             ...rule.where(context),
           },
           include: { linkedEntities: true },
@@ -309,8 +330,20 @@ export class PasseurService {
   private async unansweredQuestion(
     familyId: string,
     memberId: string,
+    enReserve: Set<string> = new Set(),
+    recitsReserves: Set<string> = new Set(),
   ): Promise<PasseurQuestion | null> {
-    const [thread] = await this.threads.unanswered(familyId, memberId, 1);
+    const filtre = enReserve.size > 0 || recitsReserves.size > 0;
+    // On demande plus d'un fil : le premier peut porter sur un sujet mis en
+    // réserve, et s'arrêter là ferait taire le Passeur pour rien.
+    const threads = await this.threads.unanswered(familyId, memberId, filtre ? 10 : 1);
+    // Les DEUX ancrages. Un fil peut pendre à une entité ou à un récit, et
+    // c'est par le second que la question passait encore.
+    const thread = threads.find(
+      (t) =>
+        (!t.entityId || !enReserve.has(t.entityId)) &&
+        (!t.storyId || !recitsReserves.has(t.storyId)),
+    );
     const question = thread?.messages[0];
     if (!thread || !question) return null;
 
