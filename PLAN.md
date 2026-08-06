@@ -113,6 +113,7 @@ tourner partout finit désactivé.
 | `captures.mjs` | la planche de `redesign/captures/` | 18 captures |
 | `stockage-s3.mts` | le pilote S3 contre un vrai serveur S3 | 10/10 |
 | `hors-ecran.mjs` | le livre imprimé, et le hors-ligne réseau coupé | 13/13 |
+| `possession.mts` | l'aller-retour export → restauration, base réelle | 29/29 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 

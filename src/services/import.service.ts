@@ -104,12 +104,81 @@ export class ImportService {
           views: num(story.views) ?? 0,
           lastViewedAt: date(story.lastViewedAt),
           archived: story.archived === true,
+          // ── CE QU'UN RETRAIT NE DOIT PAS PERDRE ──
+          //
+          // `quarantined` et `suspendedAt` n'étaient pas repris. Une famille
+          // qui restaurait sa mémoire — changement d'hébergeur, erreur,
+          // reprise après incident — retrouvait donc PUBLIÉS les récits que
+          // leur auteur avait suspendus à la demande de quelqu'un, et
+          // remontés dans le Passeur ceux qu'un membre avait mis en
+          // sourdine. Quelqu'un avait demandé qu'on n'en parle plus,
+          // l'auteur avait accepté, et une opération technique défaisait
+          // l'accord sans que personne l'ait décidé.
+          //
+          // Un retrait qui ne survit pas à une restauration n'est pas un
+          // retrait : c'est un masquage provisoire.
+          quarantined: story.quarantined === true,
+          suspendedAt: date(story.suspendedAt),
           createdAt: date(story.createdAt) ?? new Date(),
           eventDate: date(story.eventDate),
           linkedEntities: { connect: linked.map((id) => ({ id })) },
         },
       });
       storyIds.set(str(story.id) ?? row.id, row.id);
+    }
+
+    // `suspendedForId` désigne un MEMBRE : il ne peut être posé qu'une fois
+    // la table des membres remappée, donc en second passage.
+    let suspensions = 0;
+    for (const story of stories) {
+      const id = mapped(storyIds, story.id);
+      const pourQui = mapped(memberIds, story.suspendedForId);
+      if (!id || !pourQui) continue;
+      await this.prisma.story.update({ where: { id }, data: { suspendedForId: pourQui } });
+      suspensions += 1;
+    }
+
+    // ── Les mises en sourdine ──
+    //
+    // « Un membre peut décider de ne plus voir un récit » (§2.6). Sans
+    // elles, la restauration remet devant les yeux de quelqu'un ce qu'il
+    // avait choisi d'écarter, et il doit refaire trois fois le même geste.
+    let sourdines = 0;
+    for (const mute of asArray(data.storyMutes)) {
+      const storyId = mapped(storyIds, mute.storyId);
+      const memberId = mapped(memberIds, mute.memberId);
+      if (!storyId || !memberId) continue;
+      await this.prisma.storyMute.create({
+        data: {
+          familyId: created.id,
+          storyId,
+          memberId,
+          reason: str(mute.reason) ?? 'restaurée',
+          createdAt: date(mute.createdAt) ?? new Date(),
+        },
+      });
+      sourdines += 1;
+    }
+
+    // ── Les demandes de suspension ──
+    //
+    // Elles portent un nom et des mots. Les perdre laisserait l'auteur
+    // devant un récit suspendu sans savoir qui l'avait demandé, ni pourquoi.
+    let demandes = 0;
+    for (const demande of asArray(data.suspensionRequests)) {
+      const storyId = mapped(storyIds, demande.storyId);
+      const memberId = mapped(memberIds, demande.memberId);
+      if (!storyId || !memberId) continue;
+      await this.prisma.suspensionRequest.create({
+        data: {
+          familyId: created.id,
+          storyId,
+          memberId,
+          motif: str(demande.motif),
+          createdAt: date(demande.createdAt) ?? new Date(),
+        },
+      });
+      demandes += 1;
     }
 
     // Les passages en dernier : ils supposent les deux récits présents.
@@ -266,6 +335,11 @@ export class ImportService {
         fils: threads,
         messages,
         traditions,
+        // Nommés même à zéro : un compte absent se lit « il n'y en avait
+        // pas », un zéro se lit « il n'y en a plus ».
+        'récits suspendus': suspensions,
+        'mises en sourdine': sourdines,
+        'demandes de suspension': demandes,
       },
     };
   }

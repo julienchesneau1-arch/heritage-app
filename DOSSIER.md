@@ -64,7 +64,7 @@ relire d'abord.
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 5 (`outils/`), hors `npm test` |
+| Outils de mesure | 6 (`outils/`), hors `npm test` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -622,14 +622,16 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**568 tests, 28 fichiers, tous verts**, plus cinq outils de mesure qui
+**568 tests, 28 fichiers, tous verts**, plus six outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
 11 pages, 0 défaut), `outils/captures.mjs` (la planche de
 `redesign/captures/`), `outils/stockage-s3.mts` (le pilote S3 contre un
 vrai serveur S3, 10 contrôles) et `outils/hors-ecran.mjs` (le livre
-imprimé et le hors-ligne réseau réellement coupé, 13 contrôles).
+imprimé et le hors-ligne réseau réellement coupé, 13 contrôles) et
+`outils/possession.mts` (l'aller-retour export → restauration contre une
+vraie base, 29 contrôles).
 
 Les quatre fichiers ajoutés depuis : `entretien.test.ts` (le silence de
 l'écran où l'on parle), `reserve.test.ts` (les deux chemins par lesquels
@@ -741,6 +743,14 @@ par omission.
   une requête émise par le Service Worker — et vérifie qu'une page déjà lue
   reste lisible et qu'une page jamais lue rend le repli plutôt qu'un
   contenu vide.
+
+- **L'aller-retour export → restauration n'avait jamais été essayé.** Il
+  l'est désormais (`outils/possession.mts`), et il a trouvé une faute
+  grave : la restauration REPUBLIAIT les récits suspendus et levait les
+  quarantaines et les sourdines. Quelqu'un avait demandé qu'on n'affiche
+  plus un récit, l'auteur avait accepté, et une opération technique défaisait
+  l'accord sans que personne l'ait décidé. L'export ignorait par ailleurs
+  quatre modèles alors que son en-tête annonçait « TOUT ».
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.
