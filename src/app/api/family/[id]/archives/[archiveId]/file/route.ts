@@ -25,7 +25,25 @@ export async function GET(
   });
   if (!archive) return apiError('NOT_FOUND');
 
-  const data = await storage.get(archive.storageKey);
+  // Une panne du stockage n'est pas une disparition. Répondre `NOT_FOUND`
+  // sur une photo intacte, c'est apprendre à une famille qu'elle a perdu
+  // quelque chose qu'elle n'a pas perdu — et c'est irrattrapable une fois
+  // dit. `null` ne signifie plus que « l'objet n'existe pas » ; le reste
+  // remonte, et remonte en 503.
+  let data: Buffer | null;
+  try {
+    data = await storage.get(archive.storageKey);
+  } catch (error) {
+    console.error('[archives] stockage injoignable', error);
+    return new Response(
+      JSON.stringify({
+        error: 'STORAGE_UNAVAILABLE',
+        message:
+          'Ce fichier n’a pas pu être récupéré maintenant. Il n’est pas perdu : réessayez dans un moment.',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } },
+    );
+  }
   if (!data) return apiError('NOT_FOUND');
 
   return new Response(new Uint8Array(data), {

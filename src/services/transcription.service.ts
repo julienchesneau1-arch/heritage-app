@@ -84,7 +84,7 @@ export class TranscriptionService {
    * dans le cycle d'une requête : dix minutes d'audio dépassent largement le
    * délai d'une fonction serverless.
    */
-  async processPending(limit = 3): Promise<{ processed: number; failed: number }> {
+  async processPending(limit = 3): Promise<{ processed: number; failed: number; reportes: number }> {
     const pending = await this.prisma.transcriptionDraft.findMany({
       where: { status: 'pending' },
       orderBy: { createdAt: 'asc' },
@@ -94,10 +94,28 @@ export class TranscriptionService {
 
     let processed = 0;
     let failed = 0;
+    /** Ni traités, ni en échec : à reprendre tels quels au prochain passage. */
+    let reportes = 0;
 
     for (const draft of pending) {
       try {
-        const audio = await storage.get(draft.archive.storageKey);
+        // ── Une panne de stockage ne condamne pas un enregistrement ──
+        //
+        // `storage.get` rendait `null` pour toute erreur, y compris un
+        // service momentanément injoignable. Le brouillon passait alors en
+        // `failed` avec « Fichier audio introuvable dans le stockage », et
+        // le relecteur lisait que l'enregistrement de sa grand-mère était
+        // perdu — alors qu'il dormait, intact, derrière une panne de deux
+        // minutes. On laisse donc le brouillon EN ATTENTE : le cron
+        // repassera, et personne n'aura appris une fausse nouvelle.
+        let audio: Buffer | null;
+        try {
+          audio = await storage.get(draft.archive.storageKey);
+        } catch (error) {
+          console.error('[transcription] stockage injoignable, brouillon laissé en attente', error);
+          reportes += 1;
+          continue;
+        }
         if (!audio) throw new Error('Fichier audio introuvable dans le stockage.');
 
         const outcome = await this.transcribe(audio, draft.archive.mimeType, draft.archive.title);
@@ -129,7 +147,7 @@ export class TranscriptionService {
       }
     }
 
-    return { processed, failed };
+    return { processed, failed, reportes };
   }
 
   /** Un brouillon en échec peut être relancé : une panne réseau n'est pas définitive. */

@@ -59,12 +59,12 @@ relire d'abord.
 | Lignes de code applicatif | 14 554 |
 | Lignes de tests | 6 048 |
 | Lignes de documentation | 4 584 |
-| Tests, tous verts | **561**, en 28 fichiers |
+| Tests, tous verts | **568**, en 28 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 3 (`outils/`), hors `npm test` |
+| Outils de mesure | 4 (`outils/`), hors `npm test` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -622,11 +622,13 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**561 tests, 28 fichiers, tous verts**, plus trois outils de mesure qui
-tournent hors de `npm test` parce qu'ils exigent un navigateur et une base
-peuplée : `outils/accessibilite.mjs` (axe-core, 18 pages, 0 violation),
-`outils/clavier.mjs` (la tabulation pressée pour de vrai, 11 pages,
-0 défaut) et `outils/captures.mjs` (la planche de `redesign/captures/`).
+**568 tests, 28 fichiers, tous verts**, plus quatre outils de mesure qui
+tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
+peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
+0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
+11 pages, 0 défaut), `outils/captures.mjs` (la planche de
+`redesign/captures/`) et `outils/stockage-s3.mts` (le pilote S3 contre un
+vrai serveur S3, 10 contrôles).
 
 Les quatre fichiers ajoutés depuis : `entretien.test.ts` (le silence de
 l'écran où l'on parle), `reserve.test.ts` (les deux chemins par lesquels
@@ -713,9 +715,13 @@ tiennent, et ils échouent tous sur l'ancienne version.
 Cette section existe parce qu'un dossier qui ne dit que ses réussites ment
 par omission.
 
-- **Le pilote S3/R2 n'a jamais été testé contre un vrai bucket.** Le code
-  est écrit, les tests sont des tests unitaires sur le pilote, pas sur le
-  service distant.
+- **Le pilote S3/R2 a tourné contre un vrai serveur S3, mais pas contre
+  Cloudflare R2.** `outils/stockage-s3.mts` lance un serveur S3 complet en
+  local et fait dialoguer le pilote avec lui : signature v4, aller-retour
+  de 512 Ko d'octets aléatoires vérifiés par empreinte, absence, retrait,
+  panne. Dix contrôles, tous passés. Ce que cela n'établit pas, et qu'il ne
+  faut pas lui faire dire : rien sur la latence réelle, les quotas, les
+  politiques de bucket, ni sur les en-têtes que R2 traite différemment.
 - **La transcription locale WebGPU n'a jamais tourné dans un vrai
   navigateur.** L'architecture est testée, le découpage audio est testé, le
   consensus est testé — le chargement du modèle dans une vraie page, non.
@@ -735,7 +741,8 @@ par omission.
   `installer-a-cote.sh` avec le vrai sous-domaine.
 - **Table d'alias persistante pour les imports** : les participants sont
   re-associés à chaque import, d'une source à l'autre.
-- **Test du pilote S3 contre un vrai bucket.**
+- **Test du pilote S3 contre un vrai bucket R2** — le dialogue S3 est
+  vérifié en local, le service de Cloudflare ne l'est pas.
 - **La transcription locale dans un vrai navigateur.**
 - **Trois choses que je ne toucherai pas sans qu'on me le demande** :
   l'audio jouable sur un récit (« Écouter Robert le raconter »), les

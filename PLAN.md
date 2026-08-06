@@ -92,9 +92,13 @@ qu'il contenait. Le geste de suspension existe à l'écran, avec son filtrage
 partout et sa présence dans l'export. Les demandes portées s'affichent au
 moment où quelqu'un écrit sur le sujet. Les onze écrans sont composés.
 
-**B5 est réduit à deux points, et les deux vous appartiennent** (§A4, et le
-stockage distant). Le troisième — l'audit d'accessibilité automatisé — est
-fait, et il a coûté plus cher que prévu.
+**B5 se réduit à un point, et il vous appartient** (§A4). L'audit
+d'accessibilité est fait. Le pilote S3 aussi : Docker Hub est bloqué depuis
+mon environnement, mais pas le registre npm — un serveur S3 complet s'y
+installe, et le pilote lui a parlé pour de bon. Il reste que ce serveur
+n'est pas Cloudflare R2 : rien n'est établi sur la latence, les quotas ni
+les politiques de bucket. C'est un cran de plus, pas la vérification
+complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
@@ -107,6 +111,7 @@ tourner partout finit désactivé.
 | `accessibilite.mjs` | axe-core, WCAG 2.1 AA, 18 pages | 0 violation |
 | `clavier.mjs` | tabulation réelle : pièges, contour de focus, ordre | 0 défaut, 11 pages |
 | `captures.mjs` | la planche de `redesign/captures/` | 18 captures |
+| `stockage-s3.mts` | le pilote S3 contre un vrai serveur S3 | 10/10 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
@@ -167,6 +172,8 @@ l'écran du relecteur, l'habillage des onze écrans, et trois outils de
 mesure qui refusent de conclure sur une page qu'ils n'ont pas chargée.
 
 **Ce que je n'ai toujours pas pu vérifier**, et qui ne se vérifie pas d'ici :
-la transcription locale dans un vrai navigateur (§A4), et le pilote S3/R2
-contre un vrai bucket. Tant que la sauvegarde de §A3 tourne, le disque du
-VPS suffit.
+la transcription locale dans un vrai navigateur (§A4). jsDelivr et Hugging
+Face sont toujours injoignables depuis cet environnement — retesté, pas
+supposé. Le pilote S3, lui, a été essayé contre un vrai serveur S3 ; contre
+Cloudflare R2, non. Tant que la sauvegarde de §A3 tourne, le disque du VPS
+suffit de toute façon.
