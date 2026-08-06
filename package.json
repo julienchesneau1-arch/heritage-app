@@ -25,7 +25,9 @@
     "verifier:possession": "tsx outils/possession.mts",
     "verifier:stockage": "tsx outils/stockage-s3.mts",
     "verifier:echelle": "node outils/echelle.mjs",
-    "captures": "node outils/captures.mjs"
+    "captures": "node outils/captures.mjs",
+    "verifier:etancheite": "node outils/etancheite.mjs",
+    "verifier:pannes": "node outils/pannes.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

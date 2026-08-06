@@ -18,8 +18,36 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+/**
+ * ── LA COQUILLE NE DOIT PAS DÉPENDRE DE LA BASE ──
+ *
+ * `loadContext()` interroge PostgreSQL. Tant qu'il était appelé ici sans
+ * protection, une base indisponible faisait échouer le GABARIT — et un
+ * gabarit qui échoue met `error.tsx` hors circuit, puisque celui-ci se rend
+ * À L'INTÉRIEUR du gabarit. Next servait alors sa propre page, en anglais,
+ * sans un mot sur ce qu'il advient de la mémoire. Constaté en coupant la
+ * base sur une application en marche : trois pages, trois fois
+ * `__next_error__`.
+ *
+ * On rattrape donc ici, et ici seulement. La barre de navigation se rend
+ * alors dans son état minimal — c'est une dégradation visible et modeste —
+ * pendant que la PAGE, elle, lève normalement et laisse `error.tsx` dire en
+ * français que rien n'est perdu.
+ *
+ * Ce qu'on ne fait surtout pas : servir une page qui ferait comme si de
+ * rien n'était. Une panne déguisée en absence est le pire des deux.
+ */
+async function contexteTolerant() {
+  try {
+    return await loadContext();
+  } catch (error) {
+    console.error('[layout] contexte indisponible, coquille servie sans famille', error);
+    return null;
+  }
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const context = await loadContext();
+  const context = await contexteTolerant();
   const reading = currentReadingSize();
 
   return (

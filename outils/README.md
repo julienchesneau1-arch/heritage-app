@@ -30,6 +30,7 @@ démarré.
 | `possession.mts` | exporte une famille, la restaure, compare — retraits compris |
 | `stockage-s3.mts` | fait dialoguer le pilote avec un vrai serveur S3 |
 | `echelle.mjs` | fabrique 5 000 récits, mesure chaque page, efface |
+| `pannes.mjs` | coupe la base pour de vrai et lit ce que la famille voit |
 | `captures.mjs` | régénère `redesign/captures/` |
 
 ---
@@ -50,6 +51,9 @@ démarré.
 - Une route répondait **« c'est fait » sur zéro ligne modifiée** : endormir
   la tradition d'une autre famille rendait HTTP 200. La donnée n'a jamais
   été en danger — le service est cloisonné — mais l'écriteau mentait.
+- **Aucune page d'erreur ni de 404 en français.** Base coupée, la famille
+  lisait « Application error: a server-side exception has occurred », sans
+  un mot sur ce qu'il advenait de ses récits.
 - `00-premier-jour.webp` **montrait le sélecteur d'identité** : la capture
   était prise sans cookie de membre, et `/` redirige alors vers `/qui`.
 

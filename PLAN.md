@@ -102,7 +102,7 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Dix outils vivent dans `outils/`, et une seule commande les lance tous :
+Onze outils vivent dans `outils/`, et une seule commande les lance tous :
 
 ```bash
 npm run verifier              # tout, ~6 minutes
@@ -126,6 +126,7 @@ N'établissent PAS — est dans `outils/README.md`.
 | `demarrage.mjs` | l'étage d'exécution rejoué, migrations + démarrage | 7/7 |
 | `permissions.mjs` | les en-têtes, le micro, l'enregistreur de bout en bout | 12/12 |
 | `echelle.mjs` | 5 000 récits fabriqués, mesurés, effacés | 12/12 |
+| `pannes.mjs` | 404, base coupée, retour à la normale | 8/8 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 

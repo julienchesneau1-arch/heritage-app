@@ -64,7 +64,7 @@ relire d'abord.
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 10 (`outils/`), hors `npm test`, `npm run verifier` |
+| Outils de mesure | 11 (`outils/`), hors `npm test`, `npm run verifier` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart

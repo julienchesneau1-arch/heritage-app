@@ -1,7 +1,7 @@
 /**
  * TOUT VÉRIFIER, EN UNE COMMANDE — `npm run verifier`.
  *
-* Dix outils vivent ici, chacun avec ses variables d'environnement et
+ * Onze outils vivent ici, chacun avec ses variables d'environnement et
  * son port. Un contrôle qu'on ne sait pas lancer est un contrôle qu'on ne
  * lance pas, et un contrôle qu'on ne lance pas ne protège de rien.
  *
@@ -92,6 +92,10 @@ const OUTILS = [
   ['possession.mts', 'Possession — aller-retour export → restauration'],
   ['stockage-s3.mts', 'Stockage — le pilote S3 contre un vrai serveur S3'],
   ['echelle.mjs', 'Échelle — 5 000 récits fabriqués, mesurés, effacés', { long: true }],
+  // La panne de base exige de pouvoir arrêter PostgreSQL : sans les deux
+  // commandes, l'outil saute ce contrôle et le DIT, plutôt que de le
+  // compter comme réussi.
+  ['pannes.mjs', 'Pannes — 404, base coupée, retour à la normale'],
 ];
 
 const bilan = [];
@@ -113,6 +117,8 @@ for (const [fichier, titre, options = {}] of OUTILS) {
         // elle ne doit pas se disputer le port de celle qu'on mesure.
         BASE_PORT: String(PORT + 210),
         RECITS: process.env.RECITS ?? '5000',
+        ARRET_BASE: process.env.ARRET_BASE ?? '',
+        DEMARRAGE_BASE: process.env.DEMARRAGE_BASE ?? '',
       },
       stdio: 'inherit',
     });
