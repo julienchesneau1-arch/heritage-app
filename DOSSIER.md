@@ -1,7 +1,8 @@
 # Héritage — dossier complet
 
 Tout ce qui a été construit, comment, et pourquoi. Écrit le 5 août 2026,
-après 27 commits sur la branche `claude/heritage-app-spec-acztj1`.
+remis à jour le 6, après 41 commits sur la branche
+`claude/heritage-app-spec-acztj1`.
 
 Les chiffres de ce document viennent du dépôt, pas de mémoire :
 `git log`, `wc -l`, `vitest run`, `prisma migrate`.
@@ -18,7 +19,7 @@ Les chiffres de ce document viennent du dépôt, pas de mémoire :
 6. [Toutes les fonctionnalités](#6-toutes-les-fonctionnalités)
 7. [Identité et sécurité](#7-identité-et-sécurité)
 8. [La pile technique](#8-la-pile-technique)
-9. [Comment ça a été construit — les 27 étapes](#9-comment-ça-a-été-construit--les-27-étapes)
+9. [Comment ça a été construit — les 41 étapes](#9-comment-ça-a-été-construit--les-41-étapes)
 10. [La méthode : chasser une classe de défaut](#10-la-méthode--chasser-une-classe-de-défaut)
 11. [Les tests](#11-les-tests)
 12. [Le déploiement](#12-le-déploiement)
@@ -53,19 +54,20 @@ relire d'abord.
 
 | | |
 |---|---|
-| Commits | 27 |
-| Fichiers TypeScript / TSX | 94 |
-| Lignes de code applicatif | 12 894 |
-| Lignes de tests | 5 003 |
-| Lignes de documentation | 2 811 |
-| Tests, tous verts | **440**, en 24 fichiers |
-| Modèles de données | 13 |
-| Migrations SQL | 8, toutes écrites à la main |
-| Routes | 43 (22 pages, 19 routes d'API, 2 routes d'entrée) |
-| Services | 13 |
+| Commits | 41 |
+| Fichiers TypeScript / TSX | 99 |
+| Lignes de code applicatif | 14 554 |
+| Lignes de tests | 6 048 |
+| Lignes de documentation | 4 584 |
+| Tests, tous verts | **555**, en 28 fichiers |
+| Modèles de données | 15 |
+| Migrations SQL | 10, toutes écrites à la main |
+| Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
+| Services | 16 |
+| Outils de mesure | 3 (`outils/`), hors `npm test` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
-Rapport tests / code : **0,39 ligne de test par ligne de code**. La plupart
+Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
 des tests ne vérifient pas que le code marche, mais qu'il ne fait pas ce
 qu'il a interdit — plusieurs lisent le source des composants pour cela.
 
@@ -111,13 +113,13 @@ Martin se raconte », et non « Vous n'avez encore rien écrit ».
 
 ## 4. Le modèle de données
 
-13 modèles PostgreSQL, via Prisma 5.
+15 modèles PostgreSQL, via Prisma 5.
 
 | Modèle | Rôle |
 |---|---|
 | `Family` | Le tenant isolé. Porte `tokenVersion` — la rotation du lien familial. |
 | `Member` | Une personne. `isDeleted` (soft-delete), `tokenVersion` (révocation individuelle), `calendarOptOut` (retrait du flux `.ics`), génération, dates. |
-| `Story` | Un récit. Auteur **et** narrateur, `eventDate` distincte de `createdAt`, type de structure, ton, archivage, quarantaine. |
+| `Story` | Un récit. Auteur **et** narrateur, `eventDate` distincte de `createdAt`, type de structure, ton, archivage, quarantaine, et `suspendedAt` / `suspendedForId` — suspendu par son auteur, pour quelqu'un de nommé. |
 | `Entity` | Personne, lieu ou objet. `normalizedName` sans accents pour le rapprochement. |
 | `Archive` | Photo, document, enregistrement. Texte extrait facultatif. |
 | `Tradition` | Ce qui revient. Périodicité, sommeil et raison du sommeil. |
@@ -125,11 +127,13 @@ Martin se raconte », et non « Vous n'avez encore rien écrit ».
 | `Message` | Une prise de parole. Auteur **et** narrateur, comme un récit. |
 | `MessageMark` | Les trois marques. Vocabulaire fermé, contraint en base. |
 | `Passage` | **La primitive.** Le lien parent → enfant, avec son déclencheur. |
-| `TranscriptionDraft` | Un brouillon de transcription, à relire avant d'entrer dans la mémoire. |
+| `TranscriptionDraft` | Un brouillon de transcription, à relire avant d'entrer dans la mémoire. Porte `spokenById` (la voix), `reviewerId` (qui relira) et `promptText` (la question posée). |
 | `StoryMute` | Une mise en sourdine, **par membre** — pas globale. |
 | `VisibilityLog` | L'audit du Conservateur. Toute impression est traçable. |
+| `Reserve` | Ce dont quelqu'un ne veut pas qu'on lui parle. `portee` distingue la réserve silencieuse — le défaut — de la demande portée à la famille. |
+| `SuspensionRequest` | Une demande de suspension, **jamais anonyme**. Elle n'agit pas : seul l'auteur du récit décide. |
 
-**Huit migrations, toutes écrites à la main**, jamais générées :
+**Dix migrations, toutes écrites à la main**, jamais générées :
 
 ```
 20260803123956_initial
@@ -140,6 +144,8 @@ Martin se raconte », et non « Vous n'avez encore rien écrit ».
 20260803210000_le_fil          ← transporte les données avant de détruire
 20260804120000_liberte
 20260805090000_retrait         ← réécrit une phrase déjà stockée en base
+20260805140000_entretien_reserve
+20260805170000_suspension
 ```
 
 La migration `le_fil` mérite un mot : elle **transporte** les conversations
@@ -315,10 +321,81 @@ Chaque mesure impossible s'écrit « — » **avec sa raison**.
 La page nomme aussi ce qu'elle a **cessé** d'afficher : retirer un chiffre
 sans le dire serait le retirer deux fois.
 
+### L'entretien — répondre à voix haute
+
+Le chemin pour qui n'écrit pas, et c'est souvent celui qui détient le plus.
+
+- **`/entretien`, l'écran d'avant.** Deux choses s'y règlent, et avant le
+  premier enregistrement. QUI RELIRA : on désigne quelqu'un à chaque
+  entretien, jamais une fois pour toutes — un relecteur permanent
+  deviendrait le dépositaire de tous les secrets de la maison sans que
+  personne l'ait décidé. Sans relecteur nommé, l'entretien ne commence pas.
+- **`/entretien/parler`, l'écran où l'on parle.** Un écran, une question, un
+  bouton. Le menu se réduit à un titre. Aucun compteur, aucune progression,
+  aucune durée cible, aucun encouragement : l'application pose une question
+  et se tait. « Passer » est de la même taille que « Garder » et ne demande
+  jamais pourquoi.
+- **Le brouillon appartient à la voix**, pas au relecteur : celui qui a
+  parlé peut l'effacer tant que rien n'en est né, et le relecteur voit
+  seulement qu'il n'y a rien à relire.
+- **Le narrateur du récit qui en naît est celui qui a parlé** (§2.3), jamais
+  celui qui a tapé.
+
+### La réserve — ce dont on ne veut pas qu'on parle
+
+Posée une fois, jamais répétée, et **silencieuse par défaut** : une réserve
+visible apprendrait à toute la famille que le sujet existe et qu'il fait
+mal. L'application cesse simplement de poser des questions dessus — par le
+sujet lui-même, et par les récits qui y sont rattachés, sans quoi la même
+question reviendrait par la porte de derrière.
+
+**Porter la demande est un second geste, explicite.** Elle s'affiche alors,
+avec le nom de son auteur et dans ses mots, **au moment où quelqu'un écrit
+sur le sujet** — et l'application laisse écrire. Elle porte la demande, elle
+ne l'applique jamais : le jour où une machine impose le respect d'un
+souhait familial, ce n'est plus un acte de respect mais une règle qu'on
+contourne.
+
+La règle générale, née ici : **un signal comportemental ne peut que
+RETIRER, jamais ajouter.** Deux passages sur un sujet, et on cesse de le
+proposer. Rien n'en est déduit dans l'autre sens.
+
+### La suspension — par accord de l'auteur, jamais par objection
+
+Quelqu'un s'estime concerné par un récit et demande qu'il ne s'affiche
+plus. La première version que j'avais proposée suspendait automatiquement :
+elle contredit la §2.6 — « un membre peut décider de ne plus voir un récit ;
+il ne peut pas décider à la place des autres » — et revient à un veto
+déguisé. Elle a été **écartée contre ma propre recommandation**.
+
+Ce qui existe : l'objecteur **demande**, en étant nommé, dans ses mots.
+**Seul l'auteur suspend**, et l'application le lui dit — « ne rien faire est
+une réponse ». Aucune relance, aucun compte de demandes en attente : ce
+serait une pression.
+
+Un récit suspendu quitte **ce qui circule** — pages, recherche, Passeur,
+veillée, graphe, livre, calendrier, API — et reste dans **ce qu'on possède** :
+l'export ne filtre rien (amendement 3). C'est la frontière qui existait
+déjà pour les récits archivés et mis en quarantaine. Aucun `Passage` n'est
+détruit : la suspension est réversible, la suppression ne l'est pas.
+
 ### Accessibilité et confort
 
-- 16 px minimum, cibles tactiles 44 × 44, contrastes vérifiés (15,6:1,
-  5,3:1, 7,2:1).
+- **16 px minimum, mesuré et non affirmé.** Un test parcourt tout `src/` et
+  refuse `text-sm` et `text-xs` hors de deux exceptions nommées. La règle
+  était appliquée à l'œil ; vingt-neuf endroits y échappaient.
+- **Cibles tactiles 44 × 44**, y compris les pastilles d'entités, qui
+  mesuraient 26 px de haut.
+- **Contrastes calculés**, jamais estimés : `tests/contraste.test.ts`
+  applique la formule WCAG 2.1 aux couleurs lues dans la configuration —
+  17 paires, dont l'aplat de la veillée à 12,89:1 et la justification sur
+  crème à 4,84:1. Une opacité sur du texte est refusée par un autre test :
+  `opacity-80` sur une couleur mesurée à 4,84:1 la ramène à 3,28:1.
+- **axe-core sur l'application qui tourne** : 18 pages, WCAG 2.1 AA,
+  0 violation (`outils/accessibilite.mjs`).
+- **La tabulation, pressée pour de vrai** : pièges, contour de focus
+  réellement calculé, `tabindex` positif — 11 pages, 0 défaut
+  (`outils/clavier.mjs`).
 - **Taille de lecture réglable par appareil**, pas par membre : la tablette
   de la grand-mère et le téléphone de sa petite-fille n'ont pas les mêmes
   yeux, et c'est souvent le même compte.
@@ -371,8 +448,9 @@ quelqu'un s'il avait le droit, et à le croire.
 | Cadre | Next.js 14, App Router, composants et actions serveur |
 | Langage | TypeScript strict |
 | Base | PostgreSQL 16 + Prisma 5 |
-| Style | Tailwind CSS, palette de cinq couleurs |
-| Tests | Vitest |
+| Style | Tailwind CSS, palette « Organic » — quatre rampes de neuf teintes, contrastes calculés |
+| Polices | Caprasimo et Figtree, **auto-hébergées** : un `@import` Google Fonts se résout en `system-ui` hors ligne, et l'application est une PWA |
+| Tests | Vitest, plus axe-core et Playwright dans `outils/` |
 | Compilation | `output: 'standalone'` |
 | Conteneur | Docker multi-étages, image finale sans code source ni dépendances de développement |
 | TLS | Caddy (machine vierge) ou nginx existant (cohabitation) |
@@ -384,7 +462,7 @@ Coût visé, tout compris : **6 à 10 € par mois** sur un VPS Hostinger KVM 1.
 
 ---
 
-## 9. Comment ça a été construit — les 27 étapes
+## 9. Comment ça a été construit — les 41 étapes
 
 Chaque ligne est un commit réel.
 
@@ -444,6 +522,20 @@ Chaque ligne est un commit réel.
 | 25 | Kit de redesign complet, et installateur qui cohabite | 20 fichiers, 1 527 lignes |
 | 26 | **Corriger la panne du premier déploiement réel** : le `CMD` de l'image | 109 lignes |
 | 27 | L'installateur vérifie le domaine avant de toucher à nginx | 97 lignes |
+
+### La parole, et ce qu'on refuse d'en dire (5–6 août)
+
+| # | | |
+|---|---|---|
+| 28-33 | Le dossier complet, l'avenir, la spec de l'entretien | 4 documents |
+| 34 | **Le mode entretien** : un écran, une question, un bouton | 12 fichiers |
+| 35 | **La réserve** : ce dont on ne veut pas qu'on parle, silencieux par défaut | 9 fichiers |
+| 36 | Fermer la boucle de l'entretien, et le plan de ce qui reste | 8 fichiers |
+| 37 | L'application prend la direction « 2a », sans perdre une fonctionnalité | 21 fichiers |
+| 38 | **La suspension** prend corps, et la demande portée s'affiche | 14 fichiers |
+| 39 | **Audit d'accessibilité** : 17 violations trouvées, 0 restante | 16 pages |
+| 40 | Habiller les dix écrans restants, et trois défauts trouvés en le faisant | 41 fichiers |
+| 41 | **Presser Tab pour de vrai**, et deux outils qui mentaient | 5 fichiers |
 
 ---
 
@@ -530,7 +622,17 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**440 tests, 24 fichiers, tous verts.**
+**555 tests, 28 fichiers, tous verts**, plus trois outils de mesure qui
+tournent hors de `npm test` parce qu'ils exigent un navigateur et une base
+peuplée : `outils/accessibilite.mjs` (axe-core, 18 pages, 0 violation),
+`outils/clavier.mjs` (la tabulation pressée pour de vrai, 11 pages,
+0 défaut) et `outils/captures.mjs` (la planche de `redesign/captures/`).
+
+Les quatre fichiers ajoutés depuis : `entretien.test.ts` (le silence de
+l'écran où l'on parle), `reserve.test.ts` (les deux chemins par lesquels
+une question pouvait revenir), `suspension.test.ts` (demander n'est pas
+suspendre) et `contraste.test.ts` (la formule WCAG appliquée aux couleurs
+lues dans la configuration, plus le plancher de 16 px sur tout `src/`).
 
 | Fichier | Tests | Ce qu'il protège |
 |---|---|---|
@@ -610,8 +712,7 @@ par omission.
 - **La transcription locale WebGPU n'a jamais tourné dans un vrai
   navigateur.** L'architecture est testée, le découpage audio est testé, le
   consensus est testé — le chargement du modèle dans une vraie page, non.
-- **Aucun audit d'accessibilité automatisé.** Les règles de la §6.4 sont
-  appliquées à la main et vérifiées à l'œil ; axe-core n'a jamais été lancé.
+  C'est aujourd'hui le plus gros inconnu du produit.
 - **L'image Docker n'avait jamais été construite** avant le déploiement
   réel, Docker Hub étant bloqué par le proxy de l'environnement de
   développement. C'est exactement là que la première panne est survenue.
@@ -625,15 +726,20 @@ par omission.
 
 - **Obtenir le certificat TLS** : créer l'enregistrement DNS `A`, relancer
   `installer-a-cote.sh` avec le vrai sous-domaine.
-- **Le redesign** : le kit est prêt dans `redesign/` — brief, inventaire
-  écran par écran, interdits, deck de copie complet, 14 captures.
 - **Table d'alias persistante pour les imports** : les participants sont
   re-associés à chaque import, d'une source à l'autre.
-- **Audit axe-core automatisé.**
 - **Test du pilote S3 contre un vrai bucket.**
 - **La transcription locale dans un vrai navigateur.**
+- **Trois choses que je ne toucherai pas sans qu'on me le demande** :
+  l'audio jouable sur un récit (« Écouter Robert le raconter »), les
+  marques étendues aux récits, et la réduction des 33 types de structure —
+  j'ai un soupçon là-dessus, pas une donnée.
+
+Le redesign, lui, n'est plus ouvert : la direction « 2a » est appliquée à
+tous les écrans, et `redesign/captures/` en porte les 18 captures,
+régénérables par `outils/captures.mjs`.
 
 ---
 
 *Ce document décrit l'état de la branche `claude/heritage-app-spec-acztj1`
-au commit `966ba46`, le 5 août 2026.*
+au 6 août 2026. Les chiffres du §2 sont comptés sur l'arbre, pas recopiés.*
