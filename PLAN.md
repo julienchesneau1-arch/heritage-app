@@ -112,6 +112,7 @@ tourner partout finit désactivé.
 | `clavier.mjs` | tabulation réelle : pièges, contour de focus, ordre | 0 défaut, 11 pages |
 | `captures.mjs` | la planche de `redesign/captures/` | 18 captures |
 | `stockage-s3.mts` | le pilote S3 contre un vrai serveur S3 | 10/10 |
+| `hors-ecran.mjs` | le livre imprimé, et le hors-ligne réseau coupé | 13/13 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
