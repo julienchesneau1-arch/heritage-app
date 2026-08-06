@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Héritage — 2a Pleins aplats, allégé (référence de design)</title>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#8c491a"/>
+    <circle cx="72" cy="20" r="26" fill="#56633f"/>
+    <text x="50" y="58" font-size="30" fill="#f5ead8" text-anchor="middle" font-family="Georgia, serif">H</text>
+  </svg>
+</template>
+<link rel="stylesheet" href="organic.css">
+<style>
+  body { margin: 0; background: #eceae4; font-family: 'Figtree', system-ui, sans-serif; }
+  * { text-wrap: pretty; }
+  a { color: var(--color-accent-700); }
+  a:hover { color: var(--color-accent-800); }
+  .ecran { width: 390px; min-height: 812px; display: flex; flex-direction: column; border-radius: calc(var(--radius-lg) * 1.3); overflow: hidden; box-shadow: var(--shadow-lg); }
+  .pied { margin-top: auto; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); padding: var(--space-4) var(--space-6) var(--space-6); font-size: 16px; }
+  .lire { font-size: 19px; line-height: 1.62; margin: 0; }
+  .just { margin: 0; font-size: 16px; line-height: 1.5; }
+  .label { font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .ecran span, .ecran .tag { font-size: 16px; }
+  .grille { display: grid; grid-template-columns: repeat(2, 390px); gap: 32px; align-items: start; }
+  .cta { min-height: 44px; font-size: 16px; padding: var(--space-3) var(--space-6); }
+  .champ { min-height: 44px; font-size: 16px; }
+</style>
+</head>
+<body>
+<section style="padding: 40px; display: flex; flex-direction: column; gap: 24px">
+  <div style="max-width: 60rem">
+    <h1>Héritage — 2a « Pleins aplats, allégé »</h1>
+    <p>Référence de design pour les 4 écrans : Aujourd'hui (premier jour), Aujourd'hui (Le Passeur), un récit, la veillée. Texte verbatim, ne pas reformuler. Voir README.md pour le détail.</p>
+  </div>
+<div style="display: flex; flex-direction: column; gap: var(--space-6)">
+    <div class="grille">
+
+      <div class="ecran" style="background: var(--color-accent-700); color: var(--color-bg)">
+        <div style="display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-6) var(--space-6) var(--space-4)">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3)">
+            <span style="font-family: var(--font-heading); font-size: 22px">Héritage</span>
+            <span style="color: var(--color-accent-200); text-decoration: underline; text-underline-offset: 4px">Famille · Claire</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3)">
+            <span aria-current="page" style="text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 6px; text-decoration-color: var(--color-accent-2-300); padding: var(--space-2) 0">Aujourd'hui</span>
+            <span class="btn cta" style="margin-left: auto; background: var(--color-accent-2-300); color: var(--color-accent-2-900)">Raconter</span>
+          </div>
+          <div style="color: var(--color-accent-200); padding-top: var(--space-2); border-top: 1px solid color-mix(in srgb, var(--color-bg) 25%, transparent)">▸ Tout le reste</div>
+        </div>
+
+        <div style="position: relative; padding: var(--space-6) var(--space-6) var(--space-4); overflow: hidden">
+          <div style="position: absolute; top: -60px; right: -60px; width: 200px; height: 200px; border-radius: 50%; background: var(--color-accent-2-600)"></div>
+          <h2 style="position: relative; margin: 0 0 var(--space-6); font-size: 44px; color: var(--color-bg)">Ici, la famille Martin se raconte.</h2>
+          <p class="lire" style="position: relative; margin-bottom: var(--space-4); color: var(--color-accent-100)">Quelqu'un dit une chose. Quelqu'un d'autre ajoute la sienne. Quand il y en a assez, cela devient un récit qui reste.</p>
+          <p class="lire" style="position: relative; color: var(--color-accent-100)">Rien à rédiger : personne n'écrit de mémoires ici. Une phrase suffit, et elle peut être dite à voix haute.</p>
+        </div>
+
+        <div class="card elev-md" style="margin: var(--space-6) var(--space-4) var(--space-4); background: var(--color-neutral-100); color: var(--color-text); gap: var(--space-4); padding: var(--space-6)">
+          <label style="font-family: var(--font-heading); font-size: 18px">Dites une première chose</label>
+          <div class="input" style="min-height: 104px; border-radius: var(--radius-lg); padding: var(--space-4); font-size: 18px; color: var(--color-neutral-600)">Une phrase, ou trois mots.</div>
+          <div class="input champ" style="display: flex; justify-content: space-between; align-items: center">Qui parle · Claire <span class="text-muted">▾</span></div>
+          <span class="btn btn-primary cta" style="width: 100%; min-height: 56px; font-size: 19px">Envoyer</span>
+        </div>
+
+        <div style="padding: var(--space-4) var(--space-6) var(--space-6); display: flex; flex-direction: column; gap: var(--space-3)">
+          <p class="just" style="color: var(--color-accent-200)">La famille se parle peut-être déjà ailleurs — dans un groupe WhatsApp, où tout défile et où personne ne retrouve rien.</p>
+          <span style="color: var(--color-accent-2-200); text-decoration: underline; text-underline-offset: 4px">Reprendre une conversation existante</span>
+        </div>
+
+        <div class="pied" style="background: var(--color-accent-800)">
+          <span style="color: var(--color-accent-200); text-decoration: underline">Exporter la mémoire</span>
+          <span style="color: var(--color-accent-200); text-decoration: underline">Ce que l'application fait de votre mémoire</span>
+        </div>
+      </div>
+
+      <div class="ecran" style="background: var(--color-bg)">
+        <div class="nav" style="background: var(--color-accent-800); color: var(--color-bg); padding: var(--space-4) var(--space-6)">
+          <span class="nav-brand" style="font-size: 22px">Héritage</span>
+          <span style="color: var(--color-accent-200)">Aujourd'hui</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; padding: var(--space-4) var(--space-6) 0">
+          <span style="text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 6px; text-decoration-color: var(--color-accent-500); padding: var(--space-2) 0">Aujourd'hui</span>
+          <span class="text-muted" style="padding: var(--space-2) 0">Récits</span>
+          <span class="text-muted" style="padding: var(--space-2) 0">Le livre</span>
+          <span class="btn btn-primary cta" style="margin-left: auto">Raconter</span>
+        </div>
+
+        <div style="padding: var(--space-8) var(--space-6) var(--space-6); display: flex; flex-direction: column; gap: var(--space-4)">
+          <div class="label text-muted">Le Passeur</div>
+          <div class="card elev-md" style="position: relative; overflow: hidden; background: var(--color-accent-300); gap: var(--space-4); padding: var(--space-6)">
+            <div style="position: absolute; bottom: -66px; right: -36px; width: 170px; height: 170px; border-radius: 50%; background: var(--color-accent-500); opacity: 0.5"></div>
+            <p style="position: relative; margin: 0; font-family: var(--font-heading); font-size: 26px; line-height: 1.22; color: var(--color-accent-900)">« La montre arrêtée » raconte un fait sans en donner la raison.</p>
+            <p class="just" style="position: relative; color: var(--color-accent-800)">Ce récit dit : « il l'a arrêtée ce jour-là » — sans dire pourquoi.</p>
+            <div style="position: relative; display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2)">
+              <span class="btn cta" style="background: var(--color-accent-900); color: var(--color-accent-100); width: 100%; min-height: 56px; font-size: 19px">Répondre</span>
+              <span class="btn cta" style="border-color: var(--color-accent-900); color: var(--color-accent-900); width: 100%">En faire un récit</span>
+            </div>
+            <span style="position: relative; color: var(--color-accent-800); text-decoration: underline; text-underline-offset: 3px; align-self: flex-start; padding: var(--space-2) 0">Ne plus me montrer</span>
+          </div>
+        </div>
+
+        <div style="padding: 0 var(--space-6); display: flex; flex-direction: column; gap: var(--space-3)">
+          <div class="label text-muted">▾ Tout le reste</div>
+          <div style="display: flex; flex-direction: column; gap: var(--space-3)">
+            <div><span>Veillée</span><p class="just text-muted">Trois récits à lire à voix haute quand la famille est réunie.</p></div>
+            <div><span>Récits</span><p class="just text-muted">Tout ce qui a été gardé, du plus récent au plus ancien.</p></div>
+            <div><span>À mettre au propre</span><p class="just text-muted">Les enregistrements transcrits, à relire avant de les garder.</p></div>
+            <div><span>Archives</span><p class="just text-muted">Les photos, les documents, les enregistrements.</p></div>
+            <div><span>Traditions</span><p class="just text-muted">Ce qui revient chaque année, et qu'on ne veut pas perdre.</p></div>
+            <div><span>Graphe</span><p class="just text-muted">Les personnes, les lieux, les objets — et ce qui se dit de chacun.</p></div>
+            <div><span>Le livre</span><p class="just text-muted">Tout ce qui a été gardé, composé pour le papier — avec ce qui manque.</p></div>
+          </div>
+        </div>
+
+        <div class="pied">
+          <a href="#2a">Exporter la mémoire</a>
+          <a href="#2a">Ce que l'application fait de votre mémoire</a>
+        </div>
+      </div>
+
+      <div class="ecran" style="background: var(--color-bg)">
+        <div class="nav" style="background: var(--color-accent-2-800); color: var(--color-neutral-100); padding: var(--space-4) var(--space-6)">
+          <span class="nav-brand" style="font-size: 22px">Héritage</span>
+          <span style="color: var(--color-accent-2-200)">Récits</span>
+        </div>
+
+        <div style="position: relative; overflow: hidden; background: var(--color-accent-2-700); color: var(--color-neutral-100); padding: var(--space-6) var(--space-6) var(--space-8)">
+          <div style="position: absolute; top: -40px; right: -50px; width: 170px; height: 170px; border-radius: 50%; background: var(--color-accent-2-600)"></div>
+          <h2 style="position: relative; margin: 0 0 var(--space-4); font-size: 36px; color: var(--color-neutral-100)">La montre arrêtée</h2>
+          <p style="position: relative; margin: 0 0 var(--space-1)">Raconté par Robert, noté par {{ nomPlume }}</p>
+          <p class="just" style="position: relative; color: var(--color-accent-2-200)">noté le 3 janvier 2026 · Récit fondateur · Sobre</p>
+        </div>
+
+        <div style="padding: var(--space-8) var(--space-6) var(--space-6); display: flex; flex-direction: column; gap: var(--space-4)">
+          <p class="lire">Il portait cette montre tous les jours, sauf le dimanche. Elle s'est arrêtée un mardi, à onze heures vingt, et personne ne l'a jamais remise à l'heure.</p>
+          <p class="lire">Ma mère disait qu'on ne touchait pas à l'heure de son père. Elle est restée dans la boîte à couture, à onze heures vingt.</p>
+        </div>
+
+        <div style="margin: 0 var(--space-6); padding: var(--space-6) 0; border-top: 1px solid var(--color-divider); display: flex; flex-direction: column; gap: var(--space-3)">
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline"><span style="font-family: var(--font-heading)">J'y étais</span><span class="text-muted">Claire, Robert</span></div>
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline"><span style="font-family: var(--font-heading)">Je m'en souviens</span><span class="text-muted">{{ nomPlume }}</span></div>
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline"><span style="font-family: var(--font-heading)">Je ne savais pas</span><span class="text-muted">Lucas</span></div>
+        </div>
+
+        <div style="padding: 0 var(--space-6) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2)">
+          <div class="label text-muted">Transmission</div>
+          <a href="#2a">Né du récit « Le dimanche à Bordeaux »</a>
+          <a href="#2a">A engendré « La boîte à couture »</a>
+        </div>
+
+        <div style="padding: var(--space-4) var(--space-6) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2)">
+          <span class="btn btn-primary cta" style="width: 100%; min-height: 56px; font-size: 19px">Poser une question</span>
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-2)">
+            <span class="btn btn-secondary cta">Raconter la suite</span>
+            <span class="btn btn-secondary cta">Archiver</span>
+            <span class="btn btn-secondary cta">Corriger</span>
+          </div>
+        </div>
+
+        <div class="pied">
+          <a href="#2a">Exporter la mémoire</a>
+          <a href="#2a">Ce que l'application fait de votre mémoire</a>
+        </div>
+      </div>
+
+      <div class="ecran" style="background: var(--color-neutral-900); color: var(--color-neutral-200)">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; padding: var(--space-6) var(--space-6) var(--space-3)">
+          <span class="label" style="color: var(--color-accent-400)">La veillée</span>
+          <span style="color: var(--color-neutral-400)">1 sur 3</span>
+        </div>
+        <div style="display: flex; gap: var(--space-1); height: 8px; margin: 0 var(--space-6)">
+          <span style="flex: 1; border-radius: 999px; background: var(--color-accent-400)"></span>
+          <span style="flex: 1; border-radius: 999px; background: var(--color-neutral-800)"></span>
+          <span style="flex: 1; border-radius: 999px; background: var(--color-neutral-800)"></span>
+        </div>
+
+        <div style="position: relative; overflow: hidden; padding: var(--space-8) var(--space-6) var(--space-4)">
+          <div style="position: absolute; bottom: -80px; left: -70px; width: 190px; height: 190px; border-radius: 50%; background: var(--color-accent-2-800)"></div>
+          <h2 style="position: relative; margin: 0 0 var(--space-4); font-size: 44px; color: var(--color-neutral-100)">Le dimanche à Bordeaux</h2>
+          <p style="position: relative; margin: 0 0 var(--space-6); color: var(--color-neutral-400)">Robert · 10 juin 1994</p>
+          <p class="just" style="position: relative; color: var(--color-neutral-300); max-width: 30ch">Il est là parce qu'il relie 5 personnes, lieux ou objets de la famille — comme d'autres récits, mais celui-ci n'a pas été relu depuis sa création.</p>
+        </div>
+
+        <div style="padding: var(--space-6)">
+          <p style="margin: 0; font-size: 26px; line-height: 1.6; color: var(--color-neutral-100)">On y allait tous les dimanches, et la maison sentait le pain grillé avant même qu'on ait ouvert la porte. Mon père garait la voiture de travers, toujours, et personne ne le lui disait.</p>
+        </div>
+
+        <div style="margin: 0 var(--space-4) var(--space-6); background: var(--color-accent-400); border-radius: calc(var(--radius-lg) * 1.15); padding: var(--space-4) var(--space-6); display: flex; align-items: center; gap: var(--space-4)">
+          <span style="width: 52px; height: 52px; border-radius: 50%; background: var(--color-accent-900); color: var(--color-accent-300); flex: none; display: grid; place-items: center; font-size: 19px">▶</span>
+          <span style="line-height: 1.4; color: var(--color-accent-900)">Écouter Robert le raconter — 2 min 14</span>
+        </div>
+
+        <div class="pied" style="gap: var(--space-2); border-top: 1px solid var(--color-neutral-800)">
+          <span class="btn cta" style="background: var(--color-accent-400); color: var(--color-accent-900); width: 100%; min-height: 56px; font-size: 19px">Récit suivant</span>
+          <span class="btn cta" style="border-color: var(--color-neutral-600); color: var(--color-neutral-200); width: 100%">Refermer</span>
+        </div>
+      </div>
+
+    </div>
+</section>
+</body>
+</html>
