@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
+import { nomAffiche, QUI } from '@/lib/deces';
 import {
   assemblerLivre,
   compterImprimes,
@@ -35,8 +36,8 @@ export default async function LivrePage() {
       where: { familyId, archived: false, quarantined: false, suspendedAt: null },
       orderBy: { createdAt: 'asc' },
       include: {
-        author: { select: { id: true, name: true, isDeleted: true } },
-        narrator: { select: { id: true, name: true } },
+        author: { select: QUI },
+        narrator: { select: QUI },
       },
     }),
     prisma.passage.findMany({
@@ -48,7 +49,7 @@ export default async function LivrePage() {
       where: { familyId, messageCount: 1, messages: { some: { isQuestion: true } } },
       orderBy: { createdAt: 'asc' },
       include: {
-        openedBy: { select: { name: true } },
+        openedBy: { select: QUI },
         story: { select: { title: true } },
         entity: { select: { name: true } },
         messages: { take: 1, orderBy: { createdAt: 'asc' } },
@@ -73,7 +74,9 @@ export default async function LivrePage() {
     eventDate: recit.eventDate,
     structureType: recit.structureType,
     auteur: { id: recit.author.id, nom: recit.author.name, anonymise: recit.author.isDeleted },
-    narrateur: recit.narrator ? { id: recit.narrator.id, nom: recit.narrator.name } : null,
+    // Le narrateur aussi : un récit dont la VOIX a quitté la famille
+    // imprimait son prénom, en toutes lettres, sur du papier (§2.1 règle 1).
+    narrateur: recit.narrator ? { id: recit.narrator.id, nom: nomAffiche(recit.narrator) } : null,
   }));
 
   // Quelqu'un qu'aucun récit ne porte : ni comme voix, ni comme plume, ni
@@ -88,7 +91,7 @@ export default async function LivrePage() {
   const livre = assemblerLivre(recits, passages, {
     questionsSansReponse: questions.map((fil) => ({
       texte: fil.messages[0]?.body ?? '',
-      posePar: fil.openedBy.name,
+      posePar: nomAffiche(fil.openedBy),
       aPropos: fil.story?.title ?? fil.entity?.name ?? null,
     })),
     recitsSansDate: recits.filter((recit) => !recit.eventDate).map((recit) => ({ titre: recit.titre })),

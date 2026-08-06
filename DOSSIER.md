@@ -1,7 +1,7 @@
 # Héritage — dossier complet
 
 Tout ce qui a été construit, comment, et pourquoi. Écrit le 5 août 2026,
-remis à jour le 6, après 56 commits sur la branche
+remis à jour le 6, après 57 commits sur la branche
 `claude/heritage-app-spec-acztj1`.
 
 Les chiffres de ce document viennent du dépôt, pas de mémoire :
@@ -19,7 +19,7 @@ Les chiffres de ce document viennent du dépôt, pas de mémoire :
 6. [Toutes les fonctionnalités](#6-toutes-les-fonctionnalités)
 7. [Identité et sécurité](#7-identité-et-sécurité)
 8. [La pile technique](#8-la-pile-technique)
-9. [Comment ça a été construit — les 56 étapes](#9-comment-ça-a-été-construit--les-56-étapes)
+9. [Comment ça a été construit — les 57 étapes](#9-comment-ça-a-été-construit--les-57-étapes)
 10. [La méthode : chasser une classe de défaut](#10-la-méthode--chasser-une-classe-de-défaut)
 11. [Les tests](#11-les-tests)
 12. [Le déploiement](#12-le-déploiement)
@@ -54,17 +54,17 @@ relire d'abord.
 
 | | |
 |---|---|
-| Commits | 56 |
-| Fichiers TypeScript / TSX | 107 |
+| Commits | 57 |
+| Fichiers TypeScript / TSX | 109 |
 | Lignes de code applicatif | 16 020 |
-| Lignes de tests | 6 653 |
+| Lignes de tests | 6 764 |
 | Lignes de documentation | 5 098 |
-| Tests, tous verts | **607**, en 30 fichiers |
+| Tests, tous verts | **615**, en 31 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 12 (`outils/`), hors `npm test`, `npm run verifier` |
+| Outils de mesure | 13 (`outils/`), hors `npm test`, `npm run verifier` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -462,7 +462,7 @@ Coût visé, tout compris : **6 à 10 € par mois** sur un VPS Hostinger KVM 1.
 
 ---
 
-## 9. Comment ça a été construit — les 56 étapes
+## 9. Comment ça a été construit — les 57 étapes
 
 Chaque ligne est un commit réel.
 
@@ -556,6 +556,7 @@ Chaque ligne est un commit réel.
 | 54 | Le README tient sa promesse — vérifié plutôt qu'annoncé | `README.md` |
 | 55 | **Le produit ne savait pas ce qu'était la mort** | `src/lib/deces.ts` |
 | 56 | **Le Passeur adressait 117 questions à un mort**, six mois durant | `passeur.mts` |
+| 57 | **Le nom d'un membre retiré ressortait sur huit sorties** | `oubli.mts` |
 
 ---
 
@@ -642,7 +643,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**607 tests, 30 fichiers, tous verts**, plus douze outils de mesure qui
+**615 tests, 31 fichiers, tous verts**, plus treize outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
@@ -839,6 +840,27 @@ par omission.
   rouge sur le défunt — 0 question, 180 jours de silence, c'est-à-dire le
   comportement voulu compté comme une panne : la même faute que celle qu'ils
   venaient de trouver, à l'envers. Ils portent maintenant sur les vivants.
+
+- **L'oubli fuyait, et c'est la seule règle que la Constitution appelle
+  ABSOLUE** (Annexe A point 6). Le produit a huit mécanismes de retrait,
+  ajoutés un par un, chacun écrit avec ses tests là où il a été écrit.
+  Personne n'avait fait l'inverse : énumérer les trente-quatre SORTIES —
+  pages, routes, livre, calendrier, export, recherche, graphe — et les
+  confronter à chaque mécanisme. `outils/oubli.mts` plante un canari, un
+  mot inventé, dans chaque objet retiré, puis fouille les octets rendus.
+  Deux fuites : `?includeArchived=1` levait aussi le filtre des récits
+  **suspendus** — les deux conditions vivaient dans la même parenthèse,
+  alors que « voir les archives » et « voir ce que l'auteur a retiré » sont
+  deux demandes différentes ; et le **nom d'un membre retiré** sortait en
+  clair sur six sorties, plus deux que le balayage du source a trouvées.
+  La cause n'était pas l'oubli : **dix sélections ne chargeaient même pas
+  `isDeleted`**, ce qui rendait la §2.1 règle 1 inapplicable sans que rien
+  ne le signale. D'où `QUI` et `nommer()` dans `src/lib/deces.ts`, qui vont
+  par paire, et `tests/anonymisation.test.ts` qui balaie `src/app`.
+  L'outil s'était d'abord menti à lui-même : il interrogeait la recherche
+  avec le canari qu'il traquait, et le champ de recherche RÉAFFICHE ce
+  qu'on tape — trois « fuites » sur quatre étaient de ma main. Il plante
+  désormais deux mots : celui qu'on tape, et celui qu'on cherche.
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.

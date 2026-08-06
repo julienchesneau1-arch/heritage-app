@@ -32,7 +32,7 @@
 import { createHmac } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 
-const BASE = process.env.BASE;
+const BASE = process.env.BASE ?? 'http://localhost:3000';
 const sign = (p) => createHmac('sha256', process.env.FAMILY_TOKEN_SECRET).update(p).digest('hex');
 const prisma = new PrismaClient();
 
@@ -137,10 +137,25 @@ try {
       statut = reponse.status;
       corps = await reponse.text();
     } catch (error) {
-      corps = `ERREUR ${error.message}`;
+      corps = `ERREUR ${error.cause?.message ?? error.message}`;
     }
+    /*
+     * ── UNE PORTE QU'ON N'A PAS POUSSÉE N'EST PAS UNE PORTE FERMÉE ──
+     *
+     * Ce contrôle ne cherchait que le secret dans le corps. Quand `fetch`
+     * échouait — `BASE` non renseigné, application arrêtée — le corps
+     * valait « ERREUR … », ne contenait donc pas le secret, et les ONZE
+     * lectures croisées se déclaraient étanches sans qu'une seule requête
+     * soit partie. C'est la faute que ce dépôt poursuit, dans l'outil qui
+     * garde la promesse la plus grave du produit.
+     */
     const fuite = corps.includes(SECRET_B) || corps.includes('SECRET DE BBB');
-    verifier(nom, !fuite, `HTTP ${statut}${fuite ? ' — FUITE' : ''}`);
+    const joignable = statut > 0;
+    verifier(
+      nom,
+      joignable && !fuite,
+      joignable ? `HTTP ${statut}${fuite ? ' — FUITE' : ''}` : `NON MESURÉ — ${corps}`,
+    );
   };
 
   console.log('\n── 1. L’identifiant de B dans l’adresse, avec le cookie de A ──');
@@ -182,6 +197,7 @@ try {
   // testait rien du tout.
   const muter = async (nom, url, methode, corpsEnvoye) => {
     let statut = 0;
+    let detail = '';
     try {
       requetesEmises += 1;
       const reponse = await fetch(BASE + url, {
@@ -192,9 +208,12 @@ try {
       });
       statut = reponse.status;
     } catch (error) {
+      // « HTTP -1 » ne dit rien : sept contrôles rouges et aucune piste.
+      // La cause du rejet de `fetch` est la seule information utile ici.
       statut = -1;
+      detail = ` (${error?.cause?.message ?? error?.message ?? error})`;
     }
-    verifier(`${nom} est refusé`, statut === 403 || statut === 404, `HTTP ${statut}`);
+    verifier(`${nom} est refusé`, statut === 403 || statut === 404, `HTTP ${statut}${detail}`);
   };
 
   await muter('PATCH sur le récit de B', `/api/family/${F}/stories/${B.recit.id}`, 'PATCH', {
@@ -283,22 +302,37 @@ try {
       statut = reponse.status;
       corps = await reponse.text();
     } catch (error) {
-      corps = `ERREUR ${error.message}`;
+      corps = `ERREUR ${error.cause?.message ?? error.message}`;
     }
-    verifier(`anonyme : ${nom}`, !corps.includes(SECRET_B), `HTTP ${statut}`);
+    // Même règle qu'en section 1 : injoignable ≠ étanche.
+    verifier(
+      `anonyme : ${nom}`,
+      statut > 0 && !corps.includes(SECRET_B),
+      statut > 0 ? `HTTP ${statut}` : `NON MESURÉ — ${corps}`,
+    );
   }
 
   console.log('\n── 8. Le contrôle vérifie-t-il quelque chose ? ──');
   // Sans cette ligne, un `fetch` cassé rendrait tout vert : chaque réponse
   // serait vide, donc sans secret, donc « étanche ».
-  const chezSoi = await fetch(`${BASE}/api/family/${B.famille.id}/export`, {
-    headers: { Cookie: cookieDe(B.famille, B.membre), ...ENTETE_ADRESSE },
-  });
-  const contenu = await chezSoi.text();
+  // Ce `fetch`-ci n'était pas gardé : application injoignable, l'outil
+  // mourait sur une pile Node au lieu de rendre son bilan.
+  let statutTemoin = 0;
+  let contenu = '';
+  try {
+    requetesEmises += 1;
+    const chezSoi = await fetch(`${BASE}/api/family/${B.famille.id}/export`, {
+      headers: { Cookie: cookieDe(B.famille, B.membre), ...ENTETE_ADRESSE },
+    });
+    statutTemoin = chezSoi.status;
+    contenu = await chezSoi.text();
+  } catch (error) {
+    contenu = `ERREUR ${error.cause?.message ?? error.message}`;
+  }
   verifier(
     'B lit bien SA propre mémoire — le secret est atteignable quand on y a droit',
-    chezSoi.status === 200 && contenu.includes(SECRET_B),
-    `HTTP ${chezSoi.status}, ${contenu.length} octets`,
+    statutTemoin === 200 && contenu.includes(SECRET_B),
+    statutTemoin > 0 ? `HTTP ${statutTemoin}, ${contenu.length} octets` : `NON MESURÉ — ${contenu}`,
   );
 
   // ── 8. LA LIMITE PAR IP (§8.2), EN DERNIER ──
@@ -320,13 +354,19 @@ try {
     // Distincte de celle de la campagne : les 40 requêtes déjà émises ne
     // doivent pas décaler la bascule qu'on cherche à situer.
     const monAdresse = `198.51.100.${Math.floor(Math.random() * 250) + 1}9`;
+    // `0` quand la requête n'est même pas partie : la rafale se saute
+    // alors au lieu de tuer l'outil sur une pile Node.
     const frapper = async (entetes) => {
-      const reponse = await fetch(`${BASE}/api/family/${B.famille.id}/stories`, {
-        headers: { Cookie: COOKIE_B, ...entetes },
-        redirect: 'manual',
-      });
-      await reponse.arrayBuffer();
-      return reponse.status;
+      try {
+        const reponse = await fetch(`${BASE}/api/family/${B.famille.id}/stories`, {
+          headers: { Cookie: COOKIE_B, ...entetes },
+          redirect: 'manual',
+        });
+        await reponse.arrayBuffer();
+        return reponse.status;
+      } catch {
+        return 0;
+      }
     };
 
     const distingue = (await frapper({ 'X-Real-IP': monAdresse })) === 200;
@@ -346,7 +386,30 @@ try {
         applique,
         applique ? `${servis} servies, ${refuses} refusées` : 'aucun refus — TRUST_PROXY est-il posé ?',
       );
-      if (applique) {
+
+      /*
+       * ── LE SEAU EST-IL BIEN LE NÔTRE ? ──
+       *
+       * `TRUST_PROXY` est lu par le SERVEUR, pas par cet outil : lire
+       * `process.env` ici renseignerait sur le mauvais processus. On le
+       * mesure donc. Une adresse jamais vue, juste après la rafale : si
+       * elle est servie, chaque adresse a son seau et le chiffre ci-dessus
+       * a un sens ; si elle est refusée, le seau est commun, la rafale a
+       * compté les requêtes de tous les outils, et « 73 servies sur 100 »
+       * ne dit rien de la §8.2.
+       *
+       * C'est ce chiffre-là qui rendait cet outil rouge sans qu'aucune
+       * ligne du produit ne soit en cause.
+       */
+      const vierge = await frapper({ 'X-Real-IP': `192.0.2.${Math.floor(Math.random() * 250) + 1}` });
+      const seauPropre = vierge === 200;
+
+      if (applique && !seauPropre) {
+        console.log(
+          `↷ la bascule — NON MESURÉE : une adresse neuve reçoit ${vierge}, le seau est donc\n` +
+            '  commun (TRUST_PROXY n’est pas posé côté serveur). Le chiffre serait faux.',
+        );
+      } else if (applique) {
         verifier(
           'la bascule tombe sur les 100 requêtes annoncées par la §8.2',
           servis >= 95 && servis <= 105,

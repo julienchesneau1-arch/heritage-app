@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
+import { nomAffiche, QUI } from '@/lib/deces';
 import { formatDateFr } from '@/lib/normalize';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function ArchivesPage() {
     where: { familyId: context.family.id },
     orderBy: { createdAt: 'desc' },
     include: {
-      uploader: { select: { name: true } },
+      uploader: { select: QUI },
       story: { select: { id: true, title: true } },
     },
   });
@@ -49,7 +50,7 @@ export default async function ArchivesPage() {
               ) : null}
               <p className="text-lg">{archive.title}</p>
               <p className="justification">
-                {TYPE_LABELS[archive.type] ?? archive.type} · déposé par {archive.uploader.name} ·{' '}
+                {TYPE_LABELS[archive.type] ?? archive.type} · déposé par {nomAffiche(archive.uploader)} ·{' '}
                 {formatDateFr(archive.createdAt)} · {Math.round(archive.sizeBytes / 1024)} Ko
               </p>
               {archive.story ? (

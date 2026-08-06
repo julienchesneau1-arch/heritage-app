@@ -6,6 +6,7 @@ import { limiteParIp } from '@/lib/rate-limit';
 import { createStorySchema, listStoriesSchema, parseOrNull } from '@/lib/validation';
 import { storyService } from '@/services/story.service';
 import { prisma } from '@/lib/prisma';
+import { nomAffiche } from '@/lib/deces';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
   const where: Prisma.StoryWhereInput = {
     familyId,
-    ...(data.includeArchived ? {} : { archived: false, suspendedAt: null }),
+    /*
+     * ── UNE SUSPENSION N'EST PAS UN ARCHIVAGE ──
+     *
+     * Les deux filtres étaient dans la même parenthèse, et
+     * `includeArchived=1` les levait tous les deux. « Voir les récits
+     * archivés » et « voir ce que l'auteur a retiré » sont deux demandes
+     * différentes, et la seconde n'est offerte à personne : la §2.1
+     * règle 2 amendée donne à l'auteur — et au narrateur — le droit de
+     * retirer ses mots, sans paramètre pour le défaire.
+     *
+     * La page `/recits` séparait déjà les deux (`visible` y est constant).
+     * L'API, non : un membre qui ajoutait `?includeArchived=1` recevait
+     * en JSON le récit que quelqu'un venait de retirer.
+     */
+    suspendedAt: null,
+    ...(data.includeArchived ? {} : { archived: false }),
     ...(data.structureType ? { structureType: data.structureType } : {}),
     ...(data.authorId ? { authorId: data.authorId } : {}),
     ...(data.entityId ? { linkedEntities: { some: { id: data.entityId } } } : {}),
@@ -55,7 +71,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     prisma.story.count({ where }),
   ]);
 
-  return apiOk({ stories, total });
+  /*
+   * ── « ANONYMISÉ » NE S'ARRÊTE PAS AUX PAGES ──
+   *
+   * La §2.1 règle 1 le précise elle-même : « la règle ne dit pas anonymisé
+   * dans les récits, elle dit anonymisé ». Les pages passent toutes par
+   * `voixDe()` ou par `nomAffiche()` ; cette route servait `author.name`
+   * brut, avec `isDeleted: true` à côté — le nom de quelqu'un qu'on venait
+   * de retirer de la famille, en clair, à qui détient le lien familial.
+   *
+   * L'anonymisation se fait ici, à la sortie, et non dans la requête : le
+   * champ `isDeleted` reste servi, parce qu'un client a besoin de savoir
+   * que ce nom EST un anonymat, et non le prénom de quelqu'un.
+   */
+  const rendus = stories.map((story) => ({
+    ...story,
+    author: { ...story.author, name: nomAffiche(story.author) },
+  }));
+
+  return apiOk({ stories: rendus, total });
 }
 
 /** POST /api/family/:id/stories — créer un récit (et son passage, s'il en a un). */

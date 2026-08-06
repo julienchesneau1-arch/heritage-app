@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
+import { nomAffiche, QUI } from '@/lib/deces';
 import { updateStory } from '@/app/actions';
 import { MAX_CONTENT_LENGTH, STRUCTURE_TYPES, TONES } from '@/lib/structure-types';
 
@@ -28,7 +29,7 @@ export default async function EditStoryPage({
 
   const story = await prisma.story.findFirst({
     where: { id: params.storyId, familyId: context.family.id },
-    include: { author: { select: { name: true } }, narrator: { select: { name: true } } },
+    include: { author: { select: QUI }, narrator: { select: QUI } },
   });
   if (!story) notFound();
 
@@ -41,8 +42,8 @@ export default async function EditStoryPage({
       <div className="space-y-4">
         <h1 className="text-2xl">Corriger</h1>
         <p className="leading-relaxed">
-          Ce récit a été {story.narrator ? `raconté par ${story.narrator.name} et ` : ''}noté par{' '}
-          {story.author.name}. Seuls eux peuvent le corriger.
+          Ce récit a été {story.narrator ? `raconté par ${nomAffiche(story.narrator)} et ` : ''}noté par{' '}
+          {nomAffiche(story.author)}. Seuls eux peuvent le corriger.
         </p>
         <p className="justification">
           Si quelque chose est inexact, la voie ouverte est de poser une question sur le récit.

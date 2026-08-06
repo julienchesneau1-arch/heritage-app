@@ -4,6 +4,7 @@ import { apiError, apiOk } from '@/lib/errors';
 import { authorizeFamily } from '@/lib/session';
 import { openThreadSchema, parseOrNull } from '@/lib/validation';
 import { prisma } from '@/lib/prisma';
+import { nommer, QUI } from '@/lib/deces';
 import { threadService } from '@/services/thread.service';
 
 export const dynamic = 'force-dynamic';
@@ -27,11 +28,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     include: {
       entity: { select: { id: true, name: true, type: true } },
       story: { select: { id: true, title: true } },
-      openedBy: { select: { id: true, name: true } },
+      openedBy: { select: QUI },
     },
   });
 
-  return apiOk({ threads });
+  return apiOk({ threads: threads.map((t) => ({ ...t, openedBy: nommer(t.openedBy) })) });
 }
 
 /**

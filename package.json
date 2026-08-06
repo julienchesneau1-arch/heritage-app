@@ -28,7 +28,8 @@
     "captures": "node outils/captures.mjs",
     "verifier:etancheite": "node outils/etancheite.mjs",
     "verifier:pannes": "node outils/pannes.mjs",
-    "verifier:passeur": "tsx outils/passeur.mts"
+    "verifier:passeur": "tsx outils/passeur.mts",
+    "verifier:oubli": "tsx outils/oubli.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

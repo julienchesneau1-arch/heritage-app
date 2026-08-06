@@ -4,6 +4,7 @@ import { apiError, apiOk } from '@/lib/errors';
 import { authorizeFamily } from '@/lib/session';
 import { createArchiveSchema, parseOrNull } from '@/lib/validation';
 import { prisma } from '@/lib/prisma';
+import { nommer, QUI } from '@/lib/deces';
 import {
   ACCEPTED_TYPES,
   buildStorageKey,
@@ -25,12 +26,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     where: { familyId: params.id },
     orderBy: { createdAt: 'desc' },
     include: {
-      uploader: { select: { id: true, name: true } },
+      uploader: { select: QUI },
       story: { select: { id: true, title: true } },
     },
   });
 
-  return apiOk({ archives });
+  return apiOk({ archives: archives.map((a) => ({ ...a, uploader: nommer(a.uploader) })) });
 }
 
 /**

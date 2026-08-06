@@ -5,6 +5,7 @@ import { apiError, apiOk } from '@/lib/errors';
 import { authorizeFamily, requestIdentity } from '@/lib/session';
 import { parseOrNull } from '@/lib/validation';
 import { prisma } from '@/lib/prisma';
+import { nommer, QUI } from '@/lib/deces';
 import { lengthFromContent } from '@/lib/structure-types';
 import { searchTextOf } from '@/services/story.service';
 
@@ -24,18 +25,18 @@ export async function GET(
   const story = await prisma.story.findFirst({
     where: { id: params.storyId, familyId: params.id },
     include: {
-      author: { select: { id: true, name: true, isDeleted: true } },
+      author: { select: QUI },
       linkedEntities: true,
       archives: true,
       threads: {
         orderBy: { createdAt: 'asc' },
         include: {
-          openedBy: { select: { id: true, name: true } },
+          openedBy: { select: QUI },
           messages: {
             orderBy: { createdAt: 'asc' },
             include: {
-              author: { select: { id: true, name: true } },
-              narrator: { select: { id: true, name: true } },
+              author: { select: QUI },
+              narrator: { select: QUI },
             },
           },
         },
@@ -46,7 +47,23 @@ export async function GET(
   });
 
   if (!story) return apiError('NOT_FOUND');
-  return apiOk(story);
+
+  // Quatre personnes sortent d'ici : l'auteur du récit, celui qui a ouvert
+  // chaque fil, et l'auteur comme le narrateur de chaque message. Aucune
+  // ne passait par la règle.
+  return apiOk({
+    ...story,
+    author: nommer(story.author),
+    threads: story.threads.map((thread) => ({
+      ...thread,
+      openedBy: nommer(thread.openedBy),
+      messages: thread.messages.map((message) => ({
+        ...message,
+        author: nommer(message.author),
+        narrator: nommer(message.narrator),
+      })),
+    })),
+  });
 }
 
 /**

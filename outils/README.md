@@ -32,6 +32,7 @@ démarré.
 | `echelle.mjs` | fabrique 5 000 récits, mesure chaque page, efface |
 | `pannes.mjs` | coupe la base pour de vrai et lit ce que la famille voit |
 | `passeur.mts` | fait vivre le Passeur 180 jours, une horloge simulée dans le magasin |
+| `oubli.mts` | plante un canari dans chaque objet retiré, puis fouille les 34 sorties |
 | `captures.mjs` | régénère `redesign/captures/` |
 
 Le dernier est le seul à mesurer une **durée**. Le Passeur est ce que la
@@ -74,6 +75,22 @@ s'écoulerait jamais. Rien n'est modifié dans le produit pour ce contrôle.
   défaut, le grand-père est décédé en 2014 ; l'écran de l'entretien
   l'offrait pour relire l'enregistrement qu'on venait de faire sur lui.
   Les filtres ne portaient que sur `isDeleted` — « retiré de la famille ».
+- **Le nom d'un membre retiré ressortait en clair sur six sorties**
+  mesurées — la page Archives et cinq routes d'API — et un balayage du
+  source en a trouvé deux de plus, que la configuration du contrôle
+  n'atteignait pas : le livre imprimé (le narrateur d'un récit, et qui a
+  posé une question restée sans réponse) et la page de correction. La §2.1
+  règle 1 se précise pourtant elle-même — « la règle ne dit pas anonymisé
+  dans les récits, elle dit anonymisé » — et `voixDe()` la tenait dans les
+  fils. Cause réelle, et c'est elle qui compte : **dix de ces sélections ne
+  chargeaient même pas `isDeleted`**. La règle n'était pas oubliée, elle
+  était rendue INAPPLICABLE par un `select`, sans que rien ne le signale.
+  D'où `QUI` et `nommer()`, qui vont désormais par paire, et un test qui
+  balaie `src/app` pour qu'aucune sélection ne puisse la redésarmer.
+- **`?includeArchived=1` levait aussi le filtre des récits suspendus.** Les
+  deux conditions étaient dans la même parenthèse. « Voir les archives » et
+  « voir ce que l'auteur a retiré » sont deux demandes différentes, et la
+  seconde n'est offerte à personne (§2.1 règle 2 amendée).
 - **Le Passeur adressait 117 questions à un mort.** Sur 180 jours simulés,
   il fabriquait chaque jour une question destinée au grand-père décédé en
   2014. Personne ne les voyait jamais : trois refus en amont — la page
@@ -101,6 +118,11 @@ croire à plus qu'il n'a mesuré est exactement ce que ce dépôt combat.
   ghcr.io, public.ecr.aws) sont refusés par la politique du relais réseau.
   `demarrage.mjs` reconstitue l'étage d'exécution à l'identique, ce qui en
   approche le plus — mais ce n'est pas une image construite.
+- **L'export garde le nom d'un membre retiré, et c'est un arbitrage.** Le
+  retrait est un soft-delete, donc réversible ; anonymiser l'export rendrait
+  chaque restauration définitive. `oubli.mts` classe cette sortie comme
+  tolérée, avec sa raison, et l'imprime à chaque passage — quiconque détient
+  le lien familial peut y lire ce nom. C'est une décision, pas une étanchéité.
 - **La règle `RARE_PATRIMONY` du Passeur.** Sur 180 jours simulés, elle ne
   s'est jamais déclenchée : le jeu d'essai n'a pas de patrimoine assez
   ancien. Elle n'est donc pas en panne — elle est NON MESURÉE, et l'outil
@@ -108,6 +130,29 @@ croire à plus qu'il n'a mesuré est exactement ce que ce dépôt combat.
   quatre qui ont parlé.
 - **Une famille réelle.** Aucune n'a utilisé ce produit. Tout ce qui est
   écrit ici sur l'usage reste une hypothèse.
+
+---
+
+## Ce que les outils se sont fait à eux-mêmes
+
+Trois défauts trouvés dans les instruments pendant cette passe, tous du
+même genre que ceux qu'ils cherchent :
+
+- `oubli.mts` **interrogeait la recherche avec le canari qu'il traquait**,
+  et le champ de recherche réaffiche ce qu'on tape : trois « fuites » sur
+  quatre étaient de sa main. Il plante désormais deux mots — celui qu'on
+  tape, celui qu'on cherche.
+- `etancheite.mjs` **comptait une requête impossible comme une porte
+  fermée**. `BASE` non renseigné, application arrêtée : le corps valait
+  « ERREUR … », ne contenait donc pas le secret, et les onze lectures
+  croisées se déclaraient étanches sans qu'une requête soit partie.
+- `etancheite.mjs` **promettait en commentaire ce que son code ne faisait
+  pas** : « sans TRUST_PROXY=1, le seau reste commun et la section 8 le
+  DIT ». Elle ne le disait pas — elle rendait « 73 servies » sur une
+  limite de 100, en rouge, sans qu'aucune ligne du produit soit en cause.
+  Et le remplacer par une lecture de `process.env` aurait interrogé le
+  mauvais processus : `TRUST_PROXY` est lu par le SERVEUR. C'est donc
+  mesuré — une adresse neuve juste après la rafale — et non lu.
 
 ---
 

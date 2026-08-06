@@ -1,7 +1,7 @@
 /**
  * TOUT VÉRIFIER, EN UNE COMMANDE — `npm run verifier`.
  *
- * Douze outils vivent ici, chacun avec ses variables d'environnement et
+ * Treize outils vivent ici, chacun avec ses variables d'environnement et
  * son port. Un contrôle qu'on ne sait pas lancer est un contrôle qu'on ne
  * lance pas, et un contrôle qu'on ne lance pas ne protège de rien.
  *
@@ -100,6 +100,10 @@ const OUTILS = [
   // manières de mal vieillir du Passeur — se tarir, se répéter, se laisser
   // manger par une seule règle — sont toutes invisibles sur un jour.
   ['passeur.mts', 'Le Passeur — 180 jours simulés, tarissement, répétition, règles'],
+  // Le retrait a huit mécanismes et le produit trente-quatre sorties.
+  // Chacun a été écrit là où il a été écrit ; c'est le croisement des deux
+  // qui n'avait jamais été fait.
+  ['oubli.mts', 'L’oubli — huit retraits confrontés à trente-quatre sorties'],
 ];
 
 const bilan = [];

@@ -95,3 +95,29 @@ export const DECES = {
 export function nomAffiche(membre: Pick<Member, 'name' | 'isDeleted'>): string {
   return membre.isDeleted ? 'Membre anonymisé' : membre.name;
 }
+
+/*
+ * ── UN POINT DE PASSAGE, ET UNE SÉLECTION QUI LE REND POSSIBLE ──
+ *
+ * La §2.1 règle 1 le dit sans réserve : « la règle ne dit pas anonymisé
+ * dans les récits, elle dit anonymisé. » `voixDe()` la tenait dans les
+ * fils. Ailleurs, chaque endroit qui chargeait une personne refaisait le
+ * geste à la main — et `outils/oubli.mts` a trouvé cinq sorties où il
+ * n'avait pas été fait : la page Archives, la route du détail d'un récit,
+ * celle des archives, celle des fils, et la liste des récits.
+ *
+ * Trois d'entre elles ne pouvaient MÊME PAS anonymiser : leur `select`
+ * ne chargeait pas `isDeleted`. C'est la vraie cause — pas un oubli
+ * ponctuel, une sélection qui rendait la règle inapplicable sans que rien
+ * ne le signale. `QUI` et `nommer()` vont donc par paire.
+ */
+
+/** Ce qu'il faut TOUJOURS charger d'une personne pour pouvoir la nommer. */
+export const QUI = { id: true, name: true, isDeleted: true } as const;
+
+/** La même personne, nommée selon la règle. Le seul geste à faire. */
+export function nommer<T extends { name: string; isDeleted: boolean }>(personne: T): T;
+export function nommer<T extends { name: string; isDeleted: boolean }>(personne: T | null): T | null;
+export function nommer<T extends { name: string; isDeleted: boolean }>(personne: T | null): T | null {
+  return personne === null ? null : { ...personne, name: nomAffiche(personne) };
+}

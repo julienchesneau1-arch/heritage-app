@@ -102,7 +102,7 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Douze outils vivent dans `outils/`, et une seule commande les lance tous :
+Treize outils vivent dans `outils/`, et une seule commande les lance tous :
 
 ```bash
 npm run verifier              # tout, ~6 minutes
@@ -128,9 +128,16 @@ N'établissent PAS — est dans `outils/README.md`.
 | `echelle.mjs` | 5 000 récits fabriqués, mesurés, effacés | 12/12 |
 | `pannes.mjs` | 404, base coupée, retour à la normale | 8/8 |
 | `passeur.mts` | le Passeur sur 180 jours : tarissement, répétition, règles | 12/12 |
+| `oubli.mts` | huit retraits confrontés à 34 sorties, par canaris | 9/9 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
+- Le nom d'un membre **retiré de la famille** ressortait en clair sur six
+  sorties, et deux de plus trouvées en balayant le source. Dix sélections
+  ne chargeaient même pas `isDeleted` : la règle n'était pas oubliée, elle
+  était rendue inapplicable par un `select`.
+- `?includeArchived=1` **levait aussi le filtre des récits suspendus** :
+  « voir les archives » rendait ce que l'auteur avait retiré.
 - Le Passeur adressait **117 questions à un mort**, chaque jour pendant six
   mois. Aucune n'arrivait — trois refus en amont les arrêtaient toutes — de
   sorte que l'invariant tenait par coïncidence et non par règle. Le service
