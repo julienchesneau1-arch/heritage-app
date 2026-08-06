@@ -93,3 +93,53 @@ describe('La pile ne peut pas prendre la place d’une autre application', () =>
     expect(horsProxy).not.toMatch(/'(80|443):/);
   });
 });
+
+describe('La sauvegarde ne peut pas se déclarer faite sans l’être', () => {
+  /**
+   * Le script disait « sauvegarde faite » sans rien savoir.
+   *
+   * Il écrivait `pg_dump ... | gzip > fichier`. Dans un tube, c'est le
+   * DERNIER maillon qui donne le code de retour : `pg_dump` échouait,
+   * `gzip` compressait zéro octet et sortait en 0, `set -e` ne voyait
+   * rien. Et la purge des trente jours s'exécutait quand même — trente
+   * nuits d'échec silencieux, et la dernière sauvegarde valide effacée
+   * par le script censé la protéger.
+   *
+   * C'est la faute que ce dépôt poursuit partout ailleurs, posée sur le
+   * seul fichier dont la défaillance est irréversible.
+   */
+  const SCRIPT = readFileSync(join(process.cwd(), 'sauvegarde.sh'), 'utf8');
+  const CODE = SCRIPT.replace(/^\s*#.*$/gm, '');
+
+  it('ne compresse jamais la sortie d’une commande dans un tube', () => {
+    // `commande | gzip` masque l'échec de `commande`.
+    expect(CODE).not.toMatch(/\|\s*gzip\s*>/);
+  });
+
+  it('vérifie le code de retour de ce qu’elle exécute', () => {
+    expect(CODE).toMatch(/code=\$\?/);
+    expect(CODE).toMatch(/if \[ "\$code" -ne 0 \]/);
+  });
+
+  it('refuse une sortie vide plutôt que de l’archiver', () => {
+    expect(CODE).toMatch(/TAILLE_MINIMALE/);
+    expect(CODE).toMatch(/sortie vide/);
+  });
+
+  it('relit l’archive écrite : un disque plein tronque sans le dire', () => {
+    expect(CODE).toMatch(/gzip -t/);
+  });
+
+  it('écrit d’abord ailleurs, et ne promeut qu’après vérification', () => {
+    // Sans cela, une exécution ratée écrase la sauvegarde de la veille.
+    expect(CODE).toMatch(/temporaire=/);
+    expect(CODE).toMatch(/mv "\$temporaire" "\$destination"/);
+  });
+
+  it('ne purge jamais avant d’avoir établi les sauvegardes du jour', () => {
+    const purge = CODE.indexOf('-mtime');
+    const derniereCapture = CODE.lastIndexOf('capturer "$DOSSIER');
+    expect(derniereCapture).toBeGreaterThan(-1);
+    expect(purge).toBeGreaterThan(derniereCapture);
+  });
+});

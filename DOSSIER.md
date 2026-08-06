@@ -59,7 +59,7 @@ relire d'abord.
 | Lignes de code applicatif | 14 554 |
 | Lignes de tests | 6 048 |
 | Lignes de documentation | 4 584 |
-| Tests, tous verts | **555**, en 28 fichiers |
+| Tests, tous verts | **561**, en 28 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
@@ -622,7 +622,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**555 tests, 28 fichiers, tous verts**, plus trois outils de mesure qui
+**561 tests, 28 fichiers, tous verts**, plus trois outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur et une base
 peuplée : `outils/accessibilite.mjs` (axe-core, 18 pages, 0 violation),
 `outils/clavier.mjs` (la tabulation pressée pour de vrai, 11 pages,
@@ -697,7 +697,14 @@ de recharger, et retire ce qu'il vient d'ajouter si le test échoue.
 obtenir — l'enregistrement DNS du sous-domaine doit être créé.
 
 Sauvegardes : `sauvegarde.sh`, base compressée + archives binaires, trente
-jours sur place, hors-site prêt vers Cloudflare R2.
+jours sur place, hors-site prêt vers Cloudflare R2. Le script **s'arrête
+plutôt que de mentir** : il enchaînait `pg_dump | gzip > fichier`, où c'est
+le dernier maillon du tube qui donne le code de retour — un `pg_dump` en
+échec produisait vingt octets et un « sauvegarde faite » serein, pendant
+que la purge effaçait la dernière copie valide au bout de trente nuits. Il
+vérifie désormais le code de retour, refuse une sortie vide, relit
+l'archive, et ne promeut le fichier du jour qu'après. Six tests le
+tiennent, et ils échouent tous sur l'ancienne version.
 
 ---
 

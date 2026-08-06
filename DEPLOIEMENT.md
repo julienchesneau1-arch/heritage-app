@@ -284,6 +284,19 @@ crontab -e
 `sauvegarde.sh` produit chaque nuit un `pg_dump` compressé et une archive
 des fichiers binaires, et garde trente jours sur place.
 
+**Il s'arrête plutôt que de mentir.** Il vérifie le code de retour de
+chaque commande, refuse une sortie vide, relit l'archive écrite, et
+n'écrase la sauvegarde de la veille qu'une fois la nouvelle établie. La
+purge des trente jours ne s'exécute qu'après. Un échec sort en code 1 avec
+le message d'erreur du conteneur — surveillez `/var/log/heritage-backup.log`,
+ou faites-vous envoyer sa sortie par cron (`MAILTO=`).
+
+La version précédente enchaînait `pg_dump | gzip > fichier` : dans un tube,
+c'est le dernier maillon qui donne le code de retour, donc un `pg_dump`
+en échec produisait un fichier de vingt octets et un « sauvegarde faite »
+parfaitement serein — pendant que la purge effaçait la dernière copie
+valide au bout de trente nuits.
+
 **Le hors-site n'est pas un luxe ici.** Un VPS est une seule machine, et la
 promesse du produit est de garder cinquante ans de récits. Configurer
 `rclone` vers Cloudflare R2 (10 Go gratuits, très au-delà de ce qu'une
