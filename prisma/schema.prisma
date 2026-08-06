@@ -86,7 +86,8 @@ model Member {
   transcriptionsSpoken    TranscriptionDraft[] @relation("Speaker")
   transcriptionsToReview  TranscriptionDraft[] @relation("Reviewer")
 
-  reserves Reserve[]
+  reserves            Reserve[]
+  suspensionsDemandees SuspensionRequest[]
 
   @@index([familyId])
   @@map("members")
@@ -147,6 +148,8 @@ model Story {
   suspendedAt      DateTime? @map("suspended_at")
   /// Celui à la demande de qui l'auteur a suspendu. Jamais anonyme.
   suspendedForId   String?   @map("suspended_for_id")
+
+  suspensionRequests SuspensionRequest[]
 
   // Métadonnées temporelles
   createdAt DateTime  @default(now()) @map("created_at")
@@ -564,4 +567,37 @@ model VisibilityLog {
 
   @@index([familyId, shownAt])
   @@map("visibility_logs")
+}
+
+
+/// LA DEMANDE DE SUSPENSION.
+///
+/// Quelqu'un s'estime concerné par un récit qu'il n'a ni écrit ni raconté.
+/// Il ne peut pas le supprimer — ce sont les mots d'un autre — et la §2.6
+/// interdit qu'il décide à la place de la famille. Il DEMANDE.
+///
+/// Seul l'auteur suspend. Ce que la suspension lui apporte : jusqu'ici,
+/// pour accommoder quelqu'un, il n'avait que la SUPPRESSION — irréversible,
+/// et qui détruit les `Passage`, donc la chaîne de transmission. Suspendre
+/// est un geste plus doux sur ses propres mots.
+///
+/// Jamais anonyme : on ne s'oppose pas sans se nommer. Une demande par
+/// personne et par récit ; plusieurs personnes peuvent demander.
+model SuspensionRequest {
+  id       String @id @default(cuid())
+  familyId String @map("family_id")
+  storyId  String @map("story_id")
+  memberId String @map("member_id")
+
+  /// Ses mots. Affichés tels quels à l'auteur, jamais reformulés.
+  motif String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  story  Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, memberId])
+  @@index([familyId, storyId])
+  @@map("suspension_requests")
 }

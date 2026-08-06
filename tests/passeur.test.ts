@@ -28,6 +28,7 @@ const TENSION_STORY = {
   views: 12,
   archived: false,
   quarantined: false,
+  suspendedAt: null,
   linkedEntities: [{ id: 'e1', type: 'PERSON', memberId: 'mem_2' }],
   conversations: [],
 };

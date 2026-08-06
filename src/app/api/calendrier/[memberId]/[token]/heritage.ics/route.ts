@@ -48,7 +48,7 @@ export async function GET(
     // Bornée : un calendrier de mille lignes n'est plus un calendrier. Les
     // récits les plus récemment datés d'abord.
     prisma.story.findMany({
-      where: { familyId: member.familyId, archived: false, quarantined: false, eventDate: { not: null } },
+      where: { familyId: member.familyId, archived: false, quarantined: false, suspendedAt: null, eventDate: { not: null } },
       select: { id: true, title: true, eventDate: true },
       orderBy: { eventDate: 'desc' },
       take: 200,

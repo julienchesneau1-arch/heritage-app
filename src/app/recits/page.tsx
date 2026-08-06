@@ -42,9 +42,13 @@ export default async function StoriesPage({
     ...(search ? { searchText: { contains: normalizeName(search) } } : {}),
   };
 
+  // Un récit suspendu par son auteur ne s'affiche plus, et ne se compte
+  // pas non plus : « 63 récits » dont un invisible serait un compte faux.
+  const visible = { suspendedAt: null } as const;
+
   const [stories, total, archivedMatching] = await Promise.all([
     prisma.story.findMany({
-      where: { ...filters, ...(includeArchived ? {} : { archived: false }) },
+      where: { ...filters, ...visible, ...(includeArchived ? {} : { archived: false }) },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
@@ -53,11 +57,11 @@ export default async function StoriesPage({
       // ligne, cinquante lignes par page, pour rien.
       include: { author: { select: { name: true, isDeleted: true } } },
     }),
-    prisma.story.count({ where: { ...filters, ...(includeArchived ? {} : { archived: false }) } }),
+    prisma.story.count({ where: { ...filters, ...visible, ...(includeArchived ? {} : { archived: false }) } }),
     // Ce que le filtre écarte silencieusement. Sans ce compte, « aucun récit
     // ne correspond » pouvait s'afficher alors que douze récits archivés
     // correspondaient parfaitement.
-    includeArchived ? Promise.resolve(0) : prisma.story.count({ where: { ...filters, archived: true } }),
+    includeArchived ? Promise.resolve(0) : prisma.story.count({ where: { ...filters, ...visible, archived: true } }),
   ]);
 
   const shown = (page - 1) * PAGE_SIZE + stories.length;

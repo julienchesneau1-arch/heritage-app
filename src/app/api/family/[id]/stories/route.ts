@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
   const where: Prisma.StoryWhereInput = {
     familyId,
-    ...(data.includeArchived ? {} : { archived: false }),
+    ...(data.includeArchived ? {} : { archived: false, suspendedAt: null }),
     ...(data.structureType ? { structureType: data.structureType } : {}),
     ...(data.authorId ? { authorId: data.authorId } : {}),
     ...(data.entityId ? { linkedEntities: { some: { id: data.entityId } } } : {}),

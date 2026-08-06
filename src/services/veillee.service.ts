@@ -89,7 +89,7 @@ export class VeilleeService {
   private async select(familyId: string, now: Date): Promise<VeilleeEntry[]> {
     const entries: VeilleeEntry[] = [];
     const taken = new Set<string>();
-    const base = { familyId, archived: false, quarantined: false };
+    const base = { familyId, archived: false, quarantined: false, suspendedAt: null };
 
     // 1. Celui que personne n'a relu. La veillée est sa seule chance d'être dit.
     const forgotten = await this.conservateur.getForgottenStories(familyId, 1, now);

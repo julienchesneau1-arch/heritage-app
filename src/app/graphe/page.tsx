@@ -4,6 +4,7 @@ import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
 import { threadService } from '@/services/thread.service';
 import { Fil, ChampDeParole } from '@/components/fil';
+import { reserveService } from '@/services/reserve.service';
 import { divulguer } from '@/lib/honnetete';
 
 export const dynamic = 'force-dynamic';
@@ -127,6 +128,7 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
   const linkedToSelected = {
     familyId: context.family.id,
     archived: false,
+      suspendedAt: null,
     linkedEntities: { some: { id: selected.id } },
   };
 
@@ -149,6 +151,7 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
   ]);
 
   const fils = await threadService.forEntity(context.family.id, selected.id);
+  const demandesPortees = await reserveService.demandesPortees(context.family.id, selected.id);
 
   const allNeighbours = new Map<string, { id: string; name: string; type: string }>();
   for (const story of stories) {
@@ -317,6 +320,31 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
             ))}
           </ul>
         )}
+
+        {/* ── UNE DEMANDE PORTÉE ──
+            Quelqu'un a demandé qu'on ne parle pas de ce sujet, et a choisi
+            de le dire à la famille. On l'affiche ICI, au moment d'écrire,
+            dans SES mots — et l'application laisse écrire. Elle porte la
+            demande, elle ne l'applique jamais : le jour où une machine
+            impose le respect d'un souhait familial, ce n'est plus un acte
+            de respect mais une règle qu'on contourne.
+
+            Les réserves silencieuses ne sortent jamais d'ici : c'est la
+            garantie sur laquelle tout le reste repose. */}
+        {demandesPortees.length > 0 ? (
+          <div className="space-y-3 rounded-lg bg-sauge-200 p-5">
+            {demandesPortees.map((demande) => (
+              <p key={demande.id} className="font-sans text-base leading-relaxed text-sauge-900">
+                <strong>{demande.parQui}</strong> a demandé qu’on ne parle pas de cela.
+                <span className="mt-1 block">« {demande.demande} »</span>
+              </p>
+            ))}
+            <p className="font-sans text-base text-sauge-800">
+              Vous pouvez écrire quand même. Cette demande vous est transmise, elle ne vous
+              interdit rien.
+            </p>
+          </div>
+        ) : null}
 
         {context.member ? (
           <div className="border-t border-rule pt-4">

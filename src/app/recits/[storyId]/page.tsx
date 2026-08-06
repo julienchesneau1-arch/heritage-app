@@ -13,7 +13,12 @@ import {
   releaseQuarantine,
   requestTranscription,
   uploadArchive,
+  demanderSuspension,
+  retirerDemandeSuspension,
+  suspendreRecit,
+  remettreRecit,
 } from '@/app/actions';
+import { suspensionService } from '@/services/suspension.service';
 import { Fil, ChampDeParole } from '@/components/fil';
 import { threadService } from '@/services/thread.service';
 
@@ -37,7 +42,7 @@ export default async function StoryPage({
   searchParams,
 }: {
   params: { storyId: string };
-  searchParams: { depot?: string; suppr?: string; modif?: string };
+  searchParams: { depot?: string; suppr?: string; modif?: string; suspension?: string };
 }) {
   const context = await loadContext();
   if (!context) redirect('/bienvenue');
@@ -60,6 +65,8 @@ export default async function StoryPage({
   if (!story) notFound();
 
   const fils = await threadService.forStory(context.family.id, story.id);
+  const demandes = await suspensionService.demandes(context.family.id, story.id);
+  const maDemande = context.member ? demandes.find((d) => d.memberId === context.member!.id) : undefined;
 
   const depot = searchParams.depot ? DEPOT_MESSAGES[searchParams.depot] : null;
   const suppression = searchParams.suppr ? SUPPR_MESSAGES[searchParams.suppr] : null;
@@ -307,6 +314,115 @@ export default async function StoryPage({
               Supprimer définitivement
             </button>
           </form>
+        ) : null}
+      </section>
+
+
+      {/* ── LA SUSPENSION ──
+          Celui qui s'estime concerné DEMANDE ; seul l'auteur suspend. Une
+          suspension déclenchée par la seule objection contredirait la §2.6
+          — « un membre ne peut pas décider à la place des autres » — et
+          serait un veto avec des étapes en plus. */}
+      <section className="space-y-4 border-t border-rule pt-6">
+        {story.suspendedAt ? (
+          <>
+            <h2 className="section-label">Ce récit est suspendu</h2>
+            <p className="leading-relaxed">
+              Il n’apparaît plus dans les pages, la recherche, la veillée ni le livre. Il n’est pas
+              détruit : il reste dans l’export, et les liens de transmission sont intacts.
+            </p>
+            {peutCorriger ? (
+              <form action={remettreRecit}>
+                <input type="hidden" name="storyId" value={story.id} />
+                <button type="submit" className="btn">
+                  Le remettre
+                </button>
+              </form>
+            ) : null}
+          </>
+        ) : peutCorriger ? (
+          demandes.length > 0 ? (
+            <>
+              <h2 className="section-label">Une demande vous a été adressée</h2>
+              <ul className="space-y-3">
+                {demandes.map((demande) => (
+                  <li key={demande.id} className="space-y-2 rounded-lg bg-sauge-200 p-4">
+                    <p className="font-sans text-base text-sauge-900">
+                      <strong>{demande.parQui}</strong> demande que ce récit ne soit plus affiché.
+                    </p>
+                    {/* Ses mots, jamais reformulés. */}
+                    {demande.motif ? (
+                      <p className="font-sans text-base leading-relaxed text-sauge-800">
+                        « {demande.motif} »
+                      </p>
+                    ) : null}
+                    <form action={suspendreRecit}>
+                      <input type="hidden" name="storyId" value={story.id} />
+                      <input type="hidden" name="pourQui" value={demande.memberId} />
+                      <button type="submit" className="btn">
+                        Suspendre à sa demande
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+              <p className="justification">
+                Vous décidez seul : ce sont vos mots. Suspendre n’est pas supprimer — le récit
+                reste dans l’export, les liens de transmission demeurent, et vous pouvez le
+                remettre à tout moment. Ne rien faire est une réponse.
+              </p>
+            </>
+          ) : null
+        ) : context.member ? (
+          <>
+            <h2 className="section-label">Ce récit vous concerne ?</h2>
+            {maDemande ? (
+              <>
+                <p className="justification">
+                  Votre demande a été transmise à l’auteur, avec votre nom. Lui seul peut
+                  suspendre : ce sont ses mots, et personne ne décide à la place des autres.
+                </p>
+                <form action={retirerDemandeSuspension}>
+                  <input type="hidden" name="storyId" value={story.id} />
+                  <button type="submit" className="justification underline">
+                    Retirer ma demande
+                  </button>
+                </form>
+              </>
+            ) : (
+              <form action={demanderSuspension} className="space-y-3">
+                <input type="hidden" name="storyId" value={story.id} />
+                <label htmlFor="motif" className="justification block">
+                  Vous pouvez demander à l’auteur de ne plus l’afficher. Votre nom lui sera dit —
+                  on ne s’oppose pas anonymement. Il décide, et il peut refuser.
+                </label>
+                <textarea
+                  id="motif"
+                  name="motif"
+                  rows={2}
+                  placeholder="En quelques mots, si vous le souhaitez."
+                  className="w-full rounded-md border border-divider bg-neutre-100 p-4 font-sans text-base"
+                />
+                <button type="submit" className="btn">
+                  Demander la suspension
+                </button>
+              </form>
+            )}
+          </>
+        ) : null}
+
+        {searchParams.suspension === 'demandee' ? (
+          <p className="justification">La demande est transmise à l’auteur.</p>
+        ) : null}
+        {searchParams.suspension === 'auteur' ? (
+          <p className="justification">
+            Ce récit est de vous : vous pouvez déjà le corriger, l’archiver ou le suspendre.
+          </p>
+        ) : null}
+        {searchParams.suspension === 'identite' ? (
+          <p className="justification text-accent">
+            Suspendre demande une identité prouvée. Ouvrez votre lien personnel, puis réessayez.
+          </p>
         ) : null}
       </section>
 

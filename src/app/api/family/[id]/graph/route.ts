@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const [entities, stories, passages] = await Promise.all([
     prisma.entity.findMany({ where: { familyId: params.id } }),
     prisma.story.findMany({
-      where: { familyId: params.id, archived: false },
+      where: { familyId: params.id, archived: false, suspendedAt: null },
       select: { id: true, title: true, linkedEntities: { select: { id: true } } },
     }),
     prisma.passage.findMany({

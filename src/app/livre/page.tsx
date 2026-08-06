@@ -32,7 +32,7 @@ export default async function LivrePage() {
 
   const [recitsBruts, passages, questions, membres, entitesAvecRecit] = await Promise.all([
     prisma.story.findMany({
-      where: { familyId, archived: false, quarantined: false },
+      where: { familyId, archived: false, quarantined: false, suspendedAt: null },
       orderBy: { createdAt: 'asc' },
       include: {
         author: { select: { id: true, name: true, isDeleted: true } },

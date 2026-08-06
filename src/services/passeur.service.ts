@@ -292,6 +292,9 @@ export class PasseurService {
           where: {
             familyId,
             archived: false,
+            // Un récit suspendu par son auteur ne se propose plus : ce
+            // qui ne s'affiche pas ne se suggère pas non plus.
+            suspendedAt: null,
             ...(muted.length > 0 ? { id: { notIn: muted } } : {}),
             ...horsReserve,
             ...rule.where(context),

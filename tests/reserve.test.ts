@@ -280,3 +280,36 @@ describe('Le brouillon d’un entretien appartient à celui qui a parlé', () =>
     expect(DRAFT).toMatch(/promptText\s+String\?/);
   });
 });
+
+// ─── La demande portée, affichée au bon moment ───
+
+describe('Une demande portée s’affiche là où l’on écrit', () => {
+  const GRAPHE = sansCommentaires(join(process.cwd(), 'src', 'app', 'graphe', 'page.tsx'));
+
+  it('interroge les demandes portées sur l’entité qu’on regarde', () => {
+    expect(GRAPHE).toMatch(/demandesPortees\(context\.family\.id, selected\.id\)/);
+  });
+
+  it('les affiche AVANT le champ de parole, pas après', () => {
+    // Après, ce serait un reproche ; avant, c'est une information.
+    expect(GRAPHE.indexOf('demandesPortees.length > 0')).toBeLessThan(
+      GRAPHE.indexOf('<ChampDeParole'),
+    );
+  });
+
+  it('affiche les mots de l’intéressé, jamais une reformulation', () => {
+    expect(GRAPHE).toMatch(/\{demande\.demande\}/);
+    expect(GRAPHE).toMatch(/\{demande\.parQui\}/);
+  });
+
+  it('dit explicitement qu’elle n’interdit rien', () => {
+    // L'application porte la demande. Elle ne l'applique jamais.
+    expect(GRAPHE).toMatch(/Vous pouvez écrire quand même/);
+    expect(GRAPHE).toMatch(/elle ne vous\s+interdit rien/);
+  });
+
+  it('ne désactive ni ne masque le champ de parole', () => {
+    const bloc = GRAPHE.slice(GRAPHE.indexOf('demandesPortees'), GRAPHE.indexOf('<ChampDeParole') + 400);
+    expect(bloc).not.toMatch(/disabled|readOnly|hidden/);
+  });
+});

@@ -23,6 +23,7 @@ import { traditionService } from '@/services/tradition.service';
 import { TriggerModelService, type TriggerType } from '@/services/trigger-model.service';
 import { PasseurService } from '@/services/passeur.service';
 import { reserveService } from '@/services/reserve.service';
+import { suspensionService } from '@/services/suspension.service';
 import { createStorySchema, createTraditionSchema } from '@/lib/validation';
 import { ACCEPTED_TYPES, buildStorageKey, isAcceptedType, MAX_UPLOAD_BYTES, storage } from '@/lib/storage';
 import { isReadingSize, READING_COOKIE } from '@/lib/reading';
@@ -959,4 +960,82 @@ export async function leverReserve(formData: FormData) {
 
   revalidatePath('/entretien');
   redirect('/entretien?reserve=levee');
+}
+
+// ─── La suspension : demander, accorder, remettre ───
+
+/**
+ * Demander la suspension d'un récit qu'on n'a ni écrit ni raconté.
+ *
+ * Ne suspend rien. L'application PORTE la demande — nommément, on ne
+ * s'oppose pas anonymement — et laisse l'auteur décider. Une machine qui
+ * imposerait le respect d'un souhait familial en ferait une règle qu'on
+ * contourne, plus un acte de respect.
+ */
+export async function demanderSuspension(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const storyId = String(formData.get('storyId') ?? '');
+  const { raison } = await suspensionService.demander({
+    familyId: context.family.id,
+    storyId,
+    memberId: context.member.id,
+    motif: String(formData.get('motif') ?? ''),
+  });
+
+  revalidatePath(`/recits/${storyId}`);
+  redirect(`/recits/${storyId}${raison ? `?suspension=${raison}` : '?suspension=demandee'}`);
+}
+
+/** Retirer sa demande. Par celui qui l'a posée, et lui seul. */
+export async function retirerDemandeSuspension(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const storyId = String(formData.get('storyId') ?? '');
+  await suspensionService.retirerLaDemande(context.family.id, storyId, context.member.id);
+
+  revalidatePath(`/recits/${storyId}`);
+  redirect(`/recits/${storyId}?suspension=retiree`);
+}
+
+/**
+ * Suspendre — l'auteur ou le narrateur, personne d'autre.
+ *
+ * Jusqu'ici, accommoder quelqu'un n'avait qu'un geste : SUPPRIMER,
+ * irréversible et destructeur des `Passage`. Celui-ci est réversible et ne
+ * détruit rien. Le récit quitte les pages et le livre, il reste dans
+ * l'export : la famille possède ses données (amendement 3).
+ */
+export async function suspendreRecit(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+  // Comme la suppression : une identité prouvée, pas une identité déclarée.
+  if (!canDelete(context)) redirect(`/recits/${String(formData.get('storyId') ?? '')}?suspension=identite`);
+
+  const storyId = String(formData.get('storyId') ?? '');
+  await suspensionService.suspendre({
+    familyId: context.family.id,
+    storyId,
+    memberId: context.member.id,
+    pourQui: String(formData.get('pourQui') ?? ''),
+  });
+
+  revalidatePath(`/recits/${storyId}`);
+  revalidatePath('/recits');
+  redirect(`/recits/${storyId}?suspension=faite`);
+}
+
+/** Remettre le récit. C'est tout l'intérêt de suspendre plutôt que détruire. */
+export async function remettreRecit(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const storyId = String(formData.get('storyId') ?? '');
+  await suspensionService.remettre(context.family.id, storyId, context.member.id);
+
+  revalidatePath(`/recits/${storyId}`);
+  revalidatePath('/recits');
+  redirect(`/recits/${storyId}?suspension=remise`);
 }
