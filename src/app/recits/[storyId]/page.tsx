@@ -21,6 +21,7 @@ import {
 import { suspensionService } from '@/services/suspension.service';
 import { Fil, ChampDeParole } from '@/components/fil';
 import { threadService } from '@/services/thread.service';
+import { AVERTISSEMENT_TRANSCRIPTION, cheminDeTranscription } from '@/lib/sortie';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,6 +150,13 @@ export default async function StoryPage({
                       <p className="justification">
                         Une machine proposera un texte. Il faudra l’écouter et le relire avant qu’il
                         devienne un récit — elle se trompe, et il lui arrive d’inventer.
+                      </p>
+                      {/* Ce qui SORT, dit avant le geste et non après.
+                          Le texte dépend de la configuration réelle du
+                          serveur : sur une installation sans clé, annoncer
+                          un départ serait faux. */}
+                      <p className="justification">
+                        {AVERTISSEMENT_TRANSCRIPTION[cheminDeTranscription()]}
                       </p>
                     </form>
                   ) : null}

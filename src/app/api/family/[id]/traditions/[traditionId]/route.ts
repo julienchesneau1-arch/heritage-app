@@ -27,11 +27,18 @@ export async function PATCH(
     return tradition ? apiOk(tradition) : apiError('NOT_FOUND');
   }
 
+  // `ok` ne se dit qu'après avoir modifié quelque chose. Sans cela, une
+  // tradition inexistante — ou celle d'une autre famille — recevait la
+  // même confirmation qu'une tradition réellement endormie.
   if (data.action === 'sleep') {
-    await traditionService.sleep(params.id, params.traditionId, data.reason ?? 'Endormie par la famille.');
-    return apiOk({ ok: true });
+    const fait = await traditionService.sleep(
+      params.id,
+      params.traditionId,
+      data.reason ?? 'Endormie par la famille.',
+    );
+    return fait ? apiOk({ ok: true }) : apiError('NOT_FOUND');
   }
 
-  await traditionService.wake(params.id, params.traditionId);
-  return apiOk({ ok: true });
+  const fait = await traditionService.wake(params.id, params.traditionId);
+  return fait ? apiOk({ ok: true }) : apiError('NOT_FOUND');
 }

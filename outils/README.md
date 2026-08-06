@@ -21,6 +21,7 @@ démarré.
 
 | Outil | Ce qu'il exécute |
 |---|---|
+| `etancheite.mjs` | fabrique deux familles et tente de lire ET d'écrire chez l'autre |
 | `accessibilite.mjs` | axe-core sur 18 pages, WCAG 2.1 AA |
 | `clavier.mjs` | presse Tab : pièges, contour de focus calculé, `tabindex` positif |
 | `permissions.mjs` | les en-têtes servis, puis appuie sur « Enregistrer une voix » et compte les octets |
@@ -46,6 +47,9 @@ démarré.
   toute la mémoire de la famille pour en compter 42.
 - Le **plancher de 16 px** de la §6.4 n'était pas tenu en 29 endroits, et
   les libellés du graphe étaient rendus à 6,6 px.
+- Une route répondait **« c'est fait » sur zéro ligne modifiée** : endormir
+  la tradition d'une autre famille rendait HTTP 200. La donnée n'a jamais
+  été en danger — le service est cloisonné — mais l'écriteau mentait.
 - `00-premier-jour.webp` **montrait le sélecteur d'identité** : la capture
   était prise sans cookie de membre, et `/` redirige alors vers `/qui`.
 

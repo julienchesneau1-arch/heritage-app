@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
 import {
   connu,
@@ -170,5 +172,67 @@ describe('Clause 4 — rien de dérivé du présent n’est gravé', () => {
     // lecture, donc elle est juste à chaque lecture.
     expect(contientUnCalculPerissable('Robert Martin (1931–2014)')).toBe(false);
     expect(contientUnCalculPerissable('Date de décès enregistrée : 2014-11-08.')).toBe(false);
+  });
+});
+
+describe('Rien ne sort du serveur sans que ce soit dit', () => {
+  /**
+   * L'application a une page entière intitulée « Ce que l'application fait
+   * de votre mémoire ». Elle ne disait rien du seul endroit où la mémoire
+   * QUITTE PHYSIQUEMENT le serveur : la transcription par API, qui envoie
+   * la voix d'une personne à un tiers hors de l'Union européenne.
+   *
+   * L'écran disait que la machine « se trompe et qu'il lui arrive
+   * d'inventer » — c'est vrai, et ce n'est pas la question : personne
+   * n'était informé du départ.
+   *
+   * Une phrase générique aurait été pire que rien : sur une installation
+   * SANS clé, annoncer un départ serait faux et ferait renoncer des gens à
+   * un chemin qui ne sort de nulle part. Ce qui est dit dépend donc de la
+   * configuration réelle, lue à un seul endroit.
+   */
+  const SOURCE = readFileSync(join(process.cwd(), 'src', 'lib', 'sortie.ts'), 'utf8');
+
+  it('le tiers est nommé, jamais laissé dans le flou', () => {
+    expect(SOURCE).toMatch(/OpenAI/);
+    expect(SOURCE).toMatch(/États-Unis/);
+  });
+
+  it('les deux chemins ont deux textes différents', async () => {
+    const { AVERTISSEMENT_TRANSCRIPTION, SORTIE_DECRITE } = await import('@/lib/sortie');
+    expect(AVERTISSEMENT_TRANSCRIPTION.local).not.toBe(AVERTISSEMENT_TRANSCRIPTION.api);
+    expect(SORTIE_DECRITE.local).not.toBe(SORTIE_DECRITE.api);
+  });
+
+  it('le chemin local promet que rien ne part, et le tient', async () => {
+    const { AVERTISSEMENT_TRANSCRIPTION, SORTIE_DECRITE } = await import('@/lib/sortie');
+    expect(AVERTISSEMENT_TRANSCRIPTION.local).toMatch(/ne quitte pas/);
+    expect(AVERTISSEMENT_TRANSCRIPTION.local).not.toMatch(/OpenAI/);
+    expect(SORTIE_DECRITE.local).not.toMatch(/OpenAI/);
+  });
+
+  it('le chemin par API dit que la voix sort, et où', async () => {
+    const { AVERTISSEMENT_TRANSCRIPTION } = await import('@/lib/sortie');
+    expect(AVERTISSEMENT_TRANSCRIPTION.api).toMatch(/OpenAI/);
+    expect(AVERTISSEMENT_TRANSCRIPTION.api).toMatch(/Union européenne/);
+  });
+
+  it('le texte suit la configuration réelle, il n’est pas figé', async () => {
+    const { cheminDeTranscription } = await import('@/lib/sortie');
+    const avant = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = '';
+    expect(cheminDeTranscription()).toBe('local');
+    process.env.OPENAI_API_KEY = 'sk-test';
+    expect(cheminDeTranscription()).toBe('api');
+    if (avant === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = avant;
+  });
+
+  it('les deux écrans concernés le disent', () => {
+    const RECIT = readFileSync(join(process.cwd(), 'src', 'app', 'recits', '[storyId]', 'page.tsx'), 'utf8');
+    const REDDITION = readFileSync(join(process.cwd(), 'src', 'app', 'transmission', 'page.tsx'), 'utf8');
+    // Au moment du geste, et dans la reddition de comptes.
+    expect(RECIT).toMatch(/AVERTISSEMENT_TRANSCRIPTION\[cheminDeTranscription\(\)\]/);
+    expect(REDDITION).toMatch(/SORTIE_DECRITE\[cheminDeTranscription\(\)\]/);
   });
 });

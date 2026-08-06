@@ -59,12 +59,12 @@ relire d'abord.
 | Lignes de code applicatif | 14 554 |
 | Lignes de tests | 6 048 |
 | Lignes de documentation | 4 584 |
-| Tests, tous verts | **572**, en 28 fichiers |
+| Tests, tous verts | **578**, en 28 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 9 (`outils/`), hors `npm test`, `npm run verifier` |
+| Outils de mesure | 10 (`outils/`), hors `npm test`, `npm run verifier` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -622,7 +622,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**572 tests, 28 fichiers, tous verts**, plus huit outils de mesure qui
+**578 tests, 28 fichiers, tous verts**, plus huit outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,

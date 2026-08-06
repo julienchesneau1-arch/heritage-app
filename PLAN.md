@@ -102,7 +102,7 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Neuf outils vivent dans `outils/`, et une seule commande les lance tous :
+Dix outils vivent dans `outils/`, et une seule commande les lance tous :
 
 ```bash
 npm run verifier              # tout, ~6 minutes
@@ -116,6 +116,7 @@ N'établissent PAS — est dans `outils/README.md`.
 
 | Outil | Ce qu'il vérifie | État |
 |---|---|---|
+| `etancheite.mjs` | étanchéité entre familles, lecture et écriture | 36/36 |
 | `accessibilite.mjs` | axe-core, WCAG 2.1 AA, 18 pages | 0 violation |
 | `clavier.mjs` | tabulation réelle : pièges, contour de focus, ordre | 0 défaut, 11 pages |
 | `captures.mjs` | la planche de `redesign/captures/` | 18 captures |

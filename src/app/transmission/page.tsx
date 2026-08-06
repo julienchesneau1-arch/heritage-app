@@ -5,6 +5,7 @@ import { metricsService } from '@/services/metrics.service';
 import { conservateur } from '@/services/conservateur.service';
 import { formatDateFr } from '@/lib/normalize';
 import { enPourcentage, raisonDe } from '@/lib/honnetete';
+import { SORTIE_DECRITE, cheminDeTranscription } from '@/lib/sortie';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,6 +139,21 @@ export default async function TransmissionPage() {
           </ul>
         </section>
       ) : null}
+
+      {/* ── CE QUI SORT DU SERVEUR ──
+          Cette page détaillait ce que l'algorithme écarte et ce qu'il tait,
+          et ne disait rien du seul endroit où la mémoire quitte
+          PHYSIQUEMENT le serveur. « Ce que l'application fait de votre
+          mémoire » sans « et où elle l'envoie » était une reddition de
+          comptes à moitié. */}
+      <section className="carte space-y-3">
+        <h2 className="text-xl leading-snug">Ce qui sort de ce serveur</h2>
+        <p className="leading-relaxed">{SORTIE_DECRITE[cheminDeTranscription()]}</p>
+        <p className="justification">
+          Cette ligne décrit l’installation telle qu’elle est configurée en ce moment, pas une
+          intention : elle change d’elle-même si la configuration change.
+        </p>
+      </section>
 
       {/* Retirer un chiffre sans le dire serait le retirer deux fois. */}
       <section className="carte space-y-3">

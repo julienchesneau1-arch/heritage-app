@@ -1,7 +1,7 @@
 /**
  * TOUT VÉRIFIER, EN UNE COMMANDE — `npm run verifier`.
  *
- * Neuf outils vivaient ici, chacun avec ses variables d'environnement et
+* Dix outils vivent ici, chacun avec ses variables d'environnement et
  * son port. Un contrôle qu'on ne sait pas lancer est un contrôle qu'on ne
  * lance pas, et un contrôle qu'on ne lance pas ne protège de rien.
  *
@@ -83,6 +83,7 @@ if (!(await joignable())) {
 
 /** `long` : coûteux, sauté par `--rapide`. */
 const OUTILS = [
+  ['etancheite.mjs', 'Étanchéité — deux familles, lecture ET écriture croisées'],
   ['accessibilite.mjs', 'Accessibilité — axe-core, WCAG 2.1 AA, 18 pages'],
   ['clavier.mjs', 'Clavier — pièges, contour de focus, ordre de tabulation'],
   ['permissions.mjs', 'Permissions — en-têtes, micro, enregistreur de bout en bout'],

@@ -53,18 +53,37 @@ export class TraditionService {
   }
 
   /** Endormissement explicite, ou par silence prolongé. */
-  async sleep(familyId: string, traditionId: string, reason: string): Promise<void> {
-    await this.prisma.tradition.updateMany({
+  /**
+   * ── `void` DISAIT « C'EST FAIT » SANS RIEN SAVOIR ──
+   *
+   * `updateMany` est bien cloisonné par `familyId` — la donnée n'a jamais
+   * été en danger. Mais ces deux méthodes ne rendaient rien, et la route
+   * répondait `ok` quoi qu'il arrive : une tradition inexistante, ou celle
+   * d'une AUTRE famille, donnait « c'est fait » sur zéro ligne modifiée.
+   *
+   * Trouvé en essayant d'endormir la tradition d'une famille voisine avec
+   * les identifiants d'une autre (`outils/etancheite.mjs`) : HTTP 200,
+   * et rien en base. La porte tenait ; c'est l'écriteau qui mentait.
+   *
+   * Elles rendent maintenant ce qu'elles ont fait, et la route en tire un
+   * 404 — comme `activate` le faisait déjà. Un produit qui confirme ce
+   * qu'il n'a pas établi est le défaut que ce dépôt poursuit partout
+   * ailleurs (amendement 6).
+   */
+  async sleep(familyId: string, traditionId: string, reason: string): Promise<boolean> {
+    const result = await this.prisma.tradition.updateMany({
       where: { id: traditionId, familyId },
       data: { isAsleep: true, sleepReason: reason },
     });
+    return result.count > 0;
   }
 
-  async wake(familyId: string, traditionId: string): Promise<void> {
-    await this.prisma.tradition.updateMany({
+  async wake(familyId: string, traditionId: string): Promise<boolean> {
+    const result = await this.prisma.tradition.updateMany({
       where: { id: traditionId, familyId },
       data: { isAsleep: false, sleepReason: null },
     });
+    return result.count > 0;
   }
 
   /**
