@@ -730,6 +730,17 @@ par omission.
   réel, Docker Hub étant bloqué par le proxy de l'environnement de
   développement. C'est exactement là que la première panne est survenue.
   `tests/image.test.ts` couvre désormais la classe de défaut, pas l'image.
+- **Le livre et le hors-ligne se vérifient maintenant**, et ne se
+  vérifiaient pas avant. `outils/hors-ecran.mjs` bascule le rendu en média
+  `print`, produit un vrai PDF, et contrôle que le menu, la navigation et
+  le pied de page ne s'impriment pas, qu'aucune adresse web ne suit les
+  liens, qu'un récit ne se coupe pas entre deux pages, et que le fond est
+  blanc. Puis il coupe le réseau — par un relais qu'il tient lui-même,
+  parce que ni `setOffline` ni l'interception de Playwright n'atteignent
+  une requête émise par le Service Worker — et vérifie qu'une page déjà lue
+  reste lisible et qu'une page jamais lue rend le repli plutôt qu'un
+  contenu vide.
+
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.
 
