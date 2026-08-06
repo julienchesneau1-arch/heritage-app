@@ -28,22 +28,22 @@ export default async function ArchivesPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl">Archives</h1>
+      <h1 className="text-[2rem] leading-[1.12]">Archives</h1>
 
       {archives.length === 0 ? (
         <p className="justification">
           Aucune archive. Les photos et les enregistrements se déposent depuis la page d’un récit.
         </p>
       ) : (
-        <ul className="divide-y divide-rule border-y border-rule">
+        <ul className="space-y-3">
           {archives.map((archive) => (
-            <li key={archive.id} className="space-y-2 py-4">
+            <li key={archive.id} className="carte space-y-2">
               {archive.type === 'PHOTO' ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={`/api/family/${context.family.id}/archives/${archive.id}/file`}
                   alt={archive.title}
-                  className="w-full rounded-sm border border-rule"
+                  className="w-full rounded-md border border-rule"
                   loading="lazy"
                 />
               ) : null}

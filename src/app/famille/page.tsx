@@ -40,8 +40,8 @@ export default async function FamilyPage({
   const calendarById = new Map(links.map((link) => [link.id, link.calendar]));
 
   return (
-    <div className="space-y-10">
-      <h1 className="text-2xl">Famille {context.family.name}</h1>
+    <div className="space-y-6">
+      <h1 className="text-[2rem] leading-[1.12]">Famille {context.family.name}</h1>
 
       {searchParams.bienvenue ? (
         <p className="leading-relaxed">
@@ -55,8 +55,8 @@ export default async function FamilyPage({
         </p>
       ) : null}
 
-      <section className="space-y-3">
-        <h2 className="section-label">Le lien de la famille</h2>
+      <section className="carte space-y-3">
+        <h2 className="text-xl leading-snug">Le lien de la famille</h2>
         <p className="justification break-all">/f/{context.family.id}</p>
         <p className="justification">
           Il donne accès à la mémoire, et permet de se déclarer membre. Il ne permet pas de supprimer.
@@ -85,14 +85,34 @@ export default async function FamilyPage({
 
       <section className="space-y-4">
         <h2 className="section-label">Les membres</h2>
-        <ul className="divide-y divide-rule border-y border-rule">
+        <ul className="space-y-3">
           {members.map((member) => (
-            <li key={member.id} className="space-y-3 py-5">
+            <li key={member.id} className="carte space-y-3">
+              {/* ── Le formulaire se replie ──
+                  Sept membres, sept formulaires complets dépliés : la page
+                  mesurait quinze mille pixels de haut, et pour LIRE qui
+                  compose la famille il fallait traverser trente-cinq champs
+                  de saisie. La §6.1 demande la parcimonie de ce qu'on
+                  MONTRE ; c'est exactement ce cas. Rien n'est retiré — un
+                  `<details>` natif, ouvrable au clavier, sans script. */}
+              <p className="text-lg leading-snug">
+                {member.name}
+                <span className="justification block">
+                  Génération {member.generation}
+                  {member.role ? ` · ${member.role}` : ''}
+                </span>
+              </p>
+
+              <details>
+                <summary className="justification cursor-pointer py-2 underline">
+                  Modifier, ou retirer de la famille
+                </summary>
+                <div className="space-y-3 pt-3">
               <form action={updateMember} className="space-y-3">
                 <input type="hidden" name="memberId" value={member.id} />
                 <div className="flex flex-wrap gap-3">
                   <div className="min-w-[12rem] flex-1 space-y-1">
-                    <label htmlFor={`n-${member.id}`} className="section-label block">
+                    <label htmlFor={`n-${member.id}`} className="etiquette">
                       Nom
                     </label>
                     <input
@@ -100,11 +120,11 @@ export default async function FamilyPage({
                       name="name"
                       defaultValue={member.name}
                       required
-                      className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+                      className="champ"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label htmlFor={`g-${member.id}`} className="section-label block">
+                    <label htmlFor={`g-${member.id}`} className="etiquette">
                       Génération
                     </label>
                     <input
@@ -114,14 +134,14 @@ export default async function FamilyPage({
                       min={1}
                       max={10}
                       defaultValue={member.generation}
-                      className="min-h-[44px] w-20 rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                      className="champ w-20 px-2"
                     />
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
                   <div className="space-y-1">
-                    <label htmlFor={`b-${member.id}`} className="section-label block">
+                    <label htmlFor={`b-${member.id}`} className="etiquette">
                       Naissance
                     </label>
                     <input
@@ -129,11 +149,11 @@ export default async function FamilyPage({
                       name="birthDate"
                       type="date"
                       defaultValue={member.birthDate?.toISOString().split('T')[0] ?? ''}
-                      className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                      className="champ w-auto"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label htmlFor={`d-${member.id}`} className="section-label block">
+                    <label htmlFor={`d-${member.id}`} className="etiquette">
                       Décès
                     </label>
                     <input
@@ -141,7 +161,7 @@ export default async function FamilyPage({
                       name="deathDate"
                       type="date"
                       defaultValue={member.deathDate?.toISOString().split('T')[0] ?? ''}
-                      className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                      className="champ w-auto"
                     />
                   </div>
                   <div className="flex items-end pb-2">
@@ -157,14 +177,14 @@ export default async function FamilyPage({
                     </label>
                   </div>
                   <div className="min-w-[12rem] flex-1 space-y-1">
-                    <label htmlFor={`r-${member.id}`} className="section-label block">
+                    <label htmlFor={`r-${member.id}`} className="etiquette">
                       En un mot
                     </label>
                     <input
                       id={`r-${member.id}`}
                       name="role"
                       defaultValue={member.role ?? ''}
-                      className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans text-sm"
+                      className="champ"
                     />
                   </div>
                 </div>
@@ -196,6 +216,8 @@ export default async function FamilyPage({
                   </button>
                 </form>
               </div>
+                </div>
+              </details>
             </li>
           ))}
         </ul>
@@ -213,8 +235,8 @@ export default async function FamilyPage({
         </p>
       </section>
 
-      <section className="space-y-3 border-t border-rule pt-6">
-        <h2 className="section-label">Reprendre une conversation existante</h2>
+      <section className="carte space-y-3">
+        <h2 className="text-xl leading-snug">Reprendre une conversation existante</h2>
         <p className="leading-relaxed">
           Des années d’échanges dorment dans un groupe WhatsApp. Vous pouvez en garder ce qui mérite
           de rester — le fichier est lu sur votre appareil, jamais envoyé.
@@ -226,8 +248,8 @@ export default async function FamilyPage({
         </p>
       </section>
 
-      <section className="space-y-3 border-t border-rule pt-6">
-        <h2 className="section-label">Le calendrier de la famille</h2>
+      <section className="carte space-y-3">
+        <h2 className="text-xl leading-snug">Le calendrier de la famille</h2>
         <p className="leading-relaxed">
           Les dates de la famille — naissances, disparitions, traditions, événements racontés —
           peuvent être suivies depuis l’agenda que vous utilisez déjà. Chacun ajoute son adresse de
@@ -249,23 +271,23 @@ export default async function FamilyPage({
         </p>
       </section>
 
-      <section className="space-y-4 border-t border-rule pt-6">
-        <h2 className="section-label">Ajouter un membre</h2>
+      <section className="carte space-y-4">
+        <h2 className="text-xl leading-snug">Ajouter un membre</h2>
         <form action={addMember} className="space-y-4">
           <div className="flex flex-wrap gap-3">
             <div className="min-w-[12rem] flex-1 space-y-1">
-              <label htmlFor="new-name" className="section-label block">
+              <label htmlFor="new-name" className="etiquette">
                 Nom et prénom
               </label>
               <input
                 id="new-name"
                 name="name"
                 required
-                className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+                className="champ"
               />
             </div>
             <div className="space-y-1">
-              <label htmlFor="new-generation" className="section-label block">
+              <label htmlFor="new-generation" className="etiquette">
                 Génération
               </label>
               <input
@@ -275,32 +297,32 @@ export default async function FamilyPage({
                 min={1}
                 max={10}
                 defaultValue={2}
-                className="min-h-[44px] w-20 rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                className="champ w-20 px-2"
               />
             </div>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <div className="space-y-1">
-              <label htmlFor="new-birth" className="section-label block">
+              <label htmlFor="new-birth" className="etiquette">
                 Naissance
               </label>
               <input
                 id="new-birth"
                 name="birthDate"
                 type="date"
-                className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                className="champ w-auto"
               />
             </div>
             <div className="space-y-1">
-              <label htmlFor="new-death" className="section-label block">
+              <label htmlFor="new-death" className="etiquette">
                 Décès
               </label>
               <input
                 id="new-death"
                 name="deathDate"
                 type="date"
-                className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                className="champ w-auto"
               />
             </div>
           </div>

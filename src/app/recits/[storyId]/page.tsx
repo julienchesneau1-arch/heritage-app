@@ -170,7 +170,7 @@ export default async function StoryPage({
       {context.member ? (
         <form action={uploadArchive} className="space-y-2">
           <input type="hidden" name="storyId" value={story.id} />
-          <label htmlFor="file" className="section-label block">
+          <label htmlFor="file" className="etiquette">
             Ajouter une photo ou un enregistrement
           </label>
           <AudioRecorder inputId="file" />
@@ -179,7 +179,7 @@ export default async function StoryPage({
             name="file"
             type="file"
             accept="image/*,audio/*,application/pdf,video/mp4"
-            className="block w-full font-sans text-sm file:mr-3 file:min-h-[44px] file:rounded-sm file:border file:border-rule file:bg-transparent file:px-4 file:font-sans file:text-sm"
+            className="block w-full font-sans text-base file:mr-3 file:min-h-[44px] file:rounded-md file:border file:border-divider file:bg-neutre-100 file:px-4 file:font-sans file:text-base"
           />
           <button type="submit" className="btn">
             Déposer
@@ -194,7 +194,9 @@ export default async function StoryPage({
             <Link
               key={entity.id}
               href={`/graphe?entite=${entity.id}`}
-              className="rounded-sm border border-rule px-2 py-1 font-sans text-xs text-muted"
+              // Ces pastilles étaient en 12 px, hautes de 26 : deux règles de
+              // la §6.4 manquées d'un coup, sur des liens qu'on suit au doigt.
+              className="tap rounded-lg bg-neutre-200 px-4 font-sans text-base text-ink"
             >
               {entity.name}
             </Link>

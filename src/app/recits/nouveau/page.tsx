@@ -30,7 +30,7 @@ export default async function NewStoryPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl">Raconter</h1>
+      <h1 className="text-[2rem] leading-[1.12]">Raconter</h1>
 
       {/* L'autre porte, et pour beaucoup la seule praticable : les deux
           personnes qui détiennent le plus de mémoire dans une famille sont
@@ -59,7 +59,7 @@ export default async function NewStoryPage({
         </p>
       ) : null}
 
-      <form action={createStory} className="space-y-5">
+      <form action={createStory} className="carte space-y-5">
         {parent ? <input type="hidden" name="parentStoryId" value={parent.id} /> : null}
         {parent ? <input type="hidden" name="triggerType" value={searchParams.trigger ?? 'manual'} /> : null}
         {searchParams.fil ? (
@@ -70,14 +70,14 @@ export default async function NewStoryPage({
             qui tape. Sans cette question, les plus âgés et les plus jeunes
             disparaissent de leur propre mémoire familiale. */}
         <div className="space-y-1">
-          <label htmlFor="narratorId" className="section-label block">
+          <label htmlFor="narratorId" className="etiquette">
             Qui raconte ?
           </label>
           <select
             id="narratorId"
             name="narratorId"
             defaultValue=""
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+            className="champ"
           >
             <option value="">{context.member.name} — je raconte moi-même</option>
             {context.members
@@ -91,7 +91,7 @@ export default async function NewStoryPage({
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="title" className="section-label block">
+          <label htmlFor="title" className="etiquette">
             Titre
           </label>
           <input
@@ -99,12 +99,12 @@ export default async function NewStoryPage({
             name="title"
             required
             maxLength={160}
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+            className="champ"
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="content" className="section-label block">
+          <label htmlFor="content" className="etiquette">
             Le récit
           </label>
           <textarea
@@ -113,34 +113,34 @@ export default async function NewStoryPage({
             required
             rows={12}
             maxLength={MAX_CONTENT_LENGTH}
-            className="w-full rounded-sm border border-rule bg-transparent p-3 font-sans leading-relaxed"
+            className="champ py-3 leading-relaxed"
           />
           <p className="justification">{MAX_CONTENT_LENGTH} caractères maximum.</p>
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="entities" className="section-label block">
+          <label htmlFor="entities" className="etiquette">
             Personnes, lieux, objets (facultatif)
           </label>
           <input
             id="entities"
             name="entities"
             placeholder="Robert:PERSON, Montre Omega:OBJECT, Bordeaux:PLACE"
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans text-sm"
+            className="champ"
           />
           <p className="justification">Séparés par des virgules. Le type par défaut est PERSON.</p>
         </div>
 
         <div className="flex flex-wrap gap-4">
           <div className="space-y-1">
-            <label htmlFor="structureType" className="section-label block">
+            <label htmlFor="structureType" className="etiquette">
               Type de récit
             </label>
             <select
               id="structureType"
               name="structureType"
               defaultValue=""
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             >
               <option value="">Laisser le système classer</option>
               {STRUCTURE_TYPES.map((type) => (
@@ -152,14 +152,14 @@ export default async function NewStoryPage({
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="tone" className="section-label block">
+            <label htmlFor="tone" className="etiquette">
               Ton
             </label>
             <select
               id="tone"
               name="tone"
               defaultValue="factuel"
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             >
               {TONES.map((tone) => (
                 <option key={tone} value={tone}>
@@ -170,14 +170,14 @@ export default async function NewStoryPage({
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="eventDate" className="section-label block">
+            <label htmlFor="eventDate" className="etiquette">
               Date de l’événement
             </label>
             <input
               id="eventDate"
               name="eventDate"
               type="date"
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             />
           </div>
         </div>

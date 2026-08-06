@@ -84,9 +84,9 @@ export default async function StoriesPage({
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl">Récits</h1>
+      <h1 className="text-[2rem] leading-[1.12]">Récits</h1>
 
-      <form className="flex flex-wrap items-center gap-2" role="search">
+      <form className="flex flex-wrap items-center gap-3" role="search">
         {/* Un formulaire GET n'envoie que ses propres champs : sans ceci,
             filtrer refermait silencieusement les archives qu'on venait
             d'ouvrir. La page, elle, doit bien repartir à 1. */}
@@ -99,7 +99,7 @@ export default async function StoriesPage({
           name="q"
           defaultValue={search ?? ''}
           placeholder="Chercher"
-          className="min-h-[44px] flex-1 rounded-sm border border-rule bg-transparent px-3 font-sans text-sm"
+          className="champ flex-1 basis-48"
         />
         <label htmlFor="type" className="sr-only">
           Filtrer par type de récit
@@ -108,7 +108,7 @@ export default async function StoriesPage({
           id="type"
           name="type"
           defaultValue={type ?? ''}
-          className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+          className="champ w-auto"
         >
           <option value="">Tous les types</option>
           {STRUCTURE_TYPES.map((structureType) => (
@@ -132,11 +132,16 @@ export default async function StoriesPage({
               : 'Aucun récit pour l’instant.'}
         </p>
       ) : (
-        <ul className="divide-y divide-rule border-t border-rule">
+        // Une carte par récit. La liste à filets faisait un tableau ; ici,
+        // chaque récit est un objet qu'on prend, ce que la §5.2 décrit.
+        <ul className="space-y-3">
           {stories.map((story) => (
-            <li key={story.id} className="py-4">
-              <Link href={`/recits/${story.id}`} className="block space-y-1">
-                <span className="text-lg leading-snug">{story.title}</span>
+            <li key={story.id}>
+              <Link
+                href={`/recits/${story.id}`}
+                className="carte block space-y-1 transition-shadow hover:shadow-sm"
+              >
+                <span className="block text-lg leading-snug">{story.title}</span>
                 <span className="justification block">
                   {story.author.isDeleted ? 'Auteur anonymisé' : story.author.name} ·{' '}
                   {dateDuRecit(story)} · {story.structureType}

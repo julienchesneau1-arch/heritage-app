@@ -155,7 +155,7 @@ export function LocalTranscription({
           value={model}
           onChange={(event) => setModel(event.target.value as LocalModelKey)}
           disabled={state === 'running'}
-          className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+          className="champ w-auto"
         >
           {Object.entries(LOCAL_MODELS).map(([key, value]) => (
             <option key={key} value={key}>

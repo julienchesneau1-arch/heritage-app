@@ -48,8 +48,23 @@ const TYPE_LABELS: Record<string, string> = {
   CONCEPT: 'notion',
 };
 
+/**
+ * Le dessin est mis à l'échelle de la colonne : sur un téléphone de 390 px,
+ * 640 unités deviennent ~350 pixels, soit un facteur 0,55. Les libellés
+ * étaient posés à 12 et 14 unités — c'est-à-dire rendus à 6,6 et 7,7 px à
+ * l'écran. Le plancher de 16 px de la §6.4 était respecté partout SAUF
+ * dans une image, là où mon test de taille ne sait pas regarder.
+ *
+ * Les tailles ci-dessous sont donc exprimées en unités de `viewBox` et
+ * calculées pour retomber sur 16 px rendus à la largeur usuelle. Les
+ * pastilles suivent : un libellé de 30 unités au-dessus d'un point de 8
+ * ne serait plus un graphe mais une liste mal rangée.
+ */
 const WIDTH = 640;
 const HEIGHT = 560;
+/** 16 px rendus sur une colonne de ~350 px : 16 ÷ (350/640) ≈ 29. */
+const CORPS_LIBELLE = 29;
+const CORPS_CENTRE = 34;
 const CENTER = { x: WIDTH / 2, y: HEIGHT / 2 };
 const MAX_STORIES = 8;
 const MAX_NEIGHBOURS = 12;
@@ -78,7 +93,7 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
 
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl">Graphe</h1>
+        <h1 className="text-[2rem] leading-[1.12]">Graphe</h1>
         {entities.length === 0 ? (
           <p className="justification">Rien à relier pour l’instant.</p>
         ) : (
@@ -95,12 +110,12 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
                 ordre: 'les plus reliés d’abord',
               })}
             </p>
-            <ul className="divide-y divide-rule border-y border-rule">
+            <ul className="space-y-2">
               {entities.map((entity) => (
                 <li key={entity.id}>
                   <Link
                     href={`/graphe?entite=${entity.id}`}
-                    className="tap w-full justify-between px-1 text-left"
+                    className="carte tap w-full justify-between gap-3 text-left"
                   >
                     <span className="flex items-center gap-2 text-lg">
                       <span
@@ -172,7 +187,7 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl">{selected.name}</h1>
+        <h1 className="text-[2rem] leading-[1.12]">{selected.name}</h1>
         <Link href="/graphe" className="justification underline">
           Changer de point d’entrée
         </Link>
@@ -231,7 +246,7 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
               const position = storyPositions.get(story.id)!;
               return (
                 <a key={story.id} href={`/recits/${story.id}`}>
-                  <circle cx={position.x} cy={position.y} r={7} fill={COLORS.STORY} />
+                  <circle cx={position.x} cy={position.y} r={12} fill={COLORS.STORY} />
                   <title>{story.title}</title>
                 </a>
               );
@@ -244,15 +259,15 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
                   <circle
                     cx={position.x}
                     cy={position.y}
-                    r={8}
+                    r={14}
                     fill={COLORS[entity.type] ?? COLORS.CONCEPT}
                   />
                   <title>{entity.name}</title>
                   <text
                     x={position.x}
-                    y={position.y - 14}
+                    y={position.y - 24}
                     textAnchor="middle"
-                    fontSize={12}
+                    fontSize={CORPS_LIBELLE}
                     fill="#4a4642"
                     fontFamily="system-ui, sans-serif"
                   >
@@ -265,14 +280,14 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
             <circle
               cx={CENTER.x}
               cy={CENTER.y}
-              r={13}
+              r={22}
               fill={COLORS[selected.type] ?? COLORS.CONCEPT}
             />
             <text
               x={CENTER.x}
-              y={CENTER.y + 32}
+              y={CENTER.y + 48}
               textAnchor="middle"
-              fontSize={14}
+              fontSize={CORPS_CENTRE}
               fill="#1c1917"
               fontFamily="system-ui, sans-serif"
             >
@@ -315,8 +330,8 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
         </p>
       ) : null}
 
-      <section className="space-y-4 border-t border-rule pt-6">
-        <h2 className="section-label">Le fil de {selected.name}</h2>
+      <section className="carte space-y-4">
+        <h2 className="text-xl leading-snug">Le fil de {selected.name}</h2>
 
         {fils.length === 0 ? (
           <p className="justification">
@@ -374,9 +389,39 @@ export default async function GraphPage({ searchParams }: { searchParams: { enti
         ) : null}
       </section>
 
+      {/* ── Les voisins, atteignables autrement qu'au doigt sur un point ──
+          Le graphe est présenté comme un chemin : « on part de quelqu'un, et
+          on suit les récits qui y mènent ». Suivre était pourtant réservé à
+          qui parvient à toucher une pastille de neuf pixels dans une image
+          mise à l'échelle. Les mêmes éléments sont donc ici, en liens de
+          pleine taille — le dessin montre la forme, la liste donne le
+          chemin, et la §6.4 vaut aussi pour une cible tactile. */}
+      {neighbourList.length > 0 ? (
+        <section className="carte space-y-3">
+          <h2 className="text-xl leading-snug">Ce que ces récits touchent aussi</h2>
+          <ul className="flex flex-wrap gap-2">
+            {neighbourList.map((entity) => (
+              <li key={entity.id}>
+                <Link
+                  href={`/graphe?entite=${entity.id}`}
+                  className="tap rounded-lg bg-neutre-200 px-4 font-sans text-base text-ink"
+                >
+                  <span
+                    aria-hidden
+                    className="mr-2 inline-block h-3 w-3 rounded-full"
+                    style={{ backgroundColor: COLORS[entity.type] ?? COLORS.CONCEPT }}
+                  />
+                  {entity.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {stories.length > 0 ? (
-        <section className="space-y-2 border-t border-rule pt-6">
-          <h2 className="section-label">
+        <section className="carte space-y-2">
+          <h2 className="text-xl leading-snug">
             Les récits qui en parlent
             {storiesTotal > stories.length ? ` · ${stories.length} sur ${storiesTotal}` : ''}
           </h2>

@@ -100,9 +100,15 @@ describe('Ce n’est pas une séance', () => {
   it('ne rend pas « Passer » plus discret que « Garder »', () => {
     // Passer doit coûter zéro. Un lien minuscule à côté d'un gros bouton
     // est un choix qui n'en est pas un.
+    //
+    // Ce test visait `className="btn"` à la lettre ; l'habillage a posé
+    // l'écran sur un aplat foncé, où `btn` (texte encre, bordure claire)
+    // devient illisible. Ce qui compte n'est pas la classe mais la FORME :
+    // un bouton de plein droit, jamais un lien souligné.
     expect(PARLER).toMatch(/ENTRETIEN\.passer[\s\S]{0,80}/);
     const passer = PARLER.slice(PARLER.indexOf('ENTRETIEN.passer') - 200, PARLER.indexOf('ENTRETIEN.passer'));
-    expect(passer).toMatch(/className="btn"/);
+    expect(passer).toMatch(/className="btn(-primary|-clair|-contour-clair)?"/);
+    expect(passer).not.toMatch(/justification|underline|text-sm/);
   });
 });
 

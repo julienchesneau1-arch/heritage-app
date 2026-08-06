@@ -22,7 +22,7 @@ export default async function ThreadPage({ params }: { params: { threadId: strin
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl">{thread.title ?? 'Le fil'}</h1>
+      <h1 className="text-[2rem] leading-[1.12]">{thread.title ?? 'Le fil'}</h1>
       {ancre ? (
         <p className="justification">
           <Link href={ancre.href} className="underline">
@@ -31,7 +31,7 @@ export default async function ThreadPage({ params }: { params: { threadId: strin
         </p>
       ) : null}
 
-      <ul className="divide-y divide-rule border-t border-rule">
+      <ul className="carte divide-y divide-rule">
         <Fil
           thread={thread}
           members={context.members}

@@ -32,7 +32,7 @@ export default function RestorePage({
       ) : null}
 
       <form action={restoreBackup} className="space-y-3">
-        <label htmlFor="backup" className="section-label block">
+        <label htmlFor="backup" className="etiquette">
           Fichier d’export (.json)
         </label>
         <input
@@ -41,7 +41,7 @@ export default function RestorePage({
           type="file"
           accept="application/json,.json"
           required
-          className="block w-full font-sans text-sm file:mr-3 file:min-h-[44px] file:rounded-sm file:border file:border-rule file:bg-transparent file:px-4 file:font-sans file:text-sm"
+          className="block w-full font-sans text-base file:mr-3 file:min-h-[44px] file:rounded-md file:border file:border-divider file:bg-neutre-100 file:px-4 file:font-sans file:text-base"
         />
         <button type="submit" className="btn-primary">
           Restaurer

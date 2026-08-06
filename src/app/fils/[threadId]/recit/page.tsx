@@ -59,7 +59,7 @@ export default async function CrystallizePage({ params }: { params: { threadId: 
         <input type="hidden" name="threadId" value={thread.id} />
 
         <div className="space-y-1">
-          <label htmlFor="title" className="section-label block">
+          <label htmlFor="title" className="etiquette">
             Titre
           </label>
           <input
@@ -67,12 +67,12 @@ export default async function CrystallizePage({ params }: { params: { threadId: 
             name="title"
             required
             defaultValue={thread.title ?? ''}
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+            className="champ"
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="content" className="section-label block">
+          <label htmlFor="content" className="etiquette">
             Le récit
           </label>
           <textarea
@@ -81,19 +81,19 @@ export default async function CrystallizePage({ params }: { params: { threadId: 
             rows={14}
             required
             defaultValue={propose}
-            className="w-full rounded-sm border border-rule bg-transparent p-3 font-sans leading-relaxed"
+            className="champ py-3 leading-relaxed"
           />
         </div>
 
         <div className="flex flex-wrap gap-3">
           <div className="space-y-1">
-            <label htmlFor="structureType" className="section-label block">
+            <label htmlFor="structureType" className="etiquette">
               Type
             </label>
             <select
               id="structureType"
               name="structureType"
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             >
               {STRUCTURE_TYPES.map((type) => (
                 <option key={type} value={type}>
@@ -105,13 +105,13 @@ export default async function CrystallizePage({ params }: { params: { threadId: 
 
           <div className="space-y-1">
             {/* La voix, pas le clavier : le récit revient à qui a raconté. */}
-            <label htmlFor="narratorId" className="section-label block">
+            <label htmlFor="narratorId" className="etiquette">
               Raconté par
             </label>
             <select
               id="narratorId"
               name="narratorId"
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             >
               <option value="">Plusieurs voix</option>
               {speakers.map((speaker) => (

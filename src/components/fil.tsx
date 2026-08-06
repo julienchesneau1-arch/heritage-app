@@ -174,7 +174,7 @@ export function ChampDeParole({
       {storyId ? <input type="hidden" name="storyId" value={storyId} /> : null}
       <input type="hidden" name="retour" value={retour} />
 
-      <label htmlFor={champId} className="section-label block">
+      <label htmlFor={champId} className="etiquette">
         {label}
       </label>
       <textarea

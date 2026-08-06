@@ -44,12 +44,17 @@ export default async function EntretienPage({
   ]);
 
   return (
-    <div className="space-y-10">
-      <h1 className="text-2xl">{ENTRETIEN.titre}</h1>
-      <p className="text-lg leading-relaxed">{ENTRETIEN.quoi}</p>
+    <div className="space-y-8">
+      {/* L'écran d'avant porte la teinte de l'écran d'après : on entre dans
+          l'entretien en le voyant venir, on n'y est pas jeté. */}
+      <header className="aplat relative -mt-8 space-y-3 overflow-hidden bg-accent-700 pb-8 pt-7 text-accent-100">
+        <span aria-hidden="true" className="rond -right-16 -top-20 h-52 w-52 bg-accent-800" />
+        <h1 className="relative text-[2.1rem] leading-[1.12]">{ENTRETIEN.titre}</h1>
+        <p className="relative max-w-[36ch] text-lg leading-relaxed">{ENTRETIEN.quoi}</p>
+      </header>
 
       {relecteurs.length === 0 ? (
-        <section className="space-y-3 border-t border-rule pt-6">
+        <section className="carte space-y-4">
           <p className="leading-relaxed">
             Il faut être au moins deux : quelqu’un parle, quelqu’un d’autre relit ce que la machine
             a compris. Rien n’entre dans la mémoire sans cette relecture.
@@ -59,21 +64,21 @@ export default async function EntretienPage({
           </Link>
         </section>
       ) : (
-        <section className="space-y-4 border-t border-rule pt-6">
+        <section className="carte space-y-4">
           <h2 className="section-label">Qui relira</h2>
           {/* Le relecteur est désigné à CHAQUE entretien. Un relecteur
               permanent deviendrait le dépositaire de tous les secrets de la
               maison sans que personne l'ait décidé. */}
           <form action="/entretien/parler" method="get" className="space-y-4">
             <div className="space-y-1">
-              <label htmlFor="relecteur" className="section-label block">
+              <label htmlFor="relecteur" className="etiquette">
                 Cette personne écoutera l’enregistrement
               </label>
               <select
                 id="relecteur"
                 name="relecteur"
                 required
-                className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+                className="champ"
               >
                 {relecteurs.map((membre) => (
                   <option key={membre.id} value={membre.id}>
@@ -99,8 +104,8 @@ export default async function EntretienPage({
         </section>
       )}
 
-      <section className="space-y-4 border-t border-rule pt-6">
-        <h2 className="section-label">{ENTRETIEN.reserve}</h2>
+      <section className="carte space-y-4">
+        <h2 className="text-xl leading-snug">{ENTRETIEN.reserve}</h2>
         <p className="leading-relaxed">
           Vous pouvez demander qu’on ne vous interroge jamais sur quelque chose. Cela ne se voit
           nulle part, et personne dans la famille n’en est informé.
@@ -131,13 +136,13 @@ export default async function EntretienPage({
 
         <form action={poserReserve} className="space-y-4">
           <div className="space-y-1">
-            <label htmlFor="entityId" className="section-label block">
+            <label htmlFor="entityId" className="etiquette">
               Une personne, un lieu, un objet
             </label>
             <select
               id="entityId"
               name="entityId"
-              className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+              className="champ"
             >
               <option value="">—</option>
               {entites.map((entite) => (
@@ -149,13 +154,13 @@ export default async function EntretienPage({
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="sujet" className="section-label block">
+            <label htmlFor="sujet" className="etiquette">
               Ou en vos mots
             </label>
             <input
               id="sujet"
               name="sujet"
-              className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+              className="champ"
             />
           </div>
 
@@ -171,15 +176,12 @@ export default async function EntretienPage({
               </span>
             </label>
             <div className="space-y-1">
-              <label htmlFor="demande" className="section-label block">
+              <label htmlFor="demande" className="etiquette">
                 Ce que vous voulez leur dire
               </label>
-              <textarea
-                id="demande"
-                name="demande"
-                rows={2}
-                className="w-full rounded-sm border border-rule bg-transparent p-3 font-sans text-sm"
-              />
+              {/* §6.4 : 16 px plancher. Ces mots seront lus par la famille
+                  tels quels — les saisir ne se fait pas en petit. */}
+              <textarea id="demande" name="demande" rows={2} className="champ py-3" />
               <p className="justification">
                 Vos mots seront affichés tels quels. L’application ne les reformule pas.
               </p>

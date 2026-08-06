@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -143,5 +143,60 @@ describe('Aucune opacité ne vient défaire un contraste mesuré', () => {
     // `opacity-*` sur du texte. Les formes décoratives, elles, ont le droit
     // — elles ne portent aucun mot (`/50`, `/60` sur un fond).
     expect(code).not.toMatch(/\bopacity-(?!100\b)\d{1,2}\b/);
+  });
+});
+
+describe('Le plancher de 16 px tient dans tout le produit', () => {
+  /**
+   * La §6.4 pose « 16 px minimum ». C'était vrai du `html { font-size }` et
+   * faux de vingt-neuf endroits : étiquettes de champs, listes déroulantes,
+   * zones de saisie et pastilles d'entités descendaient à 14, parfois 12 px.
+   *
+   * Le plancher ne vaut que s'il est vérifié. Deux exceptions, et deux
+   * seulement : la classe `.section-label` et la position de la veillée,
+   * qui sont des CAPITALES ESPACÉES de deux ou trois mots — une forme que
+   * WCAG traite comme un libellé et non comme du texte à lire. Toute autre
+   * apparition de `text-sm` ou `text-xs` fait échouer ce test, et c'est le
+   * but : le rattrapage se fait ici, pas à l'œil, six mois plus tard.
+   */
+  const SOURCES: string[] = [];
+  (function parcourir(dossier: string) {
+    for (const entree of readdirSync(dossier)) {
+      const chemin = join(dossier, entree);
+      if (statSync(chemin).isDirectory()) parcourir(chemin);
+      else if (/\.tsx?$/.test(entree)) SOURCES.push(chemin);
+    }
+  })(join(process.cwd(), 'src'));
+
+  const EXEMPTS = new Set([
+    // La position dans la veillée : « 2 SUR 3 », capitales espacées.
+    join(process.cwd(), 'src', 'app', 'veillee', 'page.tsx'),
+  ]);
+
+  it('aucun fichier ne descend sous le corps de base', () => {
+    const fautifs = SOURCES.filter((chemin) => {
+      if (EXEMPTS.has(chemin)) return false;
+      const code = readFileSync(chemin, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      return /\btext-(sm|xs)\b/.test(code);
+    }).map((chemin) => chemin.replace(process.cwd() + '/', ''));
+    expect(fautifs).toEqual([]);
+  });
+
+  it('une étiquette de champ se lit en casse normale, jamais en capitales', () => {
+    // `.section-label` est un intertitre de deux mots. Posé sur un `<label>`,
+    // il transforme « Cette personne écoutera l'enregistrement » en une
+    // ligne de capitales espacées, qui se lit lettre à lettre — au moment
+    // exact où l'on demande à quelqu'un de choisir qui l'écoutera.
+    const fautifs = SOURCES.filter((chemin) =>
+      /<label[^>]*className="[^"]*\bsection-label\b/s.test(readFileSync(chemin, 'utf8')),
+    ).map((chemin) => chemin.replace(process.cwd() + '/', ''));
+    expect(fautifs).toEqual([]);
+  });
+
+  it('vérifie bien quelque chose', () => {
+    // Sans ce contrôle, une expression rationnelle cassée rendrait vert un
+    // produit entièrement composé en 12 px.
+    expect(/\btext-(sm|xs)\b/.test('className="font-sans text-sm"')).toBe(true);
+    expect(/<label[^>]*className="[^"]*\bsection-label\b/s.test('<label className="section-label">')).toBe(true);
   });
 });

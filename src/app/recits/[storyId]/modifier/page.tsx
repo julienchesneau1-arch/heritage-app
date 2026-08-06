@@ -72,7 +72,7 @@ export default async function EditStoryPage({
         <input type="hidden" name="storyId" value={story.id} />
 
         <div className="space-y-1">
-          <label htmlFor="title" className="section-label block">
+          <label htmlFor="title" className="etiquette">
             Titre
           </label>
           <input
@@ -81,12 +81,12 @@ export default async function EditStoryPage({
             defaultValue={story.title}
             required
             maxLength={160}
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+            className="champ"
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="content" className="section-label block">
+          <label htmlFor="content" className="etiquette">
             Le récit
           </label>
           <textarea
@@ -96,20 +96,20 @@ export default async function EditStoryPage({
             required
             rows={14}
             maxLength={MAX_CONTENT_LENGTH}
-            className="w-full rounded-sm border border-rule bg-transparent p-3 font-sans leading-relaxed"
+            className="champ py-3 leading-relaxed"
           />
         </div>
 
         <div className="flex flex-wrap gap-4">
           <div className="space-y-1">
-            <label htmlFor="structureType" className="section-label block">
+            <label htmlFor="structureType" className="etiquette">
               Type de récit
             </label>
             <select
               id="structureType"
               name="structureType"
               defaultValue={story.structureType}
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             >
               {STRUCTURE_TYPES.map((type) => (
                 <option key={type} value={type}>
@@ -120,14 +120,14 @@ export default async function EditStoryPage({
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="tone" className="section-label block">
+            <label htmlFor="tone" className="etiquette">
               Ton
             </label>
             <select
               id="tone"
               name="tone"
               defaultValue={story.tone}
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             >
               {TONES.map((tone) => (
                 <option key={tone} value={tone}>
@@ -138,7 +138,7 @@ export default async function EditStoryPage({
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="eventDate" className="section-label block">
+            <label htmlFor="eventDate" className="etiquette">
               Date de l’événement
             </label>
             <input
@@ -146,7 +146,7 @@ export default async function EditStoryPage({
               name="eventDate"
               type="date"
               defaultValue={story.eventDate?.toISOString().split('T')[0] ?? ''}
-              className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+              className="champ w-auto"
             />
           </div>
         </div>

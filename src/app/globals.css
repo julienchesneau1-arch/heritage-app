@@ -133,6 +133,16 @@
     @apply font-sans text-sm font-semibold uppercase tracking-[0.14em] text-muted;
   }
 
+  /* L'étiquette d'un champ quand elle est une PHRASE.
+     Les capitales espacées de `.section-label` conviennent à deux mots ;
+     sur une phrase entière elles se lisent lettre à lettre, et elles le
+     font au moment exact où l'on demande à quelqu'un de se décider. On
+     garde donc les capitales aux titres de section courts, et la casse
+     normale partout où l'étiquette se lit comme du texte. */
+  .etiquette {
+    @apply block font-sans text-base font-semibold text-ink;
+  }
+
   /* Le corps de lecture : plus grand que l'interface, toujours. */
   .lire {
     @apply text-lg leading-[1.62];

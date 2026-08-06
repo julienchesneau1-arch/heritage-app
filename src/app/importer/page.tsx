@@ -18,14 +18,19 @@ export default async function ImporterPage() {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-2xl leading-snug">La famille se parle déjà quelque part.</h1>
-        <p className="text-lg leading-relaxed">
+      {/* Sauge : la teinte des écrans où l'on lit ce qui existe déjà, par
+          opposition au terre cuite des écrans où l'on produit du neuf. */}
+      <header className="aplat relative -mt-8 space-y-3 overflow-hidden bg-sauge-800 pb-8 pt-7 text-sauge-100">
+        <span aria-hidden="true" className="rond -right-20 -top-16 h-48 w-48 bg-sauge-700" />
+        <h1 className="relative text-[2.1rem] leading-[1.12]">
+          La famille se parle déjà quelque part.
+        </h1>
+        <p className="relative max-w-[38ch] text-lg leading-relaxed">
           Des années de conversation dorment dans un groupe WhatsApp, un fil Messenger ou les SMS
           d’un téléphone — là où tout défile et où personne ne retrouve rien. Vous pouvez en garder
           ce qui mérite de rester.
         </p>
-      </div>
+      </header>
 
       <ImportConversation familyId={context.family.id} members={context.members} />
     </div>

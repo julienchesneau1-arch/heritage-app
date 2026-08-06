@@ -17,20 +17,20 @@ export default async function WhoPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl">Qui êtes-vous ?</h1>
+      <h1 className="text-[2rem] leading-[1.12]">Qui êtes-vous ?</h1>
       <p className="justification">
         Cette information reste dans votre navigateur. Elle sert à savoir à qui le Passeur s’adresse.
       </p>
 
       <form action={chooseMember} className="space-y-2">
-        <ul className="divide-y divide-rule border-y border-rule">
+        <ul className="space-y-2">
           {context.members.map((member) => (
             <li key={member.id}>
               <button
                 type="submit"
                 name="memberId"
                 value={member.id}
-                className="tap w-full justify-between px-1 text-left"
+                className="carte tap w-full justify-between text-left"
               >
                 <span className="text-lg">{member.name}</span>
                 <span className="justification">génération {member.generation}</span>
@@ -42,7 +42,7 @@ export default async function WhoPage() {
 
       {/* Une condition d'accès, pas une préférence esthétique : un récit
           qu'on ne peut pas lire n'est pas transmis. Réglage par appareil. */}
-      <section className="space-y-3 border-t border-rule pt-6">
+      <section className="carte space-y-3">
         <h2 className="section-label">Taille du texte</h2>
         <p className="justification">Ce réglage ne vaut que pour cet appareil.</p>
         <form action={setReadingSize} className="flex flex-wrap gap-2">

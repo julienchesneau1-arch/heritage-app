@@ -21,6 +21,13 @@
  *   BASE=http://localhost:3000 FAMILY_TOKEN_SECRET=... OUT=/tmp/axe.json \
  *     node outils/accessibilite.mjs
  *
+ * ARRÊTER LE SERVEUR AVANT DE RECONSTRUIRE. `npm run build` réécrit `.next`
+ * sous le serveur en cours, qui se met alors à rendre au hasard des pages
+ * dont les fragments ont disparu. Le symptôme est le pire possible : une
+ * page en erreur porte peu de violations, donc l'audit passe au vert sur
+ * une application cassée. Le contrôle `#__next_error__` plus bas existe
+ * pour ça, et c'est ainsi qu'on a trouvé le cas.
+ *
  * Les identifiants ci-dessous sont ceux du jeu d'essai (`npm run seed`).
  * Sur une autre base, les remplacer — une page en 404 ne signale rien, et
  * un audit qui ne visite rien rend « 0 violation ».
@@ -33,29 +40,63 @@
 import { chromium } from 'playwright';
 import { createHmac } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { PrismaClient } from '@prisma/client';
 
 const BASE = process.env.BASE;
 const sign = (p) => createHmac('sha256', process.env.FAMILY_TOKEN_SECRET).update(p).digest('hex');
-const F = 'cmsdzwxe90000w8cjgx06wtq1';
-const M = 'cmsdzwxed0002w8cj92d9kf9z';
 const AXE = readFileSync('./node_modules/axe-core/axe.min.js', 'utf8');
+
+/**
+ * ── Les identifiants viennent de la base, jamais du code ──
+ *
+ * Ils étaient écrits en dur, copiés d'un `npm run seed` d'un jour donné.
+ * Une base re-semée les change tous : l'audit visitait alors seize pages en
+ * 404, chacune sans violation, et concluait « 0 violation sur 16 pages ».
+ * C'est le défaut que ce fichier existe pour empêcher, retourné contre
+ * lui-même — le produit affirmait ce qu'il n'avait pas établi.
+ *
+ * On les lit donc dans la base, et on refuse de commencer s'il manque quoi
+ * que ce soit : mieux vaut un outil qui s'arrête qu'un rapport qui ment.
+ */
+const prisma = new PrismaClient();
+const famille = await prisma.family.findFirst({ orderBy: { createdAt: 'asc' } });
+if (!famille) throw new Error('Base vide : lancer `npm run seed` avant l’audit.');
+const F = famille.id;
+
+const [membres, recit, fil, entite] = await Promise.all([
+  prisma.member.findMany({ where: { familyId: F, isDeleted: false }, orderBy: { createdAt: 'asc' }, take: 2 }),
+  prisma.story.findFirst({ where: { familyId: F, suspendedAt: null }, orderBy: { createdAt: 'asc' } }),
+  prisma.thread.findFirst({ where: { familyId: F }, orderBy: { createdAt: 'asc' } }),
+  prisma.entity.findFirst({ where: { familyId: F }, orderBy: { createdAt: 'asc' } }),
+]);
+await prisma.$disconnect();
+
+const manque = Object.entries({ membre: membres[0], relecteur: membres[1], recit, fil, entite })
+  .filter(([, v]) => !v)
+  .map(([k]) => k);
+if (manque.length) throw new Error(`Jeu d’essai incomplet, audit impossible : ${manque.join(', ')}.`);
+
+const M = membres[0].id;
+const RELECTEUR = membres[1].id;
 
 const PAGES = [
   ['/', 'Aujourd’hui'],
   ['/recits', 'Récits'],
-  ['/recits/cmsdzwxfv000uw8cjspd9q6b6', 'Un récit'],
+  [`/recits/${recit.id}`, 'Un récit'],
   ['/recits/nouveau', 'Raconter'],
-  ['/fils/cmsdzwxge0014w8cjel4a98ev', 'Un fil'],
+  [`/fils/${fil.id}`, 'Un fil'],
   ['/veillee?etape=1', 'La veillée'],
-  ['/graphe?entite=cmsdzwxfe000ew8cjdlluto2r', 'Le graphe'],
+  [`/graphe?entite=${entite.id}`, 'Le graphe'],
+  ['/graphe', 'Le graphe — entrée'],
   ['/traditions', 'Traditions'],
   ['/archives', 'Archives'],
+  ['/brouillons', 'À mettre au propre'],
   ['/famille', 'Famille'],
   ['/transmission', 'Reddition de comptes'],
   ['/importer', 'Importer'],
   ['/livre', 'Le livre'],
   ['/entretien', 'Entretien — avant'],
-  ['/entretien/parler?relecteur=cmsdzwxex0004w8cj7e02l5cv', 'Entretien — parler'],
+  [`/entretien/parler?relecteur=${RELECTEUR}`, 'Entretien — parler'],
   ['/qui', 'Qui êtes-vous'],
 ];
 
@@ -69,7 +110,20 @@ await ctx.addCookies([
 const tout = [];
 for (const [url, nom] of PAGES) {
   const page = await ctx.newPage();
-  await page.goto(BASE + url, { waitUntil: 'networkidle' });
+  const reponse = await page.goto(BASE + url, { waitUntil: 'networkidle' });
+  // Une page en erreur ne porte aucune violation : la compter comme
+  // « conforme » est précisément le mensonge qu'on veut empêcher.
+  if (!reponse || reponse.status() >= 400) {
+    throw new Error(`${nom} (${url}) répond ${reponse?.status() ?? 'rien'} — audit interrompu.`);
+  }
+  // Next rend sa page d'erreur en 200 : le code HTTP seul ne suffit pas.
+  // Une page plantée porte peu de violations — elle n'affiche presque rien —
+  // et se présente donc comme un bon résultat. Vu de mes propres yeux : un
+  // build écrasé sous un serveur en cours a rendu trois écrans en erreur, et
+  // le rapport les a comptés comme des pages auditées.
+  if (await page.$('#__next_error__')) {
+    throw new Error(`${nom} (${url}) rend la page d’erreur de Next — audit interrompu.`);
+  }
   await page.addScriptTag({ content: AXE });
   const r = await page.evaluate(async () =>
     // WCAG 2.1 AA : c'est le niveau que la §6.4 décrit sans le nommer.

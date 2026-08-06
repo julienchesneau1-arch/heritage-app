@@ -46,15 +46,15 @@ export default async function TraditionsPage() {
   const activeIds = new Set(activeToday.map((t) => t.id));
 
   return (
-    <div className="space-y-10">
-      <h1 className="text-2xl">Traditions</h1>
+    <div className="space-y-6">
+      <h1 className="text-[2rem] leading-[1.12]">Traditions</h1>
 
       {traditions.length === 0 ? (
         <p className="justification">Aucune tradition enregistrée.</p>
       ) : (
-        <ul className="divide-y divide-rule border-y border-rule">
+        <ul className="space-y-3">
           {traditions.map((tradition) => (
-            <li key={tradition.id} className="space-y-2 py-4">
+            <li key={tradition.id} className="carte space-y-2">
               <p className="text-lg">{tradition.name}</p>
               <p className="leading-relaxed">{tradition.description}</p>
               <p className="justification">
@@ -90,23 +90,23 @@ export default async function TraditionsPage() {
         </ul>
       )}
 
-      <section className="space-y-4 border-t border-rule pt-6">
-        <h2 className="section-label">Ajouter une tradition</h2>
+      <section className="carte space-y-4">
+        <h2 className="text-xl leading-snug">Ajouter une tradition</h2>
         <form action={createTradition} className="space-y-4">
           <div className="space-y-1">
-            <label htmlFor="name" className="section-label block">
+            <label htmlFor="name" className="etiquette">
               Nom
             </label>
             <input
               id="name"
               name="name"
               required
-              className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+              className="champ"
             />
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="description" className="section-label block">
+            <label htmlFor="description" className="etiquette">
               Description
             </label>
             <textarea
@@ -114,20 +114,20 @@ export default async function TraditionsPage() {
               name="description"
               required
               rows={3}
-              className="w-full rounded-sm border border-rule bg-transparent p-2 font-sans text-sm"
+              className="champ py-3"
             />
           </div>
 
           <div className="flex flex-wrap gap-4">
             <div className="space-y-1">
-              <label htmlFor="periodicity" className="section-label block">
+              <label htmlFor="periodicity" className="etiquette">
                 Périodicité
               </label>
               <select
                 id="periodicity"
                 name="periodicity"
                 defaultValue="annual"
-                className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                className="champ w-auto"
               >
                 <option value="annual">Annuelle</option>
                 <option value="monthly">Mensuelle</option>
@@ -136,7 +136,7 @@ export default async function TraditionsPage() {
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="monthDay" className="section-label block">
+              <label htmlFor="monthDay" className="etiquette">
                 Jour (MM-JJ)
               </label>
               <input
@@ -144,19 +144,19 @@ export default async function TraditionsPage() {
                 name="monthDay"
                 placeholder="10-15"
                 pattern="(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
-                className="min-h-[44px] rounded-sm border border-rule bg-transparent px-3 font-sans text-sm"
+                className="champ w-auto"
               />
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="weekDay" className="section-label block">
+              <label htmlFor="weekDay" className="etiquette">
                 Jour de la semaine
               </label>
               <select
                 id="weekDay"
                 name="weekDay"
                 defaultValue=""
-                className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                className="champ w-auto"
               >
                 <option value="">—</option>
                 {WEEK_DAYS.map((day, index) => (

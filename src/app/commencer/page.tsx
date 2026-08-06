@@ -26,7 +26,7 @@ export default function StartPage({ searchParams }: { searchParams: { erreur?: s
 
       <form action={createFamily} className="space-y-5">
         <div className="space-y-1">
-          <label htmlFor="familyName" className="section-label block">
+          <label htmlFor="familyName" className="etiquette">
             Nom de la famille
           </label>
           <input
@@ -35,7 +35,7 @@ export default function StartPage({ searchParams }: { searchParams: { erreur?: s
             required
             maxLength={120}
             placeholder="Martin"
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+            className="champ"
           />
         </div>
 
@@ -43,7 +43,7 @@ export default function StartPage({ searchParams }: { searchParams: { erreur?: s
           <legend className="section-label">Vous</legend>
 
           <div className="space-y-1">
-            <label htmlFor="name" className="section-label block">
+            <label htmlFor="name" className="etiquette">
               Nom et prénom
             </label>
             <input
@@ -51,20 +51,20 @@ export default function StartPage({ searchParams }: { searchParams: { erreur?: s
               name="name"
               required
               maxLength={120}
-              className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+              className="champ"
             />
           </div>
 
           <div className="flex flex-wrap gap-4">
             <div className="space-y-1">
-              <label htmlFor="generation" className="section-label block">
+              <label htmlFor="generation" className="etiquette">
                 Génération
               </label>
               <select
                 id="generation"
                 name="generation"
                 defaultValue="2"
-                className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                className="champ w-auto"
               >
                 <option value="1">1 — les aînés</option>
                 <option value="2">2</option>
@@ -74,14 +74,14 @@ export default function StartPage({ searchParams }: { searchParams: { erreur?: s
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="birthDate" className="section-label block">
+              <label htmlFor="birthDate" className="etiquette">
                 Date de naissance
               </label>
               <input
                 id="birthDate"
                 name="birthDate"
                 type="date"
-                className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                className="champ w-auto"
               />
             </div>
           </div>

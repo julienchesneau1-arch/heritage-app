@@ -269,14 +269,14 @@ export default async function DraftPage({
         <input type="hidden" name="draftId" value={draft.id} />
 
         <div className="space-y-1">
-          <label htmlFor="narratorId" className="section-label block">
+          <label htmlFor="narratorId" className="etiquette">
             Qui parle sur cet enregistrement ?
           </label>
           <select
             id="narratorId"
             name="narratorId"
             defaultValue=""
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+            className="champ"
           >
             <option value="">{context.member.name} — c’est moi</option>
             {context.members
@@ -290,7 +290,7 @@ export default async function DraftPage({
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="title" className="section-label block">
+          <label htmlFor="title" className="etiquette">
             Titre
           </label>
           <input
@@ -299,12 +299,12 @@ export default async function DraftPage({
             required
             maxLength={160}
             defaultValue={draft.archive.title}
-            className="min-h-[44px] w-full rounded-sm border border-rule bg-transparent px-3 font-sans"
+            className="champ"
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="content" className="section-label block">
+          <label htmlFor="content" className="etiquette">
             Le récit, tel qu’il doit rester
           </label>
           <textarea
@@ -314,7 +314,7 @@ export default async function DraftPage({
             rows={16}
             maxLength={5000}
             defaultValue={draft.rawText ?? ''}
-            className="w-full rounded-sm border border-rule bg-transparent p-3 font-sans leading-relaxed"
+            className="champ py-3 leading-relaxed"
           />
           <p className="justification">
             Corrigez librement. Ce que vous enregistrez ici fait foi ; la proposition brute de la

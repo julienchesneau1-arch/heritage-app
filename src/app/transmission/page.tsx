@@ -48,16 +48,16 @@ export default async function TransmissionPage() {
   ]);
 
   return (
-    <div className="space-y-10">
-      <h1 className="text-2xl">Ce que l’application fait de votre mémoire</h1>
+    <div className="space-y-6">
+      <h1 className="text-[2rem] leading-[1.12]">Ce que l’application fait de votre mémoire</h1>
 
       <p className="leading-relaxed">
         Cette application choisit ce qu’elle vous montre, et ce choix exclut le reste. Voici ce
         qu’elle écarte, ce qu’elle tait, et ce qu’elle n’a jamais remontré.
       </p>
 
-      <section className="space-y-3 border-t border-rule pt-6">
-        <h2 className="section-label">Ce que l’algorithme écarte</h2>
+      <section className="carte space-y-3">
+        <h2 className="text-xl leading-snug">Ce que l’algorithme écarte</h2>
 
         {report.impressions === 0 ? (
           <p className="justification">
@@ -102,8 +102,8 @@ export default async function TransmissionPage() {
           biais que la FORME du produit introduit. Un fil écrit avantage le
           clavier rapide, et sans cette ligne on ne saurait pas si l'interface
           a fait taire ceux qui ne tapent pas. Il reste donc ici. */}
-      <section className="space-y-3 border-t border-rule pt-6">
-        <h2 className="section-label">Ce que la forme du produit fait à la parole</h2>
+      <section className="carte space-y-3">
+        <h2 className="text-xl leading-snug">Ce que la forme du produit fait à la parole</h2>
         <dl className="space-y-2">
           <Row
             label="La voix, pas le clavier"
@@ -117,8 +117,8 @@ export default async function TransmissionPage() {
       </section>
 
       {forgotten.length > 0 ? (
-        <section className="space-y-3 border-t border-rule pt-6">
-          <h2 className="section-label">Rappel patrimonial</h2>
+        <section className="carte space-y-3">
+          <h2 className="text-xl leading-snug">Rappel patrimonial</h2>
           <p className="justification">
             Ces récits existent depuis plus de douze mois et n’ont pas été relus dans cet intervalle.
             Ils sont listés ici, et nulle part ailleurs : rien ne les pousse dans le flux.
@@ -140,8 +140,8 @@ export default async function TransmissionPage() {
       ) : null}
 
       {/* Retirer un chiffre sans le dire serait le retirer deux fois. */}
-      <section className="space-y-3 border-t border-rule pt-6">
-        <h2 className="section-label">Ce qui ne figure plus ici</h2>
+      <section className="carte space-y-3">
+        <h2 className="text-xl leading-snug">Ce qui ne figure plus ici</h2>
         <p className="justification">
           Cette page affichait en grand la part de vos récits qui en avaient suscité d’autres, et
           le seuil qu’il aurait fallu franchir. C’était une note donnée à une famille sur sa façon
@@ -156,7 +156,7 @@ export default async function TransmissionPage() {
 function Row({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule pb-2">
-      <dt className="font-sans text-sm">
+      <dt className="font-sans text-base">
         {label}
         <span className="justification block">{note}</span>
       </dt>

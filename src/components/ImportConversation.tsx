@@ -146,15 +146,15 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
   return (
     <div className="space-y-8">
       {etat === 'attente' || etat === 'erreur' ? (
-        <div className="space-y-4">
-          <label htmlFor="fichier" className="section-label block">
+        <div className="carte space-y-4">
+          <label htmlFor="fichier" className="etiquette">
             Le fichier exporté
           </label>
           <input
             id="fichier"
             type="file"
             accept={EXTENSIONS_ACCEPTEES}
-            className="block w-full font-sans text-sm"
+            className="block w-full font-sans text-base"
             onChange={(event) => {
               const fichier = event.target.files?.[0];
               if (fichier) void lireFichier(fichier);
@@ -167,7 +167,7 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
           </p>
 
           <details>
-            <summary className="cursor-pointer py-2 font-sans text-sm text-muted hover:text-ink">
+            <summary className="cursor-pointer py-2 font-sans text-base text-muted hover:text-ink">
               Comment obtenir ce fichier
             </summary>
             <ul className="space-y-3 py-2">
@@ -186,8 +186,8 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
       {etat === 'lecture' ? <p className="leading-relaxed">Lecture du fichier…</p> : null}
 
       {etat === 'proprietaire' && source && fichierEnAttente ? (
-        <div className="space-y-4">
-          <h2 className="section-label">À qui est ce téléphone ?</h2>
+        <div className="carte space-y-4">
+          <h2 className="text-xl leading-snug">À qui est ce téléphone ?</h2>
           <p className="leading-relaxed">
             Une sauvegarde de SMS nomme la personne qui a écrit les messages <em>reçus</em>, mais
             jamais celle qui a envoyé les autres : elle sait seulement qu’ils sont sortis de cet
@@ -197,14 +197,14 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
             Sans ce nom, la moitié de la conversation resterait sans auteur. L’application ne le
             devinera pas.
           </p>
-          <label htmlFor="proprietaire" className="section-label block">
+          <label htmlFor="proprietaire" className="etiquette">
             Nom du propriétaire du téléphone
           </label>
           <input
             id="proprietaire"
             value={proprietaire}
             onChange={(event) => setProprietaire(event.target.value)}
-            className="min-h-[44px] w-full max-w-sm rounded-sm border border-rule bg-transparent px-3 font-sans"
+            className="champ max-w-sm"
           />
           <div className="flex flex-wrap gap-3">
             <button
@@ -228,8 +228,8 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
       {etat === 'choix' && lecture ? (
         <>
           {/* Ce qui a été lu, et ce qui ne l'a pas été. */}
-          <section className="space-y-2">
-            <h2 className="section-label">Ce que contient ce fichier</h2>
+          <section className="carte space-y-2">
+            <h2 className="text-xl leading-snug">Ce que contient ce fichier</h2>
             <p className="leading-relaxed">
               Format reconnu : {source?.nom ?? lecture.source}.{' '}
               {lecture.messages.length.toLocaleString('fr-FR')} messages de{' '}
@@ -280,8 +280,8 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
           </section>
 
           {/* Qui est qui. Rien n'est deviné. */}
-          <section className="space-y-3 border-t border-rule pt-6">
-            <h2 className="section-label">Qui est qui</h2>
+          <section className="carte space-y-3">
+            <h2 className="text-xl leading-snug">Qui est qui</h2>
             <p className="justification">
               Les noms viennent du carnet d’adresses de celui qui a exporté — ou d’un numéro de
               téléphone. Rattachez ceux que vous reconnaissez ; les autres resteront cités par leur nom, sans être rattachés à personne.
@@ -290,7 +290,7 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
             <ul className="space-y-2">
               {lecture.participants.map((nom) => (
                 <li key={nom} className="flex flex-wrap items-center gap-3">
-                  <span className="min-w-[10rem] font-sans text-sm">{nom}</span>
+                  <span className="min-w-[10rem] font-sans text-base">{nom}</span>
                   <label htmlFor={`m-${nom}`} className="sr-only">
                     Rattacher {nom}
                   </label>
@@ -300,7 +300,7 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
                     onChange={(event) =>
                       setCorrespondances((actuel) => ({ ...actuel, [nom]: event.target.value }))
                     }
-                    className="min-h-[44px] rounded-sm border border-rule bg-transparent px-2 font-sans text-sm"
+                    className="champ w-auto"
                   >
                     <option value="">Personne de la famille</option>
                     {members.map((membre) => (
@@ -315,8 +315,8 @@ export function ImportConversation({ familyId, members }: { familyId: string; me
           </section>
 
           {/* Les moments. */}
-          <section className="space-y-3 border-t border-rule pt-6">
-            <h2 className="section-label">Les moments</h2>
+          <section className="carte space-y-3">
+            <h2 className="text-xl leading-snug">Les moments</h2>
             <p className="justification">
               La conversation est découpée là où elle s’est interrompue plus d’une heure et demie.
               Ce n’est pas un tri par intérêt : l’application ne sait pas ce qui compte pour vous.

@@ -29,7 +29,7 @@ export default async function DraftsPage({ searchParams }: { searchParams: { err
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl">À mettre au propre</h1>
+      <h1 className="text-[2rem] leading-[1.12]">À mettre au propre</h1>
       <p className="justification">
         Un enregistrement transcrit par la machine n’est pas un récit. Il attend ici que quelqu’un
         l’écoute et le relise. Rien n’entre dans la mémoire de la famille sans cette relecture.
@@ -42,9 +42,9 @@ export default async function DraftsPage({ searchParams }: { searchParams: { err
       {drafts.length === 0 ? (
         <p className="justification">Aucun brouillon en attente.</p>
       ) : (
-        <ul className="divide-y divide-rule border-y border-rule">
+        <ul className="space-y-3">
           {drafts.map((draft) => (
-            <li key={draft.id} className="space-y-2 py-4">
+            <li key={draft.id} className="carte space-y-2">
               <p className="text-lg">{draft.archive.title}</p>
               <p className="justification">
                 Enregistré le {formatDateFr(draft.archive.createdAt)} · demandé par{' '}
