@@ -1,7 +1,7 @@
 # Héritage — dossier complet
 
 Tout ce qui a été construit, comment, et pourquoi. Écrit le 5 août 2026,
-remis à jour le 6, après 41 commits sur la branche
+remis à jour le 6, après 56 commits sur la branche
 `claude/heritage-app-spec-acztj1`.
 
 Les chiffres de ce document viennent du dépôt, pas de mémoire :
@@ -19,7 +19,7 @@ Les chiffres de ce document viennent du dépôt, pas de mémoire :
 6. [Toutes les fonctionnalités](#6-toutes-les-fonctionnalités)
 7. [Identité et sécurité](#7-identité-et-sécurité)
 8. [La pile technique](#8-la-pile-technique)
-9. [Comment ça a été construit — les 41 étapes](#9-comment-ça-a-été-construit--les-41-étapes)
+9. [Comment ça a été construit — les 56 étapes](#9-comment-ça-a-été-construit--les-56-étapes)
 10. [La méthode : chasser une classe de défaut](#10-la-méthode--chasser-une-classe-de-défaut)
 11. [Les tests](#11-les-tests)
 12. [Le déploiement](#12-le-déploiement)
@@ -54,17 +54,17 @@ relire d'abord.
 
 | | |
 |---|---|
-| Commits | 41 |
-| Fichiers TypeScript / TSX | 99 |
-| Lignes de code applicatif | 14 554 |
-| Lignes de tests | 6 048 |
-| Lignes de documentation | 4 584 |
-| Tests, tous verts | **604**, en 30 fichiers |
+| Commits | 56 |
+| Fichiers TypeScript / TSX | 107 |
+| Lignes de code applicatif | 16 020 |
+| Lignes de tests | 6 653 |
+| Lignes de documentation | 5 098 |
+| Tests, tous verts | **607**, en 30 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 11 (`outils/`), hors `npm test`, `npm run verifier` |
+| Outils de mesure | 12 (`outils/`), hors `npm test`, `npm run verifier` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -462,7 +462,7 @@ Coût visé, tout compris : **6 à 10 € par mois** sur un VPS Hostinger KVM 1.
 
 ---
 
-## 9. Comment ça a été construit — les 41 étapes
+## 9. Comment ça a été construit — les 56 étapes
 
 Chaque ligne est un commit réel.
 
@@ -536,6 +536,26 @@ Chaque ligne est un commit réel.
 | 39 | **Audit d'accessibilité** : 17 violations trouvées, 0 restante | 16 pages |
 | 40 | Habiller les dix écrans restants, et trois défauts trouvés en le faisant | 41 fichiers |
 | 41 | **Presser Tab pour de vrai**, et deux outils qui mentaient | 5 fichiers |
+
+### Ce qu'on trouve en exécutant, et jamais en relisant (6 août)
+
+| # | | |
+|---|---|---|
+| 42 | La sauvegarde ne peut plus se déclarer faite sans l'être | `sauvegarde.sh` |
+| 43 | **Une panne de stockage n'est pas une disparition** | 6 fichiers |
+| 44 | Le livre sur du papier, et le hors-ligne réseau coupé | `hors-ecran.mjs` |
+| 45 | Compter cinq outils là où le tableau en annonçait quatre | 2 documents |
+| 46 | **Une restauration republiait ce qu'on avait retiré** | export v3 |
+| 47 | **Le micro était fermé à l'application elle-même** | `permissions.mjs` |
+| 48 | **Le graphe s'effondrait à cinq mille récits** — 1,58 s, puis 36 ms | `echelle.mjs` |
+| 49 | Une commande pour tout vérifier, et ce qu'elle refuse de prétendre | `lancer.mjs` |
+| 50 | L'étanchéité entre familles, et ce qui sort du serveur | `etancheite.mjs` |
+| 51 | Ce que la famille lit quand quelque chose casse | pages d'erreur |
+| 52 | **La limite de débit de la §8.2 ne limitait rien** | 19 routes |
+| 53 | Le livre a son propre seuil, et ce n'est pas pour masquer le chiffre | `echelle.mjs` |
+| 54 | Le README tient sa promesse — vérifié plutôt qu'annoncé | `README.md` |
+| 55 | **Le produit ne savait pas ce qu'était la mort** | `src/lib/deces.ts` |
+| 56 | **Le Passeur adressait 117 questions à un mort**, six mois durant | `passeur.mts` |
 
 ---
 
@@ -622,7 +642,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**604 tests, 30 fichiers, tous verts**, plus huit outils de mesure qui
+**607 tests, 30 fichiers, tous verts**, plus douze outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
@@ -795,6 +815,30 @@ par omission.
   ne portaient que sur `isDeleted`, « retiré de la famille » ; un défunt
   n'est pas retiré. Doctrine posée dans `src/lib/deces.ts` : **il cesse
   d'être un acteur, il reste un sujet.**
+
+- **Le Passeur n'avait jamais été regardé durer.** C'est pourtant la seule
+  chose que la famille rencontre TOUS LES JOURS (§5.1), et ses trois
+  manières de mal vieillir sont silencieuses : se tarir — l'accueil devient
+  vide pour toujours et c'est un état VALIDE, donc rien ne le signale ; se
+  répéter — le délai de 14 jours porte sur une paire (sujet, règle), rien
+  n'empêche de marteler le même récit sous cinq règles ; et laisser une
+  seule règle manger les quatre autres, la sélection se faisant par
+  confiance × poids. `outils/passeur.mts` le fait vivre 180 jours en lui
+  injectant un magasin dont les expirations suivent une horloge simulée —
+  sans quoi la parcimonie « une question par heure » bloquerait tout après
+  le premier appel. Les trois craintes sont infirmées : 572 questions, six
+  jours de silence au pire, quatre règles sur cinq exprimées, la plus
+  fréquente à 45 %. Mais il a trouvé autre chose. **117 de ces questions
+  étaient destinées au grand-père mort en 2014**, une par jour pendant six
+  mois. Aucune n'arrivait : la page d'accueil, le choix d'identité et le
+  lien personnel les arrêtaient toutes. L'invariant tenait par la
+  coïncidence de trois refus en aval, et non par une règle en amont — une
+  quatrième porte (notification, courriel, flux) l'aurait ouvert sans que
+  rien ne s'en aperçoive. La garde est désormais dans `generateQuestion`.
+  Et le premier correctif a fait virer deux de mes propres contrôles au
+  rouge sur le défunt — 0 question, 180 jours de silence, c'est-à-dire le
+  comportement voulu compté comme une panne : la même faute que celle qu'ils
+  venaient de trouver, à l'envers. Ils portent maintenant sur les vivants.
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.

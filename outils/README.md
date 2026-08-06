@@ -31,7 +31,18 @@ démarré.
 | `stockage-s3.mts` | fait dialoguer le pilote avec un vrai serveur S3 |
 | `echelle.mjs` | fabrique 5 000 récits, mesure chaque page, efface |
 | `pannes.mjs` | coupe la base pour de vrai et lit ce que la famille voit |
+| `passeur.mts` | fait vivre le Passeur 180 jours, une horloge simulée dans le magasin |
 | `captures.mjs` | régénère `redesign/captures/` |
+
+Le dernier est le seul à mesurer une **durée**. Le Passeur est ce que la
+famille rencontre tous les jours, et il n'avait jamais été regardé au-delà
+d'un seul : ses trois manières de mal vieillir — se tarir, marteler le même
+récit, laisser une règle manger les quatre autres — ne lèvent aucune erreur
+et ne cassent aucun test. Le service prend son horloge en paramètre et son
+magasin en injection ; on lui en fournit un dont les expirations suivent
+l'horloge de la simulation, sans quoi la parcimonie « une question par
+heure » bloquerait tout après le premier appel et le délai de 14 jours ne
+s'écoulerait jamais. Rien n'est modifié dans le produit pour ce contrôle.
 
 ---
 
@@ -63,6 +74,13 @@ démarré.
   défaut, le grand-père est décédé en 2014 ; l'écran de l'entretien
   l'offrait pour relire l'enregistrement qu'on venait de faire sur lui.
   Les filtres ne portaient que sur `isDeleted` — « retiré de la famille ».
+- **Le Passeur adressait 117 questions à un mort.** Sur 180 jours simulés,
+  il fabriquait chaque jour une question destinée au grand-père décédé en
+  2014. Personne ne les voyait jamais : trois refus en amont — la page
+  d'accueil, le choix d'identité, le lien personnel — les arrêtaient toutes.
+  L'invariant tenait donc par coïncidence, et non par règle : le service
+  n'avait aucune garde. Une quatrième porte (une notification, un courriel,
+  un flux) l'aurait ouvert sans que rien ne s'en aperçoive.
 - `00-premier-jour.webp` **montrait le sélecteur d'identité** : la capture
   était prise sans cookie de membre, et `/` redirige alors vers `/qui`.
 
@@ -83,6 +101,11 @@ croire à plus qu'il n'a mesuré est exactement ce que ce dépôt combat.
   ghcr.io, public.ecr.aws) sont refusés par la politique du relais réseau.
   `demarrage.mjs` reconstitue l'étage d'exécution à l'identique, ce qui en
   approche le plus — mais ce n'est pas une image construite.
+- **La règle `RARE_PATRIMONY` du Passeur.** Sur 180 jours simulés, elle ne
+  s'est jamais déclenchée : le jeu d'essai n'a pas de patrimoine assez
+  ancien. Elle n'est donc pas en panne — elle est NON MESURÉE, et l'outil
+  l'écrit à chaque passage plutôt que de la laisser se confondre avec les
+  quatre qui ont parlé.
 - **Une famille réelle.** Aucune n'a utilisé ce produit. Tout ce qui est
   écrit ici sur l'usage reste une hypothèse.
 

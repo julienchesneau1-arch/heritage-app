@@ -1,7 +1,7 @@
 /**
  * TOUT VÉRIFIER, EN UNE COMMANDE — `npm run verifier`.
  *
- * Onze outils vivent ici, chacun avec ses variables d'environnement et
+ * Douze outils vivent ici, chacun avec ses variables d'environnement et
  * son port. Un contrôle qu'on ne sait pas lancer est un contrôle qu'on ne
  * lance pas, et un contrôle qu'on ne lance pas ne protège de rien.
  *
@@ -96,6 +96,10 @@ const OUTILS = [
   // commandes, l'outil saute ce contrôle et le DIT, plutôt que de le
   // compter comme réussi.
   ['pannes.mjs', 'Pannes — 404, base coupée, retour à la normale'],
+  // Le seul outil qui mesure une DURÉE plutôt qu'un instant : les trois
+  // manières de mal vieillir du Passeur — se tarir, se répéter, se laisser
+  // manger par une seule règle — sont toutes invisibles sur un jour.
+  ['passeur.mts', 'Le Passeur — 180 jours simulés, tarissement, répétition, règles'],
 ];
 
 const bilan = [];
@@ -119,6 +123,7 @@ for (const [fichier, titre, options = {}] of OUTILS) {
         RECITS: process.env.RECITS ?? '5000',
         ARRET_BASE: process.env.ARRET_BASE ?? '',
         DEMARRAGE_BASE: process.env.DEMARRAGE_BASE ?? '',
+        JOURS: process.env.JOURS ?? '180',
       },
       stdio: 'inherit',
     });

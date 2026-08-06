@@ -27,7 +27,8 @@
     "verifier:echelle": "node outils/echelle.mjs",
     "captures": "node outils/captures.mjs",
     "verifier:etancheite": "node outils/etancheite.mjs",
-    "verifier:pannes": "node outils/pannes.mjs"
+    "verifier:pannes": "node outils/pannes.mjs",
+    "verifier:passeur": "tsx outils/passeur.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

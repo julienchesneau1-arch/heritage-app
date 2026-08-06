@@ -260,6 +260,29 @@ export class PasseurService {
       // par un fil accroché à un récit, sans passer par l'entité.
       this.reserves.recitsEnReserve(familyId, memberId),
     ]);
+
+    /*
+     * ── ON NE POSE PAS DE QUESTION À QUELQU'UN QUI EST MORT ──
+     *
+     * Trouvé en faisant tourner le Passeur sur 180 jours simulés
+     * (`outils/passeur.mts`) : il a produit 117 questions destinées à
+     * Robert Martin, décédé en 2014 dans le jeu d'essai.
+     *
+     * Personne ne les voyait — `/qui` ne propose plus un défunt, son lien
+     * personnel n'ouvre plus de session, et une session déjà ouverte
+     * retombe. Trois chemins en amont, et zéro garde ICI : l'invariant ne
+     * tenait que par la coïncidence de trois refus. Le premier appelant
+     * nouveau — une tâche planifiée, un résumé, une route d'API — le
+     * rouvrait sans que rien ne le signale.
+     *
+     * La doctrine appartient au service qui ADRESSE quelqu'un. `null` et
+     * non une exception : « aucune question » est déjà un résultat valide
+     * du Passeur (§5.1), et c'est exactement ce qu'il faut répondre.
+     *
+     * Coût : nul. La liste des membres est déjà chargée juste au-dessus.
+     */
+    const destinataire = members.find((m) => m.id === memberId);
+    if (!destinataire || destinataire.deathDate !== null) return null;
     const context: PasseurContext = { members, memberId, now };
 
     // Filtre posé DANS LA REQUÊTE, et non après le tri : un récit écarté

@@ -102,7 +102,7 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Onze outils vivent dans `outils/`, et une seule commande les lance tous :
+Douze outils vivent dans `outils/`, et une seule commande les lance tous :
 
 ```bash
 npm run verifier              # tout, ~6 minutes
@@ -127,9 +127,14 @@ N'établissent PAS — est dans `outils/README.md`.
 | `permissions.mjs` | les en-têtes, le micro, l'enregistreur de bout en bout | 12/12 |
 | `echelle.mjs` | 5 000 récits fabriqués, mesurés, effacés | 12/12 |
 | `pannes.mjs` | 404, base coupée, retour à la normale | 8/8 |
+| `passeur.mts` | le Passeur sur 180 jours : tarissement, répétition, règles | 12/12 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
+- Le Passeur adressait **117 questions à un mort**, chaque jour pendant six
+  mois. Aucune n'arrivait — trois refus en amont les arrêtaient toutes — de
+  sorte que l'invariant tenait par coïncidence et non par règle. Le service
+  n'avait aucune garde ; une quatrième porte l'aurait ouvert en silence.
 - Le plancher de 16 px de la §6.4 n'était pas tenu en vingt-neuf endroits.
 - Les libellés du graphe étaient rendus à 6,6 px, et les éléments voisins
   n'étaient atteignables qu'en touchant un point de neuf pixels.

@@ -352,6 +352,50 @@ describe('PasseurService — Constitution', () => {
 });
 
 /**
+ * ── ON N'ADRESSE PAS LA PAROLE À UN MORT ──
+ *
+ * Trouvé par `outils/passeur.mts`, qui fait vivre le service 180 jours :
+ * il fabriquait CHAQUE JOUR une question destinée au grand-père mort en
+ * 2014 — 117 sur six mois. Aucune n'arrivait jamais : la page d'accueil,
+ * le choix d'identité et le lien personnel les arrêtaient toutes en aval.
+ * L'invariant tenait donc par la coïncidence de trois refus, et non par
+ * une règle ; une quatrième porte — notification, courriel, flux — l'aurait
+ * ouvert sans que rien ne s'en aperçoive. Ces tests portent sur le service,
+ * là où la garde doit vivre, et non sur les écrans qui la rattrapaient.
+ */
+describe('Le Passeur ne s’adresse pas à un mort', () => {
+  const MORTS = [
+    { id: 'mem_1', name: 'Emma', birthDate: new Date(1998, 2, 4), deathDate: new Date(2024, 3, 2) },
+    ...MEMBERS.slice(1),
+  ];
+
+  it('ne rend aucune question à un membre décédé, alors qu’un récit s’y prête', async () => {
+    // Le même récit, le même membre : seule la date de décès change.
+    expect(await buildService([TENSION_STORY]).generateQuestion(FAMILY, MEMBER, NOW)).not.toBeNull();
+    expect(
+      await buildService([TENSION_STORY], createMemoryStore(), new LLMOperatorService(undefined), MORTS)
+        .generateQuestion(FAMILY, MEMBER, NOW),
+    ).toBeNull();
+  });
+
+  it('ne rend rien non plus à un identifiant qui n’est plus dans la famille', async () => {
+    const service = buildService([TENSION_STORY], createMemoryStore(), new LLMOperatorService(undefined), MEMBERS);
+    expect(await service.generateQuestion(FAMILY, 'mem_inconnu', NOW)).toBeNull();
+  });
+
+  it('se tait sans consommer le tour de parole du jour', async () => {
+    // Un `return null` posé APRÈS la marque de parcimonie aurait fait
+    // taire le Passeur pour tout le monde ce jour-là.
+    const store = createMemoryStore();
+    await buildService([TENSION_STORY], store, new LLMOperatorService(undefined), MORTS)
+      .generateQuestion(FAMILY, MEMBER, NOW);
+    expect(
+      await buildService([TENSION_STORY], store).generateQuestion(FAMILY, MEMBER, NOW),
+    ).not.toBeNull();
+  });
+});
+
+/**
  * Trois affirmations du Passeur ne reposaient sur rien de vérifié.
  * Ce bloc les tient : une question peut être infondée — elle ne peut pas
  * être présentée comme un constat.
