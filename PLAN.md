@@ -1,8 +1,8 @@
 # Ce qu'il reste pour que l'application soit utilisable de bout en bout
 
-Écrit le 5 août 2026. Deux listes : **ce que je fais**, et **ce que vous
-seul pouvez faire**. Les deux sont nécessaires ; la seconde est plus courte
-et elle bloque la première.
+Écrit le 5 août 2026, remis à jour le 6. Deux listes : **ce que vous seul
+pouvez faire**, et **ce que j'ai fait**. La seconde est close. La première
+est tout ce qui reste, et elle bloque la mise en ligne.
 
 ---
 
@@ -83,61 +83,48 @@ plan de succession du lien familial.
 
 ---
 
-## B. Ce que je fais — pour que rien ne soit à moitié
+## B. Ce que j'ai fait depuis — et ce qu'il en reste
 
-### B1. Fermer la boucle de l'entretien *(le plus important)*
+**B1 à B4 sont faits.** La boucle de l'entretien est fermée : l'écran du
+relecteur nomme qui a parlé et rappelle la question, le narrateur du récit
+est la voix et non le relecteur, un brouillon effacé disparaît sans dire ce
+qu'il contenait. Le geste de suspension existe à l'écran, avec son filtrage
+partout et sa présence dans l'export. Les demandes portées s'affichent au
+moment où quelqu'un écrit sur le sujet. Les onze écrans sont composés.
 
-Aujourd'hui : on enregistre, un brouillon apparaît, le relecteur le
-transcrit et le valide. Trois manques :
+**B5 est réduit à deux points, et les deux vous appartiennent** (§A4, et le
+stockage distant). Le troisième — l'audit d'accessibilité automatisé — est
+fait, et il a coûté plus cher que prévu.
 
-- **L'écran du relecteur ne dit pas qui a parlé, ni à quelle question.**
-  Le modèle porte `spokenById` et `promptText` depuis la migration ; la
-  page les ignore. Un texte relu sans son énoncé est une réponse sans
-  question.
-- **Le narrateur du récit issu d'un entretien** doit être celui qui a
-  parlé, jamais le relecteur. La règle §2.3 existe ; l'automatisme non.
-- **Le brouillon détruit par la voix** doit disparaître de la liste du
-  relecteur sans lui dire ce qui a été retiré.
+### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-### B2. Le geste de suspension
+Trois outils vivent dans `outils/`. Aucun n'est branché sur `npm test` :
+ils exigent un navigateur et une base peuplée, et un test qui ne peut pas
+tourner partout finit désactivé.
 
-La décision est prise et le modèle est en base (`suspendedAt`,
-`suspendedForId`), mais **rien à l'écran**. Il manque :
+| Outil | Ce qu'il vérifie | État |
+|---|---|---|
+| `accessibilite.mjs` | axe-core, WCAG 2.1 AA, 18 pages | 0 violation |
+| `clavier.mjs` | tabulation réelle : pièges, contour de focus, ordre | 0 défaut, 11 pages |
+| `captures.mjs` | la planche de `redesign/captures/` | 18 captures |
 
-- sur un récit, « demander la suspension » à qui s'estime concerné ;
-- pour l'auteur, la demande reçue et le choix — suspendre, ou non ;
-- le filtrage : pages, recherche, Passeur, veillée, graphe, livre — et
-  **présence dans l'export**, qui est la moitié de la décision.
+Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
-### B3. Les demandes portées, affichées au bon moment
+- Le plancher de 16 px de la §6.4 n'était pas tenu en vingt-neuf endroits.
+- Les libellés du graphe étaient rendus à 6,6 px, et les éléments voisins
+  n'étaient atteignables qu'en touchant un point de neuf pixels.
+- Le contour de focus ne posait que la largeur et la couleur ; le style
+  venait du navigateur — une règle dont l'effet tenait au hasard.
+- `00-premier-jour.webp` montrait le sélecteur d'identité. Sans cookie de
+  membre, `/` renvoie sur `/qui` : le dossier affirmait montrer un écran
+  qu'il n'avait jamais chargé. La capture se prend désormais chez une
+  famille vide, créée et effacée pour l'occasion.
+- Et l'audit lui-même avait ses identifiants écrits en dur : une base
+  re-semée, et il visitait seize pages en 404 pour conclure « 0 violation ».
 
-`demandesPortees()` existe et est testé. Rien ne l'appelle. Une réserve
-portée doit s'afficher **au moment où quelqu'un écrit sur le sujet**, dans
-les mots de son auteur — et l'application laisse écrire.
-
-### B4. Finir l'habillage
-
-Quatre écrans ont leur traitement (premier jour, Passeur, récit, veillée).
-**Onze l'attendent** : le fil, le graphe, l'import, la page Famille, la
-reddition de comptes, les brouillons, l'entretien, la liste des récits,
-« Raconter », les archives, les traditions. Ils héritent des jetons — ils
-sont cohérents, pas composés.
-
-L'entretien mérite son aplat en premier : c'est l'écran le plus contraint
-du produit, et le seul qu'on utilisera peut-être debout, à côté de
-quelqu'un.
-
-### B5. Les trois vérifications que je n'ai jamais pu faire
-
-- **La transcription locale dans un vrai navigateur** (voir A4). Le seul
-  moyen est que vous l'essayiez.
-- **Le pilote S3/R2 contre un vrai bucket.** Le code est écrit, les tests
-  portent sur le pilote, jamais sur le service distant. Sans lui, les
-  photos et enregistrements vivent sur le disque du VPS — ce qui est
-  acceptable tant que la sauvegarde de A3 tourne.
-- **Un audit d'accessibilité automatisé.** Les contrastes sont désormais
-  calculés (`tests/contraste.test.ts`), mais la navigation au clavier,
-  l'ordre de tabulation et les rôles ARIA sont vérifiés à la main.
+C'est la même faute à chaque fois, et c'est celle contre laquelle ce
+produit est écrit : **affirmer ce qu'on n'a pas établi**. Elle ne se trouve
+pas en relisant. Elle se trouve en mesurant.
 
 ### B6. Ce que je ne ferai pas sans vous le demander
 
@@ -150,15 +137,14 @@ quelqu'un.
 
 ## C. Dans quel ordre, et pourquoi
 
-| | Quoi | Qui | Pourquoi maintenant |
-|---|---|---|---|
-| 1 | DNS + certificat | vous | Rien ne se teste tant que ce n'est pas en ligne, et une mémoire ne se sert pas en clair. |
-| 2 | Sauvegarde en cron | vous | Une panne de disque avant la première sauvegarde efface tout. |
-| 3 | Fermer la boucle de l'entretien | moi | C'est la fonctionnalité qu'on vient de construire ; à moitié, elle ne sert personne. |
-| 4 | Essayer la transcription locale | vous | Le plus gros inconnu du produit. |
-| 5 | Suspension + demandes portées | moi | La décision est prise, le modèle est là ; sans écran, elle n'existe pas. |
-| 6 | Habillage des onze écrans | moi | Cohérent mais inachevé. |
-| 7 | Audit d'accessibilité | moi | À faire une fois la forme stabilisée, sinon c'est à refaire. |
+Il ne reste que votre colonne.
+
+| | Quoi | Pourquoi maintenant |
+|---|---|---|
+| 1 | DNS + certificat (A1, A2) | Rien ne se teste tant que ce n'est pas en ligne, et une mémoire ne se sert pas en clair. |
+| 2 | Sauvegarde en cron (A3) | Une panne de disque avant la première sauvegarde efface tout. C'est la seule ligne urgente. |
+| 3 | Fonder votre famille (A5) | Sans une vraie famille, tout le reste est une démonstration. |
+| 4 | Essayer la transcription locale (A4) | Le plus gros inconnu du produit, et je ne peux pas le lever d'ici. |
 
 ---
 
@@ -175,8 +161,12 @@ reddition de comptes, l'enregistrement d'un entretien, la réserve.
 liste. Aucune famille réelle n'a utilisé cette application. C'est la seule
 phrase de ce document qui vaut plus que les autres.
 
-**Ce qui n'existe pas encore** : la suspension à l'écran, l'affichage des
-demandes portées, l'identité de la voix sur l'écran du relecteur.
+**Ce qui n'existait pas au 5 août et existe aujourd'hui** : la suspension
+à l'écran, l'affichage des demandes portées, l'identité de la voix sur
+l'écran du relecteur, l'habillage des onze écrans, et trois outils de
+mesure qui refusent de conclure sur une page qu'ils n'ont pas chargée.
 
-**Ce que je n'ai pas pu vérifier** : la transcription locale, le stockage
-distant, l'accessibilité automatisée.
+**Ce que je n'ai toujours pas pu vérifier**, et qui ne se vérifie pas d'ici :
+la transcription locale dans un vrai navigateur (§A4), et le pilote S3/R2
+contre un vrai bucket. Tant que la sauvegarde de §A3 tourne, le disque du
+VPS suffit.

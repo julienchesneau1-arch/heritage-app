@@ -79,8 +79,29 @@
      Le gris de la direction d'origine était un mélange à 55 %, soit
      3,57:1 — sous le seuil. Voir redesign/REVUE_2A.md. */
 
+  /* Le contour de focus, entièrement déclaré.
+     Il ne posait que la largeur et la couleur ; le STYLE restait celui du
+     navigateur. Sur la plupart des éléments cela donne le bon résultat par
+     chance, et sur d'autres — les champs de date, où Chromium dessine son
+     propre repère à l'intérieur — le contour calculé valait `none`. Une
+     règle dont l'effet dépend d'un défaut d'agent utilisateur n'est pas une
+     règle : `outline` fixe `outline-style: solid`, et le repère existe
+     partout de la même façon. Vérifié en tabulant (`outils/clavier.mjs`). */
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-accent-700;
+    @apply outline outline-2 outline-offset-2 outline-accent-700;
+  }
+
+  /* Les champs de saisie prennent le repère sur `:focus` tout court.
+     Sur `<input type="date">`, Chromium ne fait pas correspondre
+     `:focus-visible` à l'élément — il éclaire son segment interne, dans un
+     DOM fantôme auquel la feuille de style n'accède pas. Le repère existait
+     donc pour l'œil de qui utilise Chromium, et pour lui seul. Un champ où
+     l'on tape est le dernier endroit où l'on peut se permettre de perdre le
+     curseur ; le montrer aussi à la souris ne coûte rien. */
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply outline outline-2 outline-offset-2 outline-accent-700;
   }
 }
 

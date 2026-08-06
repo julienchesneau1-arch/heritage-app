@@ -28,10 +28,6 @@
  * une application cassée. Le contrôle `#__next_error__` plus bas existe
  * pour ça, et c'est ainsi qu'on a trouvé le cas.
  *
- * Les identifiants ci-dessous sont ceux du jeu d'essai (`npm run seed`).
- * Sur une autre base, les remplacer — une page en 404 ne signale rien, et
- * un audit qui ne visite rien rend « 0 violation ».
- *
  * Non intégré à `npm test` : axe-core exige un vrai navigateur et une base
  * peuplée. Un test qui ne peut pas s'exécuter partout finit par être
  * désactivé, et un test désactivé est pire qu'un outil qu'on lance.
@@ -123,6 +119,16 @@ for (const [url, nom] of PAGES) {
   // le rapport les a comptés comme des pages auditées.
   if (await page.$('#__next_error__')) {
     throw new Error(`${nom} (${url}) rend la page d’erreur de Next — audit interrompu.`);
+  }
+  // ── Et l'adresse doit être celle qu'on a demandée ──
+  // Un cookie invalide renvoie sur `/bienvenue`, qui répond 200 et se rend
+  // parfaitement. L'outil visitait alors onze fois le même écran d'accueil
+  // et annonçait « 0 défaut sur 11 pages ». Le code HTTP ne dit rien d'une
+  // redirection réussie ; seule l'adresse d'arrivée le dit.
+  const arrivee = new URL(page.url()).pathname;
+  const demande = new URL(BASE + url).pathname;
+  if (arrivee !== demande) {
+    throw new Error(`${nom} : demandé ${demande}, arrivé sur ${arrivee} — audit interrompu.`);
   }
   await page.addScriptTag({ content: AXE });
   const r = await page.evaluate(async () =>

@@ -46,9 +46,21 @@ if (manque.length) throw new Error(`Jeu d’essai incomplet : ${manque.join(', '
 
 const M = membres[0].id;
 
-/** `nu` : sans cookie de membre — c'est ainsi que se voit le premier jour. */
+/**
+ * ── LE PREMIER JOUR ──
+ *
+ * Il était capturé « sans cookie de membre », et c'était faux : `/` renvoie
+ * alors sur `/qui`. Le fichier `00-premier-jour.webp` montrait donc le
+ * sélecteur d'identité, sous un nom qui promettait autre chose — un dossier
+ * qui affirmait ce qu'il n'avait pas vu, à l'intérieur même des outils
+ * écrits contre ce défaut. C'est le contrôle d'adresse ajouté plus bas qui
+ * l'a trouvé, pas l'œil.
+ *
+ * Le premier jour, c'est une famille SANS AUCUN RÉCIT. La famille d'essai en
+ * a cinq : cet écran ne peut pas être pris chez elle. On en fonde donc une,
+ * vide, le temps d'une capture, et on l'efface ensuite.
+ */
 const ECRANS = [
-  ['00-premier-jour', '/', { nu: true }],
   ['01-aujourdhui', '/'],
   ['02-recits', '/recits'],
   ['03-un-recit', `/recits/${recit.id}`],
@@ -116,11 +128,51 @@ for (const [nom, url, options = {}] of ECRANS) {
   if (await page.$('#__next_error__')) {
     throw new Error(`${nom} (${url}) rend la page d’erreur de Next — captures interrompues.`);
   }
+  // ── Et l'adresse doit être celle qu'on a demandée ──
+  // Un cookie invalide renvoie sur `/bienvenue`, qui répond 200 et se rend
+  // parfaitement. L'outil visitait alors onze fois le même écran d'accueil
+  // et annonçait « 0 défaut sur 11 pages ». Le code HTTP ne dit rien d'une
+  // redirection réussie ; seule l'adresse d'arrivée le dit.
+  const arrivee = new URL(page.url()).pathname;
+  const demande = new URL(BASE + url).pathname;
+  if (arrivee !== demande) {
+    throw new Error(`${nom} : demandé ${demande}, arrivé sur ${arrivee} — captures interrompues.`);
+  }
   const png = await page.screenshot({ fullPage: true });
   writeFileSync(`${SORTIE}/${nom}.webp`, await enWebp(png, 0.82));
   console.log(`✓ ${nom.padEnd(22)} ${url}`);
   await ctx.close();
 }
 
+// ── Le premier jour, chez une famille qui n'a encore rien dit ──
+const bac = new PrismaClient();
+const vide = await bac.family.create({ data: { name: 'Premier jour' } });
+const seul = await bac.member.create({
+  data: { familyId: vide.id, name: 'Vous', generation: 1 },
+});
+try {
+  const ctx = await nav.newContext(cadre);
+  await ctx.addCookies([
+    { name: 'family_token', value: `${vide.id}.1.${sign(`${vide.id}:1`)}`, domain: 'localhost', path: '/' },
+    { name: 'member_token', value: `${seul.id}.verified.${sign(`${seul.id}.verified`)}`, domain: 'localhost', path: '/' },
+  ]);
+  const page = await ctx.newPage();
+  const reponse = await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  const arrivee = new URL(page.url()).pathname;
+  if (!reponse || reponse.status() >= 400 || arrivee !== '/' || (await page.$('#__next_error__'))) {
+    throw new Error(`premier jour : arrivé sur ${arrivee} (${reponse?.status()}) — captures interrompues.`);
+  }
+  const png = await page.screenshot({ fullPage: true });
+  writeFileSync(`${SORTIE}/00-premier-jour.webp`, await enWebp(png, 0.82));
+  console.log('✓ 00-premier-jour      / (famille vide, éphémère)');
+  await ctx.close();
+} finally {
+  // Effacée quoi qu'il arrive : une famille de test qui survit à l'outil
+  // finit par apparaître dans une capture suivante.
+  await bac.member.delete({ where: { id: seul.id } });
+  await bac.family.delete({ where: { id: vide.id } });
+  await bac.$disconnect();
+}
+
 await nav.close();
-console.log(`\n${ECRANS.length} captures dans ${SORTIE}/`);
+console.log(`\n${ECRANS.length + 1} captures dans ${SORTIE}/`);
