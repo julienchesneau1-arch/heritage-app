@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { loadContext } from '@/lib/context';
 import { prisma } from '@/lib/prisma';
@@ -30,6 +31,21 @@ export default async function NewStoryPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl">Raconter</h1>
+
+      {/* L'autre porte, et pour beaucoup la seule praticable : les deux
+          personnes qui détiennent le plus de mémoire dans une famille sont
+          souvent celles qui écrivent le moins. Un lien en texte, jamais un
+          bouton — il ne doit pas rivaliser avec le formulaire, seulement
+          exister pour qui la page blanche arrête (§5.5). */}
+      {parent ? null : (
+        <p className="justification">
+          Écrire n’est pas obligatoire.{' '}
+          <Link href="/entretien" className="underline">
+            Répondre à une question à voix haute
+          </Link>{' '}
+          — quelqu’un d’autre relira ce qui aura été compris.
+        </p>
+      )}
 
       {parent ? (
         <p className="justification">

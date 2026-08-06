@@ -22,6 +22,7 @@ import { isStructureType, type StructureType } from '@/lib/structure-types';
 import { traditionService } from '@/services/tradition.service';
 import { TriggerModelService, type TriggerType } from '@/services/trigger-model.service';
 import { PasseurService } from '@/services/passeur.service';
+import { reserveService } from '@/services/reserve.service';
 import { createStorySchema, createTraditionSchema } from '@/lib/validation';
 import { ACCEPTED_TYPES, buildStorageKey, isAcceptedType, MAX_UPLOAD_BYTES, storage } from '@/lib/storage';
 import { isReadingSize, READING_COOKIE } from '@/lib/reading';
@@ -798,4 +799,157 @@ export async function discardTranscription(formData: FormData) {
   });
   revalidatePath('/brouillons');
   redirect('/brouillons');
+}
+
+// ─── L'entretien, et la réserve ───
+
+/**
+ * Déposer ce qui vient d'être dit.
+ *
+ * Le même chemin que n'importe quelle archive — l'audio est l'original et
+ * doit survivre même si la transcription échoue — plus trois choses que
+ * l'entretien seul connaît : QUI A PARLÉ, qui relira, et à quelle question.
+ *
+ * `spokenById` n'est pas un détail d'attribution : c'est ce qui rend le
+ * brouillon révocable par celui dont c'est la voix. Jusqu'ici un brouillon
+ * n'appartenait qu'à celui qui l'avait demandé.
+ */
+export async function deposerEntretien(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const relecteurId = String(formData.get('relecteurId') ?? '');
+  const question = String(formData.get('question') ?? '').trim();
+  const passees = String(formData.get('passees') ?? '');
+
+  // Sans relecteur nommé, l'entretien n'a pas commencé : on n'a rien promis
+  // à celui qui a parlé, donc on ne garde rien.
+  const relecteur = await prisma.member.findFirst({
+    where: { id: relecteurId, familyId: context.family.id, isDeleted: false },
+    select: { id: true },
+  });
+  if (!relecteur || relecteur.id === context.member.id) redirect('/entretien?erreur=relecteur');
+
+  const file = formData.get('audio');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/entretien/parler?relecteur=${relecteurId}&passees=${encodeURIComponent(passees)}&erreur=vide`);
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    redirect(`/entretien/parler?relecteur=${relecteurId}&passees=${encodeURIComponent(passees)}&erreur=lourd`);
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const mime = file.type || 'audio/webm';
+  const storageKey = buildStorageKey(context.family.id, mime);
+  await storage.put(storageKey, bytes);
+
+  const archive = await prisma.archive.create({
+    data: {
+      familyId: context.family.id,
+      uploaderId: context.member.id,
+      type: 'AUDIO',
+      // Le titre porte la question : un enregistrement retrouvé six mois plus
+      // tard sans son énoncé est une réponse sans question.
+      title: (question || 'Entretien').slice(0, 200),
+      storageKey,
+      mimeType: mime,
+      sizeBytes: bytes.byteLength,
+      extractedEntities: [],
+    },
+    select: { id: true },
+  });
+
+  await prisma.transcriptionDraft.create({
+    data: {
+      familyId: context.family.id,
+      archiveId: archive.id,
+      requestedById: context.member.id,
+      spokenById: context.member.id,
+      reviewerId: relecteur.id,
+      promptText: question || null,
+      status: 'pending',
+    },
+  });
+
+  revalidatePath('/brouillons');
+  revalidatePath('/', 'layout');
+  redirect(`/entretien/parler?relecteur=${relecteurId}&passees=${encodeURIComponent(passees)}&garde=1`);
+}
+
+/**
+ * Détruire ce qu'on vient de dire.
+ *
+ * Le brouillon appartient à celui qui a PARLÉ, pas au relecteur. Sans
+ * justification, et sans que le relecteur apprenne ce qui a disparu — il
+ * verra seulement qu'il n'y a rien à relire.
+ *
+ * L'archive part avec : l'audio est l'original, le garder après une
+ * destruction demandée serait garder ce qu'on a promis d'effacer.
+ */
+export async function effacerEntretien(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const draftId = String(formData.get('draftId') ?? '');
+  const draft = await prisma.transcriptionDraft.findFirst({
+    where: { id: draftId, familyId: context.family.id, spokenById: context.member.id },
+    select: { id: true, archiveId: true, storyId: true },
+  });
+
+  // Seule la voix efface, et seulement tant que rien n'en est né.
+  if (draft && !draft.storyId) {
+    await prisma.$transaction([
+      prisma.transcriptionDraft.delete({ where: { id: draft.id } }),
+      prisma.archive.delete({ where: { id: draft.archiveId } }),
+    ]);
+  }
+
+  revalidatePath('/brouillons');
+  redirect('/entretien/parler?efface=1');
+}
+
+/**
+ * Poser une réserve : « ne me demande jamais rien sur ceci ».
+ *
+ * Silencieuse par défaut. La porter à la famille est un second geste,
+ * explicite — une réserve visible apprendrait à tout le monde que le sujet
+ * existe et qu'il fait mal.
+ */
+export async function poserReserve(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  const entityId = String(formData.get('entityId') ?? '') || undefined;
+  const sujet = String(formData.get('sujet') ?? '').trim() || undefined;
+  if (!entityId && !sujet) redirect('/entretien?erreur=reserve');
+
+  const portee = formData.get('porter') !== null ? 'portee' : 'silencieuse';
+  const demande = String(formData.get('demande') ?? '').trim() || undefined;
+
+  await reserveService.poser(context.family.id, {
+    memberId: context.member.id,
+    entityId,
+    sujet,
+    portee,
+    // Une demande sans mots n'est pas une demande : on ne la porte pas.
+    demande: portee === 'portee' ? demande : undefined,
+  });
+
+  revalidatePath('/entretien');
+  redirect('/entretien?reserve=posee');
+}
+
+/** Lever sa réserve. Par l'intéressé seul, comme la sourdine (§2.6). */
+export async function leverReserve(formData: FormData) {
+  const context = await requireContext();
+  if (!context.member) redirect('/qui');
+
+  await reserveService.lever(
+    context.family.id,
+    context.member.id,
+    String(formData.get('reserveId') ?? ''),
+  );
+
+  revalidatePath('/entretien');
+  redirect('/entretien?reserve=levee');
 }

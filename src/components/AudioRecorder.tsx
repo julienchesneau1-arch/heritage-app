@@ -16,6 +16,7 @@ import { useRef, useState } from 'react';
 export function AudioRecorder({ inputId }: { inputId: string }) {
   const [state, setState] = useState<'idle' | 'recording' | 'done' | 'unsupported'>('idle');
   const [seconds, setSeconds] = useState(0);
+  const [preview, setPreview] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -38,6 +39,21 @@ export function AudioRecorder({ inputId }: { inputId: string }) {
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+
+        // ── La réécoute a lieu AVANT que le son ne parte ──
+        //
+        // On peut supprimer un enregistrement déjà déposé, et c'est prévu.
+        // Mais « vous pouvez l'effacer de notre serveur » et « il n'a jamais
+        // quitté votre appareil sans votre accord » ne sont pas la même
+        // promesse — et c'est la seconde qu'on doit à quelqu'un qui vient de
+        // dire à voix haute une chose qu'il regrette peut-être.
+        //
+        // L'URL est révoquée au réenregistrement : sans cela chaque essai
+        // laisserait un blob en mémoire jusqu'au rechargement de la page.
+        setPreview((ancienne) => {
+          if (ancienne) URL.revokeObjectURL(ancienne);
+          return URL.createObjectURL(blob);
+        });
 
         // On alimente le champ fichier du formulaire : le dépôt suit
         // exactement le même chemin qu'une photo, sans code parallèle.
@@ -75,8 +91,30 @@ export function AudioRecorder({ inputId }: { inputId: string }) {
     );
   }
 
+  /** Renoncer avant l'envoi. Le son n'a alors jamais quitté l'appareil. */
+  function jeter() {
+    if (preview) URL.revokeObjectURL(preview);
+    setPreview(null);
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (input) input.value = '';
+    setSeconds(0);
+    setState('idle');
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="space-y-3">
+      {preview ? (
+        <div className="space-y-2">
+          {/* `controls` natif : lecture, pause et déplacement dans la bande
+              sans une ligne de script, et manipulable au clavier. */}
+          <audio src={preview} controls className="w-full" />
+          <button type="button" onClick={jeter} className="justification underline">
+            Effacer et recommencer
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
       {state === 'recording' ? (
         <>
           <button type="button" onClick={stop} className="btn-primary">
@@ -92,8 +130,9 @@ export function AudioRecorder({ inputId }: { inputId: string }) {
         </button>
       )}
       {state === 'done' ? (
-        <span className="justification">Enregistrement prêt — reste à le déposer.</span>
+        <span className="justification">Réécoutez avant de déposer. Rien n’est parti pour l’instant.</span>
       ) : null}
+      </div>
     </div>
   );
 }

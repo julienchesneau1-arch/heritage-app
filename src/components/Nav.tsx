@@ -33,6 +33,26 @@ export function Nav({
   const pathname = usePathname();
   const inv = inventaire ?? INVENTAIRE_VIDE;
 
+  // ── L'écran où l'on parle n'a pas de menu ──
+  //
+  // « Un écran, une question, un bouton. Aucun texte à lire au-delà de la
+  // question elle-même. » Neuf entrées de navigation au-dessus d'une
+  // question posée à voix haute, c'est neuf choses à ne pas lire pour
+  // quelqu'un qui doit seulement se souvenir.
+  //
+  // On retire, on ne cache pas : le pied de page garde l'export et la
+  // reddition de comptes, et « Terminer » ramène à l'accueil. Rien ne
+  // devient inatteignable.
+  if (pathname.startsWith('/entretien/parler')) {
+    return (
+      <header className="border-b border-rule pt-6 pb-2">
+        <Link href="/" className="text-2xl tracking-tight">
+          Héritage
+        </Link>
+      </header>
+    );
+  }
+
   const ouvertes = SECTIONS.filter((page) => page.utile(inv));
   const repliees = SECTIONS.filter((page) => !page.utile(inv));
 

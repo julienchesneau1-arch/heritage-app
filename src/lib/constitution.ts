@@ -59,6 +59,13 @@ const GUILT_PATTERNS: RegExp[] = [
   /il y a longtemps que/i,
   /cela fait (longtemps|des mois|des années) que vous/i,
   /n'oubliez pas de/i,
+  // Vise l'injonction « pensez à raconter ceci ». Attrape aussi, par
+  // construction, des tournures innocentes : « quand vous pensez à votre
+  // enfance ». C'est assumé — ce filtre a le droit d'être trop large, il
+  // n'a pas le droit d'être trop étroit. Quand il refuse une phrase juste,
+  // on reformule la phrase ; on n'assouplit pas le motif. Un cas réel :
+  // une question de l'entretien, réécrite en « qui vous revient, de votre
+  // enfance ».
   /pensez à/i,
 ];
 
