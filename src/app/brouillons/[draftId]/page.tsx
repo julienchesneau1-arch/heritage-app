@@ -23,6 +23,39 @@ export const dynamic = 'force-dynamic';
  * douté sont signalés avec la raison. Le texte reste entièrement modifiable —
  * c'est la famille qui écrit, la machine n'a fait qu'une proposition.
  */
+
+/** Ce que le relecteur doit savoir avant de lire une ligne. */
+function Entretien({
+  draft,
+}: {
+  draft: {
+    promptText: string | null;
+    spokenBy: { name: string; isDeleted: boolean } | null;
+  };
+}) {
+  if (!draft.spokenBy && !draft.promptText) return null;
+  const voix = draft.spokenBy
+    ? draft.spokenBy.isDeleted
+      ? 'Membre anonymisé'
+      : draft.spokenBy.name
+    : null;
+
+  return (
+    <section className="space-y-2 rounded-lg bg-sauge-200 p-5">
+      {draft.promptText ? (
+        <p className="font-titre text-xl leading-snug text-sauge-900">
+          « {draft.promptText} »
+        </p>
+      ) : null}
+      {voix ? (
+        <p className="font-sans text-base text-sauge-800">
+          Répondu à voix haute par {voix}. Le récit qui en naîtra portera son nom, pas le vôtre.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function DraftPage({
   params,
   searchParams,
@@ -36,7 +69,15 @@ export default async function DraftPage({
 
   const draft = await prisma.transcriptionDraft.findFirst({
     where: { id: params.draftId, familyId: context.family.id },
-    include: { archive: true, requestedBy: { select: { name: true } } },
+    include: {
+      archive: true,
+      requestedBy: { select: { name: true } },
+      // La VOIX, et la question posée. Le modèle les porte depuis le mode
+      // entretien ; cette page les ignorait. Un texte relu sans son énoncé
+      // est une réponse sans question, et un texte relu sans savoir de qui
+      // il est ne peut pas être attribué correctement (§2.3).
+      spokenBy: { select: { id: true, name: true, isDeleted: true } },
+    },
   });
   if (!draft) notFound();
 
@@ -44,6 +85,7 @@ export default async function DraftPage({
     return (
       <div className="space-y-4">
         <h1 className="text-2xl">{draft.archive.title}</h1>
+        <Entretien draft={draft} />
         <audio controls preload="none" className="w-full">
           <source
             src={`/api/family/${context.family.id}/archives/${draft.archive.id}/file`}
@@ -104,6 +146,8 @@ export default async function DraftPage({
           L’enregistrement ci-dessous fait foi ; le texte n’en est qu’une proposition.
         </p>
       </div>
+
+      <Entretien draft={draft} />
 
       <audio controls preload="metadata" className="w-full">
         <source

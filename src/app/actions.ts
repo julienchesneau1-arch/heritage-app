@@ -755,10 +755,17 @@ export async function validateTranscription(formData: FormData) {
   if (!draft) redirect('/brouillons');
 
   const rawNarrator = String(formData.get('narratorId') ?? '');
-  const narratorId =
+  const choisi =
     rawNarrator && rawNarrator !== context.member.id && context.members.some((m) => m.id === rawNarrator)
       ? rawNarrator
       : undefined;
+
+  // Un brouillon d'ENTRETIEN sait déjà qui a parlé. C'est la seule chose que
+  // le relecteur n'a pas à deviner, et la §2.3 donne le récit à la VOIX, pas
+  // au clavier. Le choix manuel reste possible — le relecteur peut corriger
+  // — mais le défaut n'est plus « moi ».
+  const voix = draft.spokenById && draft.spokenById !== context.member.id ? draft.spokenById : undefined;
+  const narratorId = choisi ?? voix;
 
   const parsed = createStorySchema.safeParse({
     authorId: context.member.id,

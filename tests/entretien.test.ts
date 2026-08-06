@@ -256,3 +256,47 @@ describe('L’écran où l’on parle ne demande rien à lire d’autre', () => 
     expect(RECORDER).toMatch(/input\.value = ''/);
   });
 });
+
+// ─── La boucle se referme chez le relecteur ───
+
+describe('Le relecteur sait de qui et de quoi il s’agit', () => {
+  const BROUILLON = sansCommentaires('src', 'app', 'brouillons', '[draftId]', 'page.tsx');
+
+  it('charge la voix et la question, que le modèle porte depuis l’entretien', () => {
+    expect(BROUILLON).toMatch(/spokenBy: \{ select: \{ id: true, name: true, isDeleted: true \} \}/);
+  });
+
+  it('affiche la question au-dessus du texte à relire', () => {
+    // Un texte relu sans son énoncé est une réponse sans question.
+    expect(BROUILLON).toMatch(/draft\.promptText/);
+    // Sur les DEUX états : avant transcription, et au moment de relire.
+    expect((BROUILLON.match(/<Entretien draft=\{draft\} \/>/g) ?? []).length).toBe(2);
+  });
+
+  it('anonymise la voix d’un membre retiré, ici comme ailleurs', () => {
+    expect(BROUILLON).toMatch(/isDeleted[\s\S]{0,60}Membre anonymisé/);
+  });
+
+  it('dit au relecteur que le récit portera le nom de la voix, pas le sien', () => {
+    expect(BROUILLON).toMatch(/portera son nom, pas le vôtre/);
+  });
+
+  it('attribue effectivement le récit à celui qui a parlé', () => {
+    // §2.3 : la voix, pas le clavier. Le choix manuel reste prioritaire —
+    // le relecteur peut corriger — mais le défaut n'est plus « moi ».
+    const action = ACTIONS.slice(
+      ACTIONS.indexOf('export async function validateTranscription'),
+      ACTIONS.indexOf('export async function discardTranscription'),
+    );
+    expect(action).toMatch(/const voix = draft\.spokenById && draft\.spokenById !== context\.member\.id/);
+    expect(action).toMatch(/const narratorId = choisi \?\? voix/);
+  });
+
+  it('ne touche pas au récit écrit à la main, qui n’a pas de brouillon', () => {
+    const creation = ACTIONS.slice(
+      ACTIONS.indexOf('export async function createStory'),
+      ACTIONS.indexOf('export async function archiveStory'),
+    );
+    expect(creation).not.toMatch(/spokenById/);
+  });
+});
