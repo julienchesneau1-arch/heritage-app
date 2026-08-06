@@ -15,7 +15,17 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "verifier": "node outils/lancer.mjs",
+    "verifier:accessibilite": "node outils/accessibilite.mjs",
+    "verifier:clavier": "node outils/clavier.mjs",
+    "verifier:permissions": "node outils/permissions.mjs",
+    "verifier:hors-ecran": "node outils/hors-ecran.mjs",
+    "verifier:demarrage": "node outils/demarrage.mjs",
+    "verifier:possession": "tsx outils/possession.mts",
+    "verifier:stockage": "tsx outils/stockage-s3.mts",
+    "verifier:echelle": "node outils/echelle.mjs",
+    "captures": "node outils/captures.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

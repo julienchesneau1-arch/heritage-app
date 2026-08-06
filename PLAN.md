@@ -102,9 +102,17 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Trois outils vivent dans `outils/`. Aucun n'est branché sur `npm test` :
-ils exigent un navigateur et une base peuplée, et un test qui ne peut pas
-tourner partout finit désactivé.
+Neuf outils vivent dans `outils/`, et une seule commande les lance tous :
+
+```bash
+npm run verifier              # tout, ~6 minutes
+npm run verifier -- --rapide  # sans l'échelle, ~90 secondes
+```
+
+Aucun n'est branché sur `npm test` : ils exigent un navigateur, une base
+peuplée ou un serveur S3, et un test qui ne peut pas tourner partout finit
+désactivé. Le détail de ce qu'ils établissent — et surtout de ce qu'ils
+N'établissent PAS — est dans `outils/README.md`.
 
 | Outil | Ce qu'il vérifie | État |
 |---|---|---|
