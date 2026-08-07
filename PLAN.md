@@ -102,7 +102,7 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Quatorze outils vivent dans `outils/`, et une seule commande les lance tous :
+Quinze outils vivent dans `outils/`, et une seule commande les lance tous :
 
 ```bash
 npm run verifier              # tout, ~6 minutes
@@ -130,9 +130,13 @@ N'établissent PAS — est dans `outils/README.md`.
 | `passeur.mts` | le Passeur sur 180 jours : tarissement, répétition, règles | 12/12 |
 | `oubli.mts` | huit retraits confrontés à 34 sorties, par canaris | 9/9 |
 | `conservateur.mts` | le budget de visibilité, deux familles comparées | 7/7 |
+| `signaux.mts` | une année d'écrans d'accueil, jour par jour | 15/15 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
+- Le signal du jour anniversaire disait « Robert Martin **nous quittait** » :
+  le produit se comptait parmi les endeuillés et choisissait un euphémisme
+  de deuil à la place de la famille. La phrase est devenue une constatation.
 - Le **budget de visibilité** de la §3.2 n'était appliqué que si quelqu'un
   ouvrait la page Transmission. Sans cette visite, un récit captant 52 %
   des impressions — pour un seuil de 15 % — n'était jamais écarté des

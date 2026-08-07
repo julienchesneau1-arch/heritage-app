@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ACTEURS, DECES, estDecede, peutAgir } from '@/lib/deces';
+import { ACTEURS, DECES, anniversaireDeces, estDecede, peutAgir } from '@/lib/deces';
 
 /**
  * LA MORT — « il cesse d'être un acteur, il reste un sujet ».
@@ -167,5 +167,54 @@ describe('La demande d’un mort ne s’éteint pas', () => {
     for (const clef of Object.keys(DECES)) {
       expect(SOURCES).toContain(`DECES.${clef}`);
     }
+  });
+});
+
+/**
+ * « Il y a 12 ans, Robert Martin nous quittait. »
+ *
+ * Trouvé par `outils/signaux.mts` en jouant une année d'écrans d'accueil.
+ * Deux fautes dans cinq mots : un « nous » par lequel le produit se compte
+ * parmi les endeuillés, et un euphémisme qui choisit le registre du deuil
+ * à la place de la famille. Ce fichier écrit pourtant, depuis le premier
+ * jour : « le ton appartient à la famille, pas au produit ».
+ */
+describe('L’anniversaire d’un décès se constate, il ne se commente pas', () => {
+  it('ne dit jamais « nous » — le produit n’est pas de la famille', () => {
+    expect(anniversaireDeces('Robert Martin', 12)).not.toMatch(/\bnous\b|\bnotre\b|\bnos\b/i);
+  });
+
+  it('n’emploie aucun euphémisme de deuil', () => {
+    const texte = anniversaireDeces('Robert Martin', 12);
+    for (const euphemisme of ['quittait', 'disparu', 's’en est allé', 'parti', 'repose']) {
+      expect(texte).not.toContain(euphemisme);
+    }
+  });
+
+  it('nomme la personne et le nombre d’années, et rien de plus', () => {
+    expect(anniversaireDeces('Robert Martin', 12)).toBe('Il y a 12 ans, le décès de Robert Martin.');
+    expect(anniversaireDeces('Jeanne Martin', 1)).toBe('Il y a 1 an, le décès de Jeanne Martin.');
+  });
+
+  it('n’accorde aucun participe — le produit ignore le genre, et ne le demandera pas', () => {
+    // « décédé » / « décédée » obligerait à connaître le genre pour une
+    // phrase. La tournure est nominale, comme `DECES.mention` l'est déjà
+    // via « cette personne ».
+    for (const ans of [0, 1, 2, 12, 50]) {
+      // Bornes des DEUX côtés : sans la première, « né » se trouvait à
+      // l'intérieur d'« année » et le contrôle échouait sur son propre
+      // exemple correct.
+      expect(anniversaireDeces('Camille Martin', ans)).not.toMatch(/\b(décédée?|morte?|née?)\b/);
+    }
+  });
+
+  it('tient l’année du décès lui-même, où « il y a 0 an » n’aurait aucun sens', () => {
+    expect(anniversaireDeces('Robert Martin', 0)).toBe('Le décès de Robert Martin, cette année.');
+  });
+
+  it('et le signal du jour passe bien par cette fonction', () => {
+    const SERVICE = lire('src', 'services', 'trigger-model.service.ts');
+    expect(SERVICE).toContain('anniversaireDeces(member.name, yearsSince)');
+    expect(SERVICE).not.toContain('nous quittait');
   });
 });

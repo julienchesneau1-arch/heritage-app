@@ -1,7 +1,7 @@
 /**
  * TOUT VÉRIFIER, EN UNE COMMANDE — `npm run verifier`.
  *
- * Quatorze outils vivent ici, chacun avec ses variables d'environnement et
+ * Quinze outils vivent ici, chacun avec ses variables d'environnement et
  * son port. Un contrôle qu'on ne sait pas lancer est un contrôle qu'on ne
  * lance pas, et un contrôle qu'on ne lance pas ne protège de rien.
  *
@@ -107,6 +107,8 @@ const OUTILS = [
   // Deux familles identiques, un seul écart : l'une ouvre la page
   // Transmission. Le budget de visibilité de la §3.2 en dépendait.
   ['conservateur.mts', 'Le Conservateur — budget de visibilité, deux familles comparées'],
+  // Un signal est daté par nature : ses défauts ne se voient pas un mardi.
+  ['signaux.mts', 'Le signal temporel — une année d’écrans d’accueil'],
 ];
 
 const bilan = [];
@@ -136,6 +138,7 @@ for (const [fichier, titre, options = {}] of OUTILS) {
         // ferait tourner 360 jours pour rien.
         JOURS_CONSERVATEUR: process.env.JOURS_CONSERVATEUR ?? '60',
         RECITS_CONSERVATEUR: process.env.RECITS_CONSERVATEUR ?? '40',
+        JOURS_SIGNAUX: process.env.JOURS_SIGNAUX ?? '365',
       },
       stdio: 'inherit',
     });

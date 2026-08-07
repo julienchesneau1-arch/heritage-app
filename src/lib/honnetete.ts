@@ -141,7 +141,7 @@ export function estVraimentPremier(valeurs: readonly number[]): boolean {
  * Un texte destiné à être mis en cache, exporté ou copié chez un tiers
  * contient-il un calcul qui vieillira ?
  *
- * « Il y a 10 ans, Robert nous quittait », gravé dans un flux iCalendar que
+ * « Il y a 10 ans, le décès de Robert », gravé dans un flux iCalendar que
  * l'agenda recopie, devient faux l'an prochain sans que personne ne s'en
  * aperçoive. On publie la date de référence ; l'arithmétique reste au
  * lecteur, qui la refait chaque fois qu'il lit.

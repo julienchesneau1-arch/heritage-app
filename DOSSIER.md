@@ -1,7 +1,7 @@
 # Héritage — dossier complet
 
 Tout ce qui a été construit, comment, et pourquoi. Écrit le 5 août 2026,
-remis à jour le 6, après 58 commits sur la branche
+remis à jour le 6, après 59 commits sur la branche
 `claude/heritage-app-spec-acztj1`.
 
 Les chiffres de ce document viennent du dépôt, pas de mémoire :
@@ -19,7 +19,7 @@ Les chiffres de ce document viennent du dépôt, pas de mémoire :
 6. [Toutes les fonctionnalités](#6-toutes-les-fonctionnalités)
 7. [Identité et sécurité](#7-identité-et-sécurité)
 8. [La pile technique](#8-la-pile-technique)
-9. [Comment ça a été construit — les 58 étapes](#9-comment-ça-a-été-construit--les-58-étapes)
+9. [Comment ça a été construit — les 59 étapes](#9-comment-ça-a-été-construit--les-59-étapes)
 10. [La méthode : chasser une classe de défaut](#10-la-méthode--chasser-une-classe-de-défaut)
 11. [Les tests](#11-les-tests)
 12. [Le déploiement](#12-le-déploiement)
@@ -54,17 +54,17 @@ relire d'abord.
 
 | | |
 |---|---|
-| Commits | 58 |
-| Fichiers TypeScript / TSX | 110 |
+| Commits | 59 |
+| Fichiers TypeScript / TSX | 111 |
 | Lignes de code applicatif | 16 020 |
-| Lignes de tests | 6 861 |
+| Lignes de tests | 6 963 |
 | Lignes de documentation | 5 098 |
-| Tests, tous verts | **619**, en 31 fichiers |
+| Tests, tous verts | **625**, en 31 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 14 (`outils/`), hors `npm test`, `npm run verifier` |
+| Outils de mesure | 15 (`outils/`), hors `npm test`, `npm run verifier` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -462,7 +462,7 @@ Coût visé, tout compris : **6 à 10 € par mois** sur un VPS Hostinger KVM 1.
 
 ---
 
-## 9. Comment ça a été construit — les 58 étapes
+## 9. Comment ça a été construit — les 59 étapes
 
 Chaque ligne est un commit réel.
 
@@ -558,6 +558,7 @@ Chaque ligne est un commit réel.
 | 56 | **Le Passeur adressait 117 questions à un mort**, six mois durant | `passeur.mts` |
 | 57 | **Le nom d'un membre retiré ressortait sur huit sorties** | `oubli.mts` |
 | 58 | **Le Conservateur ne travaillait que si on ouvrait Transmission** | `conservateur.mts` |
+| 59 | **Le produit se comptait parmi les endeuillés** | `signaux.mts` |
 
 ---
 
@@ -644,7 +645,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**619 tests, 31 fichiers, tous verts**, plus quatorze outils de mesure qui
+**625 tests, 31 fichiers, tous verts**, plus quinze outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
@@ -885,6 +886,26 @@ par omission.
   sans `REDIS_URL` le magasin vit en mémoire du processus, donc un
   redéploiement effaçait les signalements ; une seule question suffit
   maintenant à les rétablir.
+
+- **Le produit se comptait parmi les endeuillés.** Le quatrième acteur, le
+  TriggerModel (§3.1), n'avait jamais été regardé sur une année — or un
+  signal est daté par nature, et ses défauts ne se voient pas un mardi.
+  `outils/signaux.mts` joue 365 jours d'écran d'accueil, membre par membre.
+  Le fonctionnement tient : au plus un signal par jour, jamais d'écran
+  vide, 3 % de jours seulement portent autre chose que l'écran neutre, les
+  deux anniversaires de Robert tombent exactement le bon jour, et le
+  silence de trente jours s'écoule puis rend la parole tout seul.
+  Mais le texte, lui, disait : « Il y a 12 ans, Robert Martin **nous
+  quittait**. » Deux fautes dans cinq mots. Le « nous » — le produit n'est
+  pas de la famille, personne ne lui a demandé d'en être. « Quittait » — un
+  euphémisme choisit un registre de deuil, et une famille dit « mort », une
+  autre « parti », une troisième ne dit rien. `src/lib/deces.ts` l'écrivait
+  pourtant depuis le premier jour : « le ton appartient à la famille, pas
+  au produit ». La phrase est devenue nominale — « Il y a 12 ans, le décès
+  de Robert Martin. » — sans « nous », sans euphémisme, et sans participe à
+  accorder, le produit ignorant le genre et n'ayant pas à le demander pour
+  une phrase. Trois tests l'avaient sous les yeux : ils citaient la phrase
+  comme exemple d'un texte acceptable.
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.

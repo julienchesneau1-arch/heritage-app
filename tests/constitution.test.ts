@@ -26,7 +26,7 @@ describe('Amendement 1 — pas d’inférence émotionnelle', () => {
     'Cette histoire dit que Robert réparait les vélos. Elle ne dit pas pourquoi il refusait d’en acheter un neuf.',
     'Emma n’a pas encore raconté cette histoire de son point de vue.',
     '« La montre arrêtée » a été racontée il y a 2 ans. Qu’est-ce qui a changé depuis ?',
-    'Il y a 11 ans, Robert Martin nous quittait.',
+    'Il y a 11 ans, le décès de Robert Martin.',
   ];
 
   it.each(allowed)('accepte : %s', (text) => {

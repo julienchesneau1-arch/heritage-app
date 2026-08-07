@@ -160,7 +160,7 @@ describe('Clause 4 — rien de dérivé du présent n’est gravé', () => {
   it('repère un calcul qui vieillira', () => {
     // Gravé dans un flux que l'agenda recopie, ce texte sera faux dans un an
     // sans que personne ne s'en aperçoive.
-    expect(contientUnCalculPerissable('Il y a 10 ans, Robert nous quittait.')).toBe(true);
+    expect(contientUnCalculPerissable('Il y a 10 ans, le décès de Robert.')).toBe(true);
     expect(contientUnCalculPerissable('Personne ne l’a relu depuis 3 ans.')).toBe(true);
     expect(contientUnCalculPerissable('Jeanne, âgée de 92 ans.')).toBe(true);
     expect(contientUnCalculPerissable('Deux ans plus tard, ils sont partis.')).toBe(false);

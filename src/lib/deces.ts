@@ -91,6 +91,34 @@ export const DECES = {
     'La personne qui a fait cette demande est décédée. Elle ne peut plus la retirer, et personne ne peut le faire à sa place.',
 } as const;
 
+/*
+ * ── LE SIGNAL DU JOUR ANNIVERSAIRE ──
+ *
+ * Le TriggerModel écrivait : « Il y a 12 ans, Robert Martin nous
+ * quittait. » Deux fautes dans cinq mots, et la doctrine de ce fichier les
+ * nomme toutes les deux.
+ *
+ *  · « NOUS » — le produit se compte parmi les endeuillés. Il n'est pas de
+ *    la famille. Personne ne lui a demandé d'en être.
+ *  · « QUITTAIT » — un euphémisme choisit un registre. Or « le ton
+ *    appartient à la famille, pas au produit » : une famille dit « mort »,
+ *    une autre « parti », une troisième ne dit rien. Ce n'est pas au
+ *    logiciel de trancher, un matin, sur l'écran d'accueil.
+ *
+ * Reste la difficulté propre au français : « décédé » s'accorde, et le
+ * produit ne connaît pas le genre — il ne le demandera pas non plus, ce
+ * serait une donnée de plus pour une phrase. D'où une tournure NOMINALE,
+ * sans verbe et sans accord. C'est la même sortie que `DECES.mention`,
+ * qui contourne le problème par « cette personne ».
+ *
+ * `« Aujourd'hui, Robert Martin aurait eu 95 ans »` reste tel quel : ce
+ * n'est ni un « nous » ni un euphémisme, c'est une soustraction.
+ */
+export function anniversaireDeces(nom: string, ans: number): string {
+  if (ans <= 0) return `Le décès de ${nom}, cette année.`;
+  return `Il y a ${ans} ${ans > 1 ? 'ans' : 'an'}, le décès de ${nom}.`;
+}
+
 /** Le nom tel qu'il s'affiche : anonymisé si retiré, tel quel sinon. */
 export function nomAffiche(membre: Pick<Member, 'name' | 'isDeleted'>): string {
   return membre.isDeleted ? 'Membre anonymisé' : membre.name;

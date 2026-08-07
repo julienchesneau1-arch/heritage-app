@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { TriggerModelService } from '@/services/trigger-model.service';
 import { createMemoryStore } from '@/lib/redis';
+import { anniversaireDeces } from '@/lib/deces';
 
 const FAMILY = 'fam_1';
 const MEMBER = 'mem_1';
@@ -54,7 +55,13 @@ describe('TriggerModelService — parcimonie', () => {
     const signal = await service.generateSignal(FAMILY, MEMBER, TODAY);
     expect(signal?.type).toBe('ANNIVERSARY');
     expect(signal?.payload.message).toContain('Robert');
-    expect(signal?.payload.message).toContain('nous quittait');
+    // « Il y a 12 ans, Robert Martin NOUS QUITTAIT » : le produit se
+    // comptait parmi les endeuillés, et choisissait un euphémisme de deuil
+    // à la place de la famille. La doctrine de `src/lib/deces.ts` interdit
+    // les deux — « le ton appartient à la famille, pas au produit ».
+    expect(signal?.payload.message).toBe(anniversaireDeces('Robert', 12));
+    expect(signal?.payload.message).not.toMatch(/\bnous\b/i);
+    expect(signal?.payload.message).not.toContain('quittait');
   });
 
   it('tombe sur le signal passif quand rien ne se passe', async () => {

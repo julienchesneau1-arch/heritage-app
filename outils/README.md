@@ -34,6 +34,7 @@ démarré.
 | `passeur.mts` | fait vivre le Passeur 180 jours, une horloge simulée dans le magasin |
 | `oubli.mts` | plante un canari dans chaque objet retiré, puis fouille les 34 sorties |
 | `conservateur.mts` | deux familles identiques, un seul écart : l'une ouvre Transmission |
+| `signaux.mts` | joue une année d'écrans d'accueil, jour par jour, membre par membre |
 | `captures.mjs` | régénère `redesign/captures/` |
 
 `passeur.mts` et `conservateur.mts` sont les deux qui mesurent une
@@ -87,6 +88,17 @@ de lui-même.
   défaut, le grand-père est décédé en 2014 ; l'écran de l'entretien
   l'offrait pour relire l'enregistrement qu'on venait de faire sur lui.
   Les filtres ne portaient que sur `isDeleted` — « retiré de la famille ».
+- **Le produit se comptait parmi les endeuillés.** Le signal du jour
+  anniversaire disait : « Il y a 12 ans, Robert Martin **nous quittait**. »
+  Deux fautes dans cinq mots. Le « nous » : le produit n'est pas de la
+  famille, personne ne lui a demandé d'en être. « Quittait » : un
+  euphémisme choisit un registre de deuil — une famille dit « mort », une
+  autre « parti », une troisième ne dit rien, et ce n'est pas au logiciel
+  de trancher un matin sur l'écran d'accueil. `src/lib/deces.ts` l'écrivait
+  pourtant depuis le premier jour : « le ton appartient à la famille, pas
+  au produit ». La phrase est devenue nominale — pas de « nous », pas
+  d'euphémisme, et **aucun participe à accorder**, le produit ignorant le
+  genre et n'ayant pas à le demander pour une phrase.
 - **Le budget de visibilité de la §3.2 dépendait d'une visite de page.**
   `isOverexposed()` lit une clé dont `checkOverexposure()` est le seul
   écrivain, et aucun chemin du produit ne l'appelait : il n'était atteint
@@ -148,6 +160,9 @@ croire à plus qu'il n'a mesuré est exactement ce que ce dépôt combat.
   chaque restauration définitive. `oubli.mts` classe cette sortie comme
   tolérée, avec sa raison, et l'imprime à chaque passage — quiconque détient
   le lien familial peut y lire ce nom. C'est une décision, pas une étanchéité.
+- **Le type de signal `RECENT_ACTIVITY`.** Il ne s'est jamais déclenché sur
+  une année simulée du jeu d'essai. Il n'est donc pas en panne — il est
+  NON MESURÉ, et l'outil le nomme à chaque passage.
 - **Que le budget de visibilité soit le BON seuil.** L'outil établit qu'il
   s'applique, pas qu'il soit juste : personne n'a observé une vraie famille
   pour savoir si « deux fois la part uniforme » correspond à quoi que ce

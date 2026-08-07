@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
 import { store, type KeyValueStore } from '@/lib/redis';
+import { anniversaireDeces } from '@/lib/deces';
 import { monthDayOf } from '@/lib/normalize';
 
 /**
@@ -83,7 +84,8 @@ export class TriggerModelService {
           type: 'ANNIVERSARY',
           priority: 5,
           payload: {
-            message: `Il y a ${yearsSince} ${plural(yearsSince, 'an', 'ans')}, ${member.name} nous quittait.`,
+            // Ni « nous », ni euphémisme : voir `src/lib/deces.ts`.
+            message: anniversaireDeces(member.name, yearsSince),
             justification: `Date de décès enregistrée : ${isoDay(member.deathDate)}.`,
           },
         });

@@ -30,7 +30,8 @@
     "verifier:pannes": "node outils/pannes.mjs",
     "verifier:passeur": "tsx outils/passeur.mts",
     "verifier:oubli": "tsx outils/oubli.mts",
-    "verifier:conservateur": "tsx outils/conservateur.mts"
+    "verifier:conservateur": "tsx outils/conservateur.mts",
+    "verifier:signaux": "tsx outils/signaux.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
