@@ -102,7 +102,7 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Treize outils vivent dans `outils/`, et une seule commande les lance tous :
+Quatorze outils vivent dans `outils/`, et une seule commande les lance tous :
 
 ```bash
 npm run verifier              # tout, ~6 minutes
@@ -129,9 +129,14 @@ N'établissent PAS — est dans `outils/README.md`.
 | `pannes.mjs` | 404, base coupée, retour à la normale | 8/8 |
 | `passeur.mts` | le Passeur sur 180 jours : tarissement, répétition, règles | 12/12 |
 | `oubli.mts` | huit retraits confrontés à 34 sorties, par canaris | 9/9 |
+| `conservateur.mts` | le budget de visibilité, deux familles comparées | 7/7 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 
+- Le **budget de visibilité** de la §3.2 n'était appliqué que si quelqu'un
+  ouvrait la page Transmission. Sans cette visite, un récit captant 52 %
+  des impressions — pour un seuil de 15 % — n'était jamais écarté des
+  suggestions. Le mécanisme se conduit désormais lui-même.
 - Le nom d'un membre **retiré de la famille** ressortait en clair sur six
   sorties, et deux de plus trouvées en balayant le source. Dix sélections
   ne chargeaient même pas `isDeleted` : la règle n'était pas oubliée, elle

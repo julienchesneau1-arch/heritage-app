@@ -344,6 +344,20 @@ export class PasseurService {
     // On descend le classement jusqu'au premier candidat recevable. Les
     // vérifications coûteuses (store) ne portent que sur les meilleurs, pas
     // sur les cinquante autres.
+    /*
+     * Le budget de visibilité se recalcule ici s'il est périmé.
+     *
+     * `isOverexposed()` ne lit qu'une clé : sans ce réveil, elle rendait
+     * `false` pour tout le monde tant que personne n'ouvrait la page
+     * Transmission. C'est le consommateur du verdict qui doit s'assurer
+     * qu'il existe — pas une page de statistiques sans rapport.
+     *
+     * Placé APRÈS le tri, et non en tête de méthode : la parcimonie a déjà
+     * fait sortir la plupart des appels, et on ne paie le `groupBy` que
+     * lorsqu'on va réellement s'en servir. Le repère a son propre TTL.
+     */
+    await this.conservateur.assurerBudget(familyId, now);
+
     for (const candidate of drafts) {
       if (await this.wasAskedRecently(familyId, memberId, subjectOf(candidate), candidate.ruleId)) continue;
       // Le Conservateur retire les sur-exposées des suggestions.

@@ -34,6 +34,12 @@ export const FORGOTTEN_AFTER_MONTHS = 12;
 export const DISMISSAL_QUARANTINE_THRESHOLD = 3;
 
 const OVEREXPOSED_TTL_SECONDS = 30 * 86_400;
+/*
+ * Six heures : assez court pour qu'un récit cesse d'être poussé le jour
+ * même où il s'emballe, assez long pour que le `groupBy` sur douze mois de
+ * journal ne se refasse pas à chaque question posée.
+ */
+const BUDGET_REFRESH_SECONDS = 6 * 3_600;
 const DISMISSAL_TTL_SECONDS = 90 * 86_400;
 const VIEW_DEDUPE_SECONDS = 30 * 60;
 
@@ -135,6 +141,44 @@ export class ConservateurService {
 
   async isOverexposed(storyId: string): Promise<boolean> {
     return (await this.store.get(overexposedKey(storyId))) === 'true';
+  }
+
+  /**
+   * ── LE BUDGET SE TIENT TOUT SEUL ──
+   *
+   * `isOverexposed()` lit une clé dont `checkOverexposure()` est le seul
+   * écrivain. Or aucun chemin du produit n'appelait `checkOverexposure()` :
+   * il n'était atteint que par `report()`, c'est-à-dire quand quelqu'un
+   * ouvrait la page Transmission ou appelait `/metrics`.
+   *
+   * Mesuré par `outils/conservateur.mts`, deux familles identiques sur 60
+   * jours, mêmes récits et mêmes lectures, un seul écart :
+   *
+   *   · celle qui ouvre Transmission : le récit vedette est signalé 60
+   *     jours sur 60, et le Passeur ne le propose jamais.
+   *   · celle qui ne l'ouvre pas : le même récit capte 52 % des
+   *     impressions — pour un seuil de 15 % — n'est signalé AUCUN jour,
+   *     et le Passeur le propose encore.
+   *
+   * Le budget de visibilité de la §3.2 n'était donc pas une garantie du
+   * produit : c'était un effet de bord d'une visite de page de
+   * statistiques. Une famille qui n'y va jamais — c'est-à-dire la plupart
+   * — n'avait pas de Conservateur.
+   *
+   * Le calcul se conduit maintenant lui-même, au moment où quelqu'un a
+   * besoin de la réponse. Le repère porte un TTL : le `groupBy` sur douze
+   * mois de journal ne se refait pas à chaque question.
+   *
+   * Il est posé APRÈS le calcul, et non avant : un calcul qui échoue doit
+   * être retenté à la question suivante. Un repère posé d'abord ferait
+   * taire le mécanisme six heures durant, en silence — exactement le
+   * défaut qu'on vient de corriger.
+   */
+  async assurerBudget(familyId: string, now = new Date()): Promise<boolean> {
+    if (await this.store.get(budgetKey(familyId))) return false;
+    await this.checkOverexposure(familyId, now);
+    await this.store.setex(budgetKey(familyId), BUDGET_REFRESH_SECONDS, 'true');
+    return true;
   }
 
   /**
@@ -336,6 +380,11 @@ function monthsAgo(from: Date, months: number): Date {
 
 function overexposedKey(storyId: string) {
   return `conservateur:overexposed:${storyId}`;
+}
+
+/** Le repère du dernier calcul du budget, par famille. */
+function budgetKey(familyId: string) {
+  return `conservateur:budget:${familyId}`;
 }
 
 function viewKey(storyId: string, memberId: string) {

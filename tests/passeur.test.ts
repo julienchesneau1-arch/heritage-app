@@ -88,6 +88,11 @@ function buildService(
     story: {
       findMany: async ({ where, take }: { where: Record<string, unknown>; take?: number }) =>
         stories.filter((story) => matchesWhere(story, where)).slice(0, take ?? undefined),
+      // Le Passeur réveille le budget de visibilité du Conservateur avant
+      // de choisir : sans `count`, quinze tests mouraient sur un `undefined`
+      // — non pas parce que le produit était cassé, mais parce que le faux
+      // client ne l'était plus assez complètement.
+      count: async () => stories.length,
     },
     member: {
       findMany: async () => members,
@@ -237,7 +242,7 @@ describe('PasseurService — une question que quelqu’un a réellement posée',
     // requête, on vérifie qu'elle y est.
     let recu: Record<string, unknown> | null = null;
     const prisma = {
-      story: { findMany: async () => [] },
+      story: { findMany: async () => [], count: async () => 0 },
       member: { findMany: async () => MEMBERS },
       visibilityLog: { groupBy: async () => [] },
       storyMute: { findMany: async () => [] },

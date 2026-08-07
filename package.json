@@ -29,7 +29,8 @@
     "verifier:etancheite": "node outils/etancheite.mjs",
     "verifier:pannes": "node outils/pannes.mjs",
     "verifier:passeur": "tsx outils/passeur.mts",
-    "verifier:oubli": "tsx outils/oubli.mts"
+    "verifier:oubli": "tsx outils/oubli.mts",
+    "verifier:conservateur": "tsx outils/conservateur.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

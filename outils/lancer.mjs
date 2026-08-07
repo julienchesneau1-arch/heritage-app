@@ -1,7 +1,7 @@
 /**
  * TOUT VÉRIFIER, EN UNE COMMANDE — `npm run verifier`.
  *
- * Treize outils vivent ici, chacun avec ses variables d'environnement et
+ * Quatorze outils vivent ici, chacun avec ses variables d'environnement et
  * son port. Un contrôle qu'on ne sait pas lancer est un contrôle qu'on ne
  * lance pas, et un contrôle qu'on ne lance pas ne protège de rien.
  *
@@ -104,6 +104,9 @@ const OUTILS = [
   // Chacun a été écrit là où il a été écrit ; c'est le croisement des deux
   // qui n'avait jamais été fait.
   ['oubli.mts', 'L’oubli — huit retraits confrontés à trente-quatre sorties'],
+  // Deux familles identiques, un seul écart : l'une ouvre la page
+  // Transmission. Le budget de visibilité de la §3.2 en dépendait.
+  ['conservateur.mts', 'Le Conservateur — budget de visibilité, deux familles comparées'],
 ];
 
 const bilan = [];
@@ -128,6 +131,11 @@ for (const [fichier, titre, options = {}] of OUTILS) {
         ARRET_BASE: process.env.ARRET_BASE ?? '',
         DEMARRAGE_BASE: process.env.DEMARRAGE_BASE ?? '',
         JOURS: process.env.JOURS ?? '180',
+        // La campagne du Conservateur est jouée DEUX fois : elle a sa
+        // propre durée, sans quoi le `JOURS=180` du Passeur ci-dessus la
+        // ferait tourner 360 jours pour rien.
+        JOURS_CONSERVATEUR: process.env.JOURS_CONSERVATEUR ?? '60',
+        RECITS_CONSERVATEUR: process.env.RECITS_CONSERVATEUR ?? '40',
       },
       stdio: 'inherit',
     });

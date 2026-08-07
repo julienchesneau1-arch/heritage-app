@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { ConservateurService } from '@/services/conservateur.service';
 import { createMemoryStore } from '@/lib/redis';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const FAMILY = 'fam_1';
 
@@ -200,3 +202,93 @@ describe('Distorsion — la voix compte, pas le clavier', () => {
 function countOf(values: string[], value: string): number {
   return Math.max(1, values.filter((v) => v === value).length);
 }
+
+/**
+ * LE BUDGET DOIT SE TENIR TOUT SEUL.
+ *
+ * `isOverexposed()` lit une clé dont `checkOverexposure()` est le seul
+ * écrivain, et aucun chemin du produit n'appelait `checkOverexposure()` :
+ * il n'était atteint que par `report()`, c'est-à-dire quand quelqu'un
+ * ouvrait la page Transmission.
+ *
+ * `outils/conservateur.mts` l'a mesuré sur deux familles identiques, 60
+ * jours, mêmes récits et mêmes lectures. Celle qui ouvrait Transmission :
+ * récit vedette signalé 60 jours sur 60, jamais proposé. Celle qui ne
+ * l'ouvrait pas : le même récit à 52 % des impressions pour un seuil de
+ * 15 %, signalé aucun jour, et encore proposé par le Passeur.
+ *
+ * Le budget de la §3.2 n'était pas une garantie du produit — c'était un
+ * effet de bord d'une visite de page.
+ */
+describe('assurerBudget — le calcul se conduit lui-même', () => {
+  function service(counts: Array<{ storyId: string; count: number }>) {
+    let appels = 0;
+    const prisma = {
+      visibilityLog: {
+        groupBy: async () => {
+          appels += 1;
+          return counts.map((c) => ({ storyId: c.storyId, _count: { storyId: c.count } }));
+        },
+      },
+      story: { count: async () => 20 },
+    } as unknown as PrismaClient;
+    const conservateur = new ConservateurService(prisma, createMemoryStore());
+    return { conservateur, appelsDuJournal: () => appels };
+  }
+
+  const DESEQUILIBRE = [
+    { storyId: 's1', count: 80 },
+    { storyId: 's2', count: 10 },
+    { storyId: 's3', count: 10 },
+  ];
+
+  it('signale une sur-exposition sans que personne n’ouvre la page Transmission', async () => {
+    const { conservateur } = service(DESEQUILIBRE);
+    expect(await conservateur.isOverexposed('s1')).toBe(false);
+
+    await conservateur.assurerBudget(FAMILY);
+    expect(await conservateur.isOverexposed('s1')).toBe(true);
+  });
+
+  it('ne refait pas le calcul à chaque appel — le journal est coûteux', async () => {
+    const { conservateur, appelsDuJournal } = service(DESEQUILIBRE);
+
+    expect(await conservateur.assurerBudget(FAMILY)).toBe(true);
+    expect(await conservateur.assurerBudget(FAMILY)).toBe(false);
+    expect(await conservateur.assurerBudget(FAMILY)).toBe(false);
+    expect(appelsDuJournal()).toBe(1);
+  });
+
+  it('le repère se pose APRÈS le calcul : un échec se retente', async () => {
+    // Un repère posé d'abord ferait taire le mécanisme six heures durant,
+    // en silence — le défaut qu'on vient précisément de corriger.
+    let premier = true;
+    const prisma = {
+      visibilityLog: {
+        groupBy: async () => {
+          if (premier) {
+            premier = false;
+            throw new Error('base indisponible');
+          }
+          return DESEQUILIBRE.map((c) => ({ storyId: c.storyId, _count: { storyId: c.count } }));
+        },
+      },
+      story: { count: async () => 20 },
+    } as unknown as PrismaClient;
+    const conservateur = new ConservateurService(prisma, createMemoryStore());
+
+    await expect(conservateur.assurerBudget(FAMILY)).rejects.toThrow('base indisponible');
+    await conservateur.assurerBudget(FAMILY);
+    expect(await conservateur.isOverexposed('s1')).toBe(true);
+  });
+
+  it('et le Passeur le réveille avant de choisir un récit à proposer', () => {
+    // Sans cet appel, `isOverexposed` rend `false` pour tout le monde et
+    // le filtre juste en dessous ne filtre rien.
+    const source = readFileSync(join(process.cwd(), 'src/services/passeur.service.ts'), 'utf8');
+    const reveil = source.indexOf('this.conservateur.assurerBudget(');
+    const filtre = source.indexOf('this.conservateur.isOverexposed(');
+    expect(reveil).toBeGreaterThan(-1);
+    expect(reveil).toBeLessThan(filtre);
+  });
+});
