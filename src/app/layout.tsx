@@ -79,7 +79,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 n'a donc sa place dans la navigation du haut. */}
             {context ? (
               <>
-                <a href={`/api/family/${context.family.id}/export`} className="justification underline">
+                {/* Le lien pointait droit sur le JSON. Il mène maintenant à
+                    la page qui offre le COFFRE — le fichier qui se lit sans
+                    cette application (Annexe A point 7) — et qui donne le
+                    JSON seul juste en dessous, pour qui n'a besoin que de
+                    lui. Le geste le plus utile passe devant le plus
+                    technique ; aucun des deux n'est retiré. */}
+                <a href="/sortie" className="justification underline">
                   Exporter la mémoire
                 </a>
                 <a href="/transmission" className="justification underline">

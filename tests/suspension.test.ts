@@ -138,7 +138,12 @@ describe('Un récit suspendu quitte ce qui circule, pas ce qu’on possède', ()
   /** Toute requête qui alimente un affichage doit porter le filtre. */
   const AFFICHAGES: Array<[string, string[]]> = [
     ['la liste des récits', ['src', 'app', 'recits', 'page.tsx']],
-    ['le livre', ['src', 'app', 'livre', 'page.tsx']],
+    // Le rassemblement du livre a quitté la page pour un service partagé :
+    // le coffre (`src/lib/coffre.ts`) doit produire EXACTEMENT le même
+    // livre, et deux requêtes écrites deux fois divergeraient. Le contrôle
+    // porte donc sur le point de passage unique — il couvre maintenant les
+    // deux sorties au lieu d'une.
+    ['le livre', ['src', 'services', 'livre.service.ts']],
     ['la veillée', ['src', 'services', 'veillee.service.ts']],
     ['le Passeur', ['src', 'services', 'passeur.service.ts']],
     ['le graphe', ['src', 'app', 'graphe', 'page.tsx']],

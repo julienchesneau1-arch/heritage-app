@@ -102,7 +102,7 @@ complète.
 
 ### Ce que les outils vérifient, et ce qu'ils ont trouvé
 
-Quinze outils vivent dans `outils/`, et une seule commande les lance tous :
+Seize outils vivent dans `outils/`, et une seule commande les lance tous :
 
 ```bash
 npm run verifier              # tout, ~6 minutes
@@ -131,6 +131,7 @@ N'établissent PAS — est dans `outils/README.md`.
 | `oubli.mts` | huit retraits confrontés à 34 sorties, par canaris | 9/9 |
 | `conservateur.mts` | le budget de visibilité, deux familles comparées | 7/7 |
 | `signaux.mts` | une année d'écrans d'accueil, jour par jour | 15/15 |
+| `coffre.mts` | le coffre ouvert sans l'application, puis réimporté | 10/10 |
 
 Ce qu'ils ont trouvé, et qu'aucune relecture n'avait vu :
 

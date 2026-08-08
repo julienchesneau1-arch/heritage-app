@@ -35,7 +35,16 @@ démarré.
 | `oubli.mts` | plante un canari dans chaque objet retiré, puis fouille les 34 sorties |
 | `conservateur.mts` | deux familles identiques, un seul écart : l'une ouvre Transmission |
 | `signaux.mts` | joue une année d'écrans d'accueil, jour par jour, membre par membre |
+| `coffre.mts` | ouvre le coffre en `file://`, réseau interdit, puis le réimporte |
 | `captures.mjs` | régénère `redesign/captures/` |
+
+`coffre.mts` est le seul qui débranche l'application. Les autres vérifient
+que le produit se comporte bien ; celui-là vérifie qu'il peut **cesser
+d'exister** sans rien emporter. Le fichier s'ouvre en `file://`, toute
+requête sortante est refusée et comptée, le texte est lu tel qu'il est
+RENDU — pas tel qu'il est dans les octets — et le JSON embarqué est
+réimporté dans une famille neuve. Un fichier qu'on lit mais dont on ne
+peut rien refaire est une photographie de la mémoire, pas la mémoire.
 
 `passeur.mts` et `conservateur.mts` sont les deux qui mesurent une
 **durée**, et c'est ce qui les distingue de tous les autres : ils portent
@@ -145,6 +154,12 @@ de lui-même.
 Cette section compte autant que la précédente. Un outil vert qui laisse
 croire à plus qu'il n'a mesuré est exactement ce que ce dépôt combat.
 
+- **Que le coffre s'ouvre dans un navigateur de 2050.** Il n'appelle rien,
+  n'exécute rien et n'utilise que du HTML et du CSS ordinaires — c'est tout
+  ce qu'on peut faire pour l'y aider. Personne ne peut vérifier l'avenir.
+- **La taille du coffre sur un très grand corpus.** Le livre pèse 6,9 Mo à
+  5 000 récits, et le coffre y ajoute le JSON. Il n'est pas borné, comme le
+  livre, et pour la même raison : une sortie incomplète ne libère personne.
 - **La transcription locale dans un vrai navigateur.** jsDelivr et Hugging
   Face sont injoignables depuis l'environnement de développement — retesté,
   pas supposé. C'est le plus gros inconnu du produit.

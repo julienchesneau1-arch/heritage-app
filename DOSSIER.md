@@ -1,7 +1,7 @@
 # Héritage — dossier complet
 
 Tout ce qui a été construit, comment, et pourquoi. Écrit le 5 août 2026,
-remis à jour le 6, après 59 commits sur la branche
+remis à jour le 6, après 60 commits sur la branche
 `claude/heritage-app-spec-acztj1`.
 
 Les chiffres de ce document viennent du dépôt, pas de mémoire :
@@ -19,7 +19,7 @@ Les chiffres de ce document viennent du dépôt, pas de mémoire :
 6. [Toutes les fonctionnalités](#6-toutes-les-fonctionnalités)
 7. [Identité et sécurité](#7-identité-et-sécurité)
 8. [La pile technique](#8-la-pile-technique)
-9. [Comment ça a été construit — les 59 étapes](#9-comment-ça-a-été-construit--les-59-étapes)
+9. [Comment ça a été construit — les 60 étapes](#9-comment-ça-a-été-construit--les-60-étapes)
 10. [La méthode : chasser une classe de défaut](#10-la-méthode--chasser-une-classe-de-défaut)
 11. [Les tests](#11-les-tests)
 12. [Le déploiement](#12-le-déploiement)
@@ -54,17 +54,17 @@ relire d'abord.
 
 | | |
 |---|---|
-| Commits | 59 |
-| Fichiers TypeScript / TSX | 111 |
-| Lignes de code applicatif | 16 020 |
-| Lignes de tests | 6 963 |
+| Commits | 60 |
+| Fichiers TypeScript / TSX | 114 |
+| Lignes de code applicatif | 16 126 |
+| Lignes de tests | 7 043 |
 | Lignes de documentation | 5 098 |
-| Tests, tous verts | **625**, en 31 fichiers |
+| Tests, tous verts | **637**, en 32 fichiers |
 | Modèles de données | 15 |
 | Migrations SQL | 10, toutes écrites à la main |
 | Routes | 45 (24 pages, 19 routes d'API, 2 routes d'entrée) |
 | Services | 16 |
-| Outils de mesure | 15 (`outils/`), hors `npm test`, `npm run verifier` |
+| Outils de mesure | 16 (`outils/`), hors `npm test`, `npm run verifier` |
 | Amendements constitutionnels | 6, dont 3 ajoutés en cours de route |
 
 Rapport tests / code : **0,42 ligne de test par ligne de code**. La plupart
@@ -462,7 +462,7 @@ Coût visé, tout compris : **6 à 10 € par mois** sur un VPS Hostinger KVM 1.
 
 ---
 
-## 9. Comment ça a été construit — les 59 étapes
+## 9. Comment ça a été construit — les 60 étapes
 
 Chaque ligne est un commit réel.
 
@@ -559,6 +559,7 @@ Chaque ligne est un commit réel.
 | 57 | **Le nom d'un membre retiré ressortait sur huit sorties** | `oubli.mts` |
 | 58 | **Le Conservateur ne travaillait que si on ouvrait Transmission** | `conservateur.mts` |
 | 59 | **Le produit se comptait parmi les endeuillés** | `signaux.mts` |
+| 60 | **Le coffre** : un fichier, et l'application peut disparaître | `src/lib/coffre.ts` |
 
 ---
 
@@ -645,7 +646,7 @@ a été écrit dans le document plutôt que dissimulé — c'est ainsi que §3.1
 
 ## 11. Les tests
 
-**625 tests, 31 fichiers, tous verts**, plus quinze outils de mesure qui
+**637 tests, 32 fichiers, tous verts**, plus seize outils de mesure qui
 tournent hors de `npm test` parce qu'ils exigent un navigateur, une base
 peuplée ou un serveur S3 : `outils/accessibilite.mjs` (axe-core, 18 pages,
 0 violation), `outils/clavier.mjs` (la tabulation pressée pour de vrai,
@@ -906,6 +907,29 @@ par omission.
   accorder, le produit ignorant le genre et n'ayant pas à le demander pour
   une phrase. Trois tests l'avaient sous les yeux : ils citaient la phrase
   comme exemple d'un texte acceptable.
+
+- **Le risque dominant n'était pas dans le code — il était dans la
+  dépendance à une seule personne.** L'Annexe A point 7 dit que « le succès
+  ultime est que la famille continue de transmettre sans l'app ». Le livre
+  s'imprimait, l'export rendait le JSON — et les deux exigeaient que le
+  serveur réponde, donc que quelqu'un le paie, le maintienne, et soit encore
+  là. Une mémoire promise sur cinquante ans reposait sur une facture et une
+  bonne santé. Aucun test ne le couvrait, et quinze outils de vérification
+  n'y changeaient rien.
+  **Le coffre** (`src/lib/coffre.ts`) est un seul fichier HTML autonome :
+  le livre lisible par un humain, ET l'export complet lisible par une
+  machine, dans une balise `<script type="application/json">` que le
+  navigateur n'exécute pas. Aucune police distante, aucune image, aucun
+  script, aucun lien de retour vers l'application — le point 7 dit « sans
+  l'app », et un objet qui y ramène est un dépliant.
+  `outils/coffre.mts` est le seul contrôle qui débranche tout : il ouvre le
+  fichier en `file://`, refuse et compte toute requête sortante, lit le
+  texte tel qu'il est RENDU, puis **réimporte le JSON embarqué dans une
+  famille neuve**. Un fichier qu'on lit mais dont on ne peut rien refaire
+  est une photographie de la mémoire, pas la mémoire. 10/10.
+  Le rassemblement du livre a quitté la page pour un service partagé : deux
+  requêtes écrites deux fois auraient divergé, et la famille aurait eu deux
+  livres différents sans que rien ne le signale.
 
 - **Aucune famille réelle n'a utilisé le produit.** Tout ce qui est écrit ici
   sur l'usage est une hypothèse.

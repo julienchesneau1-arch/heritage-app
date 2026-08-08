@@ -31,7 +31,8 @@
     "verifier:passeur": "tsx outils/passeur.mts",
     "verifier:oubli": "tsx outils/oubli.mts",
     "verifier:conservateur": "tsx outils/conservateur.mts",
-    "verifier:signaux": "tsx outils/signaux.mts"
+    "verifier:signaux": "tsx outils/signaux.mts",
+    "verifier:coffre": "tsx outils/coffre.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

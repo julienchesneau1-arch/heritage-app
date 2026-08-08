@@ -1,7 +1,7 @@
 /**
  * TOUT VÉRIFIER, EN UNE COMMANDE — `npm run verifier`.
  *
- * Quinze outils vivent ici, chacun avec ses variables d'environnement et
+ * Seize outils vivent ici, chacun avec ses variables d'environnement et
  * son port. Un contrôle qu'on ne sait pas lancer est un contrôle qu'on ne
  * lance pas, et un contrôle qu'on ne lance pas ne protège de rien.
  *
@@ -109,6 +109,10 @@ const OUTILS = [
   ['conservateur.mts', 'Le Conservateur — budget de visibilité, deux familles comparées'],
   // Un signal est daté par nature : ses défauts ne se voient pas un mardi.
   ['signaux.mts', 'Le signal temporel — une année d’écrans d’accueil'],
+  // Le seul contrôle qui débranche l'application pour de bon : le coffre
+  // s'ouvre en `file://`, toute requête sortante échoue, et les données
+  // embarquées sont réimportées dans une famille neuve (Annexe A point 7).
+  ['coffre.mts', 'Le coffre — ouvert sans l’application, puis réimporté'],
 ];
 
 const bilan = [];

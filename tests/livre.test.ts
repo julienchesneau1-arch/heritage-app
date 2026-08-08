@@ -156,7 +156,17 @@ describe('Il dit ce qu’il ne sait pas (amendement 6, en papier)', () => {
 });
 
 describe('La page du livre respecte la Constitution', () => {
-  const source = readFileSync(join(process.cwd(), 'src', 'app', 'livre', 'page.tsx'), 'utf8');
+  /*
+   * Le rassemblement des données a quitté la page pour
+   * `src/services/livre.service.ts`, que le coffre partage. Ce qui relève
+   * de la PAGE — ne pas ramener vers l'écran, énoncer les manques en
+   * constats — se lit toujours dans la page ; ce qui relève de la
+   * SÉLECTION se lit désormais dans le service, et vaut alors pour les
+   * deux sorties.
+   */
+  const source =
+    readFileSync(join(process.cwd(), 'src', 'app', 'livre', 'page.tsx'), 'utf8') +
+    readFileSync(join(process.cwd(), 'src', 'services', 'livre.service.ts'), 'utf8');
   const sansCommentaires = source
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
