@@ -32,7 +32,10 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 05 | [`docs/05_GOLDEN_TESTS.md`](docs/05_GOLDEN_TESTS.md) | Scénarios de non-régression, y compris adversariaux | vous modifiez un comportement |
 | 06 | [`docs/06_CLAUDE_CODE_MASTER_PROMPT.md`](docs/06_CLAUDE_CODE_MASTER_PROMPT.md) | Instructions permanentes pour Claude Code | **avant toute session de code** |
 | 07 | [`docs/07_UPDATE_ENGINE_SPEC.md`](docs/07_UPDATE_ENGINE_SPEC.md) | Auto-update, LAB/Twin, canary, rollback | vous touchez au cycle de vie |
-| 08 | [`docs/08_LANDSCAPE_AUDIT.md`](docs/08_LANDSCAPE_AUDIT.md) | **Audit du terrain** : ce qu'on assemble vs ce qu'on développe | avant de décider de coder quoi que ce soit |
+| 08 | [`docs/08_LANDSCAPE_AUDIT.md`](docs/08_LANDSCAPE_AUDIT.md) | **Audit du terrain** : ce qu'on assemble vs ce qu'on développe, brique par brique | avant de décider de coder quoi que ce soit |
+| 09 | [`docs/09_ARCHITECTURE_AUDIT_AND_GAPS.md`](docs/09_ARCHITECTURE_AUDIT_AND_GAPS.md) | **Audit d'architecture et analyse d'écarts** : ce qui doit être décidé maintenant vs plus tard | avant de reprendre le développement |
+| 10 | [`docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md`](docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md) | **Build vs Buy** sur les systèmes personnels complets (OpenClaw, OpenJarvis, SemaClaw…) | avant d'adopter une orchestration existante |
+| — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.
 
@@ -71,7 +74,8 @@ Le banc de mesure se lance à part, sur la machine cible : `pnpm bench`
 
 ## L'état actuel du projet
 
-**Phases 0 et 1 franchies. Phase 2 — Outils et vérification — à démarrer.**
+**Phases 0 et 1 franchies. Phase 2 gelée à mi-parcours, pour audit d'architecture
+(voir `docs/09`).**
 
 Ce qui existe et tourne : schéma PostgreSQL avec migrations réversibles, Event
 Ledger append-only chaîné par hash, Policy Gate L0–L4 adossé à Cedar, Memory
