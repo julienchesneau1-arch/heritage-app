@@ -1,16 +1,17 @@
 # JARVIS — Personal Operating System
 
 **Pack de référence v0.2 — Architecture-first**
-Statut : spécification. **Aucun code produit à ce stade, volontairement.**
+Statut : **Phases 0 et 1 construites et vérifiées**, Phase 2 en cours.
 
 ---
 
 ## Ce que ce dépôt contient
 
-Ce dépôt ne contient pas encore Jarvis. Il contient la **constitution** de Jarvis :
-les décisions structurantes, les invariants de sécurité, la politique de dépendances,
-les scénarios de non-régression, et l'audit du terrain qui détermine ce que nous
-allons *assembler* plutôt que *développer*.
+Deux choses, et l'ordre compte : d'abord la **constitution** de Jarvis — décisions
+structurantes, invariants de sécurité, politique de dépendances, scénarios de
+non-régression, audits — puis le **noyau** qui l'applique.
+
+Aucune couche n'a été construite sans porte de sortie vérifiable.
 
 Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 
@@ -51,7 +52,7 @@ pnpm install
 cp .env.example .env        # puis renseigner les mots de passe
 pnpm db:bootstrap           # crée les rôles et la base (superutilisateur)
 pnpm db:migrate             # applique les migrations
-pnpm test                   # 121 tests
+pnpm test                   # 154 tests
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
 ```
@@ -74,17 +75,19 @@ Le banc de mesure se lance à part, sur la machine cible : `pnpm bench`
 
 ## L'état actuel du projet
 
-**Phases 0 et 1 franchies. Phase 2 gelée à mi-parcours, pour audit d'architecture
-(voir `docs/09`).**
+**Phases 0 et 1 franchies. Étape A (fondations de données) posée. Phase 2 gelée
+à mi-parcours, prête à reprendre.**
 
 Ce qui existe et tourne : schéma PostgreSQL avec migrations réversibles, Event
 Ledger append-only chaîné par hash, Policy Gate L0–L4 adossé à Cedar, Memory
-Guard, recherche hybride à trois voies, Context Engine avec détection
-d'ambiguïté, interfaces fournisseurs avec test de contrat bloquant, coffre à
-secrets, banc de mesure, CI. **121 tests passent.**
+Guard à deux axes de classification, recherche hybride à trois voies, Context
+Engine avec détection d'ambiguïté, Memory Inbox, capture d'état antérieur,
+registre des dérivés, interfaces fournisseurs avec test de contrat bloquant,
+coffre à secrets, banc de mesure, CI. **154 tests passent.**
 
 Ce qui n'existe pas encore : Tool Gateway, Verification Engine, séparation
-Privileged/Quarantined, Data Firewall, voix, iOS. Voir `docs/02`.
+Privileged/Quarantined, Data Firewall, Model Router, voix, iOS. Voir `docs/02`
+et l'analyse d'écarts en `docs/09`.
 
 Le document 08 conclut qu'environ **80 % de la machinerie** peut être assemblée à partir
 de briques open source matures, et identifie les **20 %** — la couche de confiance — qui
@@ -95,10 +98,15 @@ indirecte.*
 Les deux décisions bloquantes sont tranchées (9 août 2026) : **Cedar** pour l'évaluation
 de politique (ADR-005), **TypeScript + Swift** pour l'implémentation (ADR-016).
 
-Restent avant Phase 0 : la validation de la frontière assembler / développer, et le
-**banc de mesure** — sept questions que l'audit ne peut pas trancher par la lecture
-(WER français, latence de bout en bout, qualité de récupération, appel d'outils en
-français…). Voir `docs/08 §7`.
+Le document 09 (analyse d'écarts) a conduit à poser cinq **fondations de données**
+avant d'aller plus loin — taxonomie de source à deux axes, capture d'état antérieur,
+registre des dérivés, Memory Inbox, classification fine. Ce sont les seules décisions
+dont le report coûtait cher, parce que la mémoire accumule des données qu'on ne peut
+pas régénérer.
+
+Reste ouvert : le **banc de mesure**, sept questions que la lecture ne peut pas
+trancher (WER français, latence de bout en bout, qualité de récupération, appel
+d'outils en français…). Voir `docs/08 §7` — il s'exécute sur la machine cible.
 
 La règle qui en découle est permanente :
 

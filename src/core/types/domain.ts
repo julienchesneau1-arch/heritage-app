@@ -131,6 +131,100 @@ export const Actor = z.enum([
 export type Actor = z.infer<typeof Actor>;
 
 /* -------------------------------------------------------------------------- */
+/* Origine épistémique — 09 §2.1                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Comment le sait-on ?
+ *
+ * Axe DISTINCT de `Provenance`, et la distinction est le point :
+ *
+ *   `Provenance`  → axe de SÉCURITÉ : cette valeur peut-elle alimenter un
+ *                   paramètre sensible ? (consommé par le Policy Gate)
+ *   `SourceType`  → axe ÉPISTÉMIQUE : quel crédit mérite cette information ?
+ *
+ * Sans ce second axe, « Julien préfère le matin » déclaré par Julien et la
+ * même phrase déduite de ses propos sont indistinguables une fois écrites.
+ */
+export const SourceType = z.enum([
+  'USER_EXPLICIT', // déclaré ET confirmé par l'utilisateur
+  'USER_INFERRED', // déduit de ses propos, non confirmé
+  'MODEL_INFERRED', // déduit par un modèle
+  'TOOL_VERIFIED', // constaté par un outil contre l'état réel
+  'EXTERNAL_SOURCE', // affirmé par un email, un PDF, une page web
+  'SYSTEM', // produit par le noyau
+]);
+export type SourceType = z.infer<typeof SourceType>;
+
+/**
+ * Provenance dérivée de l'origine.
+ *
+ * Dériver plutôt que demander supprime une classe entière d'incohérences :
+ * il devient impossible de déclarer une source externe avec une provenance de
+ * confiance. La base impose d'ailleurs la même cohérence
+ * (`source_matches_provenance`).
+ */
+export function provenanceOf(source: SourceType): Provenance {
+  switch (source) {
+    case 'USER_EXPLICIT':
+    case 'USER_INFERRED':
+      return 'USER';
+    case 'TOOL_VERIFIED':
+      return 'TOOL_OUTPUT';
+    case 'EXTERNAL_SOURCE':
+      return 'EXTERNAL_UNTRUSTED';
+    case 'MODEL_INFERRED':
+    case 'SYSTEM':
+      return 'SYSTEM';
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Catégorie de donnée — clé de la Data Policy (09 §2.1)                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * De quoi parle cette donnée ?
+ *
+ * Clé de la table « donnée × local/cloud » à venir. Elle doit être renseignée
+ * À L'ÉCRITURE : une mémoire écrite sans catégorie restera sans catégorie.
+ */
+export const DataCategory = z.enum([
+  'WEATHER',
+  'TASK',
+  'CALENDAR',
+  'CONTACT',
+  'LOCATION',
+  'EMAIL',
+  'MESSAGE',
+  'DOCUMENT',
+  'FINANCIAL',
+  'HEALTH',
+  'CREDENTIAL',
+  'PERSONAL_MEMORY',
+  'PROJECT',
+  'OTHER',
+]);
+export type DataCategory = z.infer<typeof DataCategory>;
+
+/**
+ * Catégories qui ne peuvent jamais être classées autrement que RED.
+ *
+ * « Les secrets ne sortent jamais » cesse d'être une convention applicative :
+ * c'est une contrainte de base (`sensitive_categories_are_red`), et le Guard
+ * corrige la classification plutôt que de laisser passer.
+ */
+const ALWAYS_RED: ReadonlySet<DataCategory> = new Set<DataCategory>([
+  'CREDENTIAL',
+  'FINANCIAL',
+  'HEALTH',
+]);
+
+export function requiresRed(category: DataCategory): boolean {
+  return ALWAYS_RED.has(category);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Classification de mémoire — 03 §11                                         */
 /* -------------------------------------------------------------------------- */
 

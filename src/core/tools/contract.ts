@@ -10,7 +10,6 @@
  */
 import { z } from 'zod';
 import type { Db } from '../db/client.js';
-import type { SecretVault } from '../secrets/vault.js';
 import type {
   Actor,
   AutonomyLevel,

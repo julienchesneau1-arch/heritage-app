@@ -6,7 +6,14 @@
  * contournerait 03 §11 et rouvrirait l'empoisonnement de mémoire.
  */
 import type { Db } from '../db/client.js';
-import type { MemoryKind, PrivacyClass, Provenance } from '../types/domain.js';
+import type {
+  DataCategory,
+  MemoryKind,
+  PrivacyClass,
+  Provenance,
+  SourceType,
+} from '../types/domain.js';
+import { createDerivativeRegistry } from './derivatives.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import type { MemoryState, MemoryType, StoredMemory } from './types.js';
 
@@ -16,6 +23,8 @@ export interface VerifiedMemory {
   readonly content: string;
   readonly confidence: number;
   readonly source: string;
+  readonly sourceType: SourceType;
+  readonly dataCategory: DataCategory;
   readonly provenance: Provenance;
   readonly privacyClass: PrivacyClass;
   readonly subjectEntityId: string | null;
@@ -31,6 +40,8 @@ export interface MemoryRow {
   content: string;
   confidence: number;
   source: string;
+  source_type: string;
+  data_category: string;
   provenance: string;
   privacy_class: string;
   state: string;
@@ -49,6 +60,8 @@ export function toStoredMemory(row: MemoryRow): StoredMemory {
     content: row.content,
     confidence: row.confidence,
     source: row.source,
+    sourceType: row.source_type as SourceType,
+    dataCategory: row.data_category as DataCategory,
     provenance: row.provenance as Provenance,
     privacyClass: row.privacy_class as PrivacyClass,
     state: row.state as MemoryState,
@@ -61,9 +74,9 @@ export function toStoredMemory(row: MemoryRow): StoredMemory {
 }
 
 const SELECT_COLUMNS = `
-  id, kind, memory_type, content, confidence, source, provenance,
-  privacy_class, state, subject_entity_id, created_at, last_verified_at,
-  expires_at, (embedding IS NOT NULL) AS has_embedding
+  id, kind, memory_type, content, confidence, source, source_type,
+  data_category, provenance, privacy_class, state, subject_entity_id,
+  created_at, last_verified_at, expires_at, (embedding IS NOT NULL) AS has_embedding
 `;
 
 export interface MemoryStore {
@@ -84,14 +97,19 @@ export interface MemoryStore {
 }
 
 export function createMemoryStore(db: Db): MemoryStore {
+  // Le registre des dérivés est interne au magasin : tout artefact dérivé doit
+  // être enregistré au moment où il est créé, pas dans un second temps que
+  // quelqu'un pourrait oublier (09 §2.1).
+  const derivatives = createDerivativeRegistry(db);
+
   return {
     async insertVerified(memory: VerifiedMemory): Promise<Result<StoredMemory>> {
       const inserted = await db.query<MemoryRow>(
         `INSERT INTO memories (
-           kind, memory_type, content, confidence, source, provenance,
-           privacy_class, subject_entity_id, expires_at, content_digest,
-           last_verified_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+           kind, memory_type, content, confidence, source, source_type,
+           data_category, provenance, privacy_class, subject_entity_id,
+           expires_at, content_digest, last_verified_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          RETURNING ${SELECT_COLUMNS}`,
         [
           memory.kind,
@@ -99,6 +117,8 @@ export function createMemoryStore(db: Db): MemoryStore {
           memory.content,
           memory.confidence,
           memory.source,
+          memory.sourceType,
+          memory.dataCategory,
           memory.provenance,
           memory.privacyClass,
           memory.subjectEntityId,
@@ -153,6 +173,19 @@ export function createMemoryStore(db: Db): MemoryStore {
         [literal, model, id],
       );
       if (!updated.ok) return updated;
+
+      // L'embedding vit aujourd'hui sur la même ligne que la mémoire, donc il
+      // disparaît en cascade. On l'enregistre malgré tout : le jour où un
+      // index externe apparaîtra, la garantie de suppression ne dépendra pas
+      // de la mémoire qu'aura quelqu'un de cette particularité.
+      const registered = await derivatives.register(
+        id,
+        'EMBEDDING',
+        `memories.embedding (${model})`,
+        true,
+      );
+      if (!registered.ok) return registered;
+
       return ok(undefined);
     },
 

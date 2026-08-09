@@ -22,7 +22,6 @@ import type { PolicyGate } from '../policy/gate.js';
 import type { PolicyOutcome } from '../policy/types.js';
 import type { SecretVault } from '../secrets/vault.js';
 import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domain.js';
-import { isUntrusted } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import type { VerificationEngine } from '../verification/engine.js';
 import type {
@@ -220,7 +219,12 @@ export function createToolGateway(deps: {
             if (!spec.sensitive) continue;
             const value = (input as Record<string, unknown>)[spec.name];
             if (value !== undefined) {
-              sensitiveValues[spec.name] = String(value).slice(0, 200);
+              // La confirmation doit porter sur la valeur CONCRÈTE. On la
+              // sérialise sans supposer qu'elle est une chaîne : un objet
+              // rendu « [object Object] » ne permettrait de confirmer rien.
+              const rendered =
+                typeof value === 'string' ? value : JSON.stringify(value);
+              sensitiveValues[spec.name] = (rendered ?? '').slice(0, 200);
             }
           }
         }

@@ -9,6 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { createDb } from '../../src/core/db/client.js';
 import { createMemoryGuard } from '../../src/core/memory/guard.js';
+import { createMemoryInbox } from '../../src/core/memory/inbox.js';
 import { createMemoryStore } from '../../src/core/memory/store.js';
 import { createHybridSearch } from '../../src/core/memory/search.js';
 import { createEntityResolver } from '../../src/core/context/resolver.js';
@@ -53,18 +54,22 @@ const checks: readonly Check[] = [
       if (!dbConfigured) return false;
       const connection = db();
       try {
-        const guard = createMemoryGuard(createMemoryStore(connection));
+        const guard = createMemoryGuard(
+          createMemoryStore(connection),
+          createMemoryInbox(connection),
+        );
         const result = await guard.propose(
           {
             memoryType: 'PREFERENCE',
             content: `Julien aime X (contrôle de porte ${String(Date.now())})`,
-            provenance: 'EXTERNAL_UNTRUSTED',
+            sourceType: 'EXTERNAL_SOURCE',
             source: 'email:gate-check',
+            dataCategory: 'EMAIL',
             suggestedConfidence: 1,
           },
           { userConfirmed: false },
         );
-        if (!result.ok) return false;
+        if (!result.ok || result.value.outcome !== 'STORED') return false;
         return (
           result.value.memory.kind === 'EXTERNAL_CLAIM' &&
           result.value.memory.memoryType !== 'PREFERENCE' &&
@@ -113,6 +118,8 @@ const checks: readonly Check[] = [
         content: 'z'.repeat(400),
         confidence: 0.9,
         source: 'gate',
+        sourceType: 'USER_EXPLICIT',
+        dataCategory: 'PERSONAL_MEMORY',
         provenance: 'USER',
         privacyClass: 'ORANGE',
         state: 'ACTIVE',
@@ -154,6 +161,8 @@ const checks: readonly Check[] = [
             content: 'IBAN FR76 0000 0000 0000',
             confidence: 1,
             source: 'gate',
+            sourceType: 'USER_EXPLICIT',
+            dataCategory: 'FINANCIAL',
             provenance: 'USER',
             privacyClass: 'RED',
             state: 'ACTIVE',
@@ -183,19 +192,24 @@ const checks: readonly Check[] = [
       if (!dbConfigured) return false;
       const connection = db();
       try {
-        const guard = createMemoryGuard(createMemoryStore(connection));
+        const guard = createMemoryGuard(
+          createMemoryStore(connection),
+          createMemoryInbox(connection),
+        );
         const marker = `porte-hors-ligne-${String(Date.now())}`;
         const stored = await guard.propose(
           {
             memoryType: 'SEMANTIC',
             content: `Contrôle de porte hors ligne ${marker}`,
-            provenance: 'USER',
+            sourceType: 'USER_EXPLICIT',
             source: 'gate',
+            dataCategory: 'PERSONAL_MEMORY',
             suggestedConfidence: 0.9,
           },
           { userConfirmed: true },
         );
-        if (!stored.ok) return false;
+        if (!stored.ok || stored.value.outcome !== 'STORED') return false;
+        const storedId = stored.value.memory.id;
 
         // `null` = aucun fournisseur, exactement le cas réseau coupé.
         const search = createHybridSearch(connection, null);
@@ -204,7 +218,7 @@ const checks: readonly Check[] = [
 
         return (
           found.value.degraded &&
-          found.value.merged.some((m) => m.memory.id === stored.value.memory.id)
+          found.value.merged.some((m) => m.memory.id === storedId)
         );
       } finally {
         await connection.close();

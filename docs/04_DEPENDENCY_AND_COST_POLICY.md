@@ -143,11 +143,24 @@ routage réel.
 
 # PARTIE II — COÛT
 
-## 8. La cible
+## 8. La cible *(révisée le 9 août 2026 — voir `00 §R2`)*
 
 ```
-Coût logiciel récurrent : 0 €/mois
+Coût logiciel récurrent obligatoire : 0 €/mois
+Coût marginal : 0 € sur 80 à 95 % des interactions
 ```
+
+**Pourquoi deux lignes plutôt qu'une.** « 0 € » sans qualificatif était tenable
+uniquement en acceptant une dégradation qu'on ne nommait pas : la substitution
+naïve d'un modèle frontière par un modèle local générique coûte 25 à 39 points
+de précision sur des tâches d'IA personnelle (`10 §2.1`).
+
+La première ligne reste absolue : **aucun abonnement n'est requis** pour l'usage
+quotidien, et le système doit tourner un mois entier sans cloud.
+
+La seconde est un objectif mesurable : la grande majorité des interactions ne
+coûte rien, et le cloud n'est sollicité que lorsque le gain de qualité le
+justifie réellement — sur des données que la politique autorise à sortir.
 
 Aucun abonnement obligatoire pour : LLM, base vectorielle, orchestration, mémoire,
 transcription, TTS, automatisation.

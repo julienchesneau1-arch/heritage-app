@@ -94,6 +94,9 @@ jobs:
       - name: Tests contexte
         run: pnpm test:context
 
+      - name: Tests undo
+        run: pnpm test:undo
+
       - name: Tests unitaires
         run: pnpm test:unit
 

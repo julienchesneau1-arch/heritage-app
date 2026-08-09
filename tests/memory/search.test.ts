@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHybridSearch, type HybridSearch } from '../../src/core/memory/search.js';
 import { createMemoryStore, type MemoryStore } from '../../src/core/memory/store.js';
 import { createMemoryGuard } from '../../src/core/memory/guard.js';
+import { createMemoryInbox } from '../../src/core/memory/inbox.js';
 import type { Db } from '../../src/core/db/client.js';
 import { appDb, databaseAvailable } from '../helpers/db.js';
 import {
@@ -40,7 +41,7 @@ describe.skipIf(skip)('recherche hybride', () => {
   beforeAll(async () => {
     db = appDb();
     store = createMemoryStore(db);
-    const guard = createMemoryGuard(store);
+    const guard = createMemoryGuard(store, createMemoryInbox(db));
 
     const entity = await db.query<{ id: string }>(
       `INSERT INTO entities (kind, display_name) VALUES ('PROJECT', 'Mariage')
@@ -56,14 +57,18 @@ describe.skipIf(skip)('recherche hybride', () => {
         {
           memoryType: 'SEMANTIC',
           content,
-          provenance: 'USER',
+          sourceType: 'USER_EXPLICIT',
           source: 'test-corpus',
+          dataCategory: 'PERSONAL_MEMORY',
           suggestedConfidence: 0.9,
           subjectEntityId: index === 1 || index === 2 ? entityId : null,
         },
         { userConfirmed: true },
       );
       if (!stored.ok) throw new Error(stored.error.message);
+      if (stored.value.outcome !== 'STORED') {
+        throw new Error(`corpus non stocké : ${stored.value.outcome}`);
+      }
 
       const attached = await store.attachEmbedding(
         stored.value.memory.id,

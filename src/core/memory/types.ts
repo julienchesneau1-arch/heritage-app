@@ -15,8 +15,8 @@
  */
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { PrivacyClass, Provenance } from '../types/domain.js';
-import type { MemoryKind } from '../types/domain.js';
+import { DataCategory, PrivacyClass, SourceType } from '../types/domain.js';
+import type { MemoryKind, Provenance } from '../types/domain.js';
 
 export const MemoryType = z.enum([
   'EPISODIC', // M2 — ce qui s'est passé
@@ -41,10 +41,18 @@ export type MemoryState = z.infer<typeof MemoryState>;
 export const MemoryProposal = z.object({
   memoryType: MemoryType,
   content: z.string().min(1).max(4000),
-  /** D'où vient l'information. Détermine le `kind` retenu. */
-  provenance: Provenance,
+  /**
+   * Comment on le sait. Détermine le `kind` retenu et le plafond de confiance.
+   *
+   * La `provenance` (axe de sécurité) en est DÉRIVÉE, jamais fournie : cela
+   * rend impossible de déclarer une source externe avec une provenance de
+   * confiance.
+   */
+  sourceType: SourceType,
   /** Source concrète : « conversation », identifiant d'email, URL… */
   source: z.string().min(1),
+  /** De quoi il s'agit. Clé de la Data Policy — renseignée à l'écriture. */
+  dataCategory: DataCategory.default('OTHER'),
   privacyClass: PrivacyClass.default('ORANGE'),
   subjectEntityId: z.uuid().nullable().default(null),
   /** Confiance suggérée. Le Guard peut la réduire, jamais l'augmenter. */
@@ -61,6 +69,8 @@ export interface StoredMemory {
   readonly content: string;
   readonly confidence: number;
   readonly source: string;
+  readonly sourceType: SourceType;
+  readonly dataCategory: DataCategory;
   readonly provenance: Provenance;
   readonly privacyClass: PrivacyClass;
   readonly state: MemoryState;
@@ -84,6 +94,42 @@ export const CONFIDENCE_CEILING: Readonly<Record<MemoryKind, number>> = {
   HYPOTHESIS: 0.5,
   EXTERNAL_CLAIM: 0.4,
 };
+
+/**
+ * Second plafond, par origine.
+ *
+ > « Une information déduite par le modèle ne doit jamais avoir le même statut
+ > qu'une information déclarée par l'utilisateur. »
+ *
+ * Le Guard applique le MINIMUM des deux plafonds. Deux barrières valent mieux
+ * qu'une : le crédit (`kind`) peut être correct alors que l'origine reste
+ * faible, et réciproquement.
+ */
+export const SOURCE_CEILING: Readonly<Record<SourceType, number>> = {
+  USER_EXPLICIT: 1.0,
+  TOOL_VERIFIED: 0.95,
+  SYSTEM: 0.8,
+  MODEL_INFERRED: 0.7,
+  USER_INFERRED: 0.6,
+  EXTERNAL_SOURCE: 0.4,
+};
+
+/** Un candidat mémoire en attente de décision — le Memory Inbox (09 §2.1). */
+export interface MemoryCandidate {
+  readonly id: string;
+  readonly content: string;
+  readonly memoryType: MemoryType;
+  readonly sourceType: SourceType;
+  readonly source: string;
+  readonly dataCategory: DataCategory;
+  readonly privacyClass: PrivacyClass;
+  readonly suggestedConfidence: number;
+  readonly subjectEntityId: string | null;
+  readonly state: 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'EXPIRED';
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly resultingMemoryId: string | null;
+}
 
 /**
  * Empreinte de déduplication.

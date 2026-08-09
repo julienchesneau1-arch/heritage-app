@@ -101,9 +101,41 @@ Chaque dépendance doit gagner son droit d'exister : pourquoi elle est nécessai
 pourquoi une API native ne suffit pas, sa licence, les données qu'elle voit, sa
 stratégie de mise à jour, et **comment on la remplace**. Voir `04`.
 
-### R2 — €0 récurrent comme contrainte d'architecture
-Ce n'est plus un objectif d'optimisation, c'est une contrainte de conception. Le
-système doit tourner **sans aucun fournisseur IA payant**. Budget cloud par défaut : **0 €**.
+### R2 — Data-local-first + compute-adaptive *(révisé le 9 août 2026)*
+
+**Formulation d'origine**, conservée pour mémoire : « tout doit être local ».
+
+**Pourquoi elle a été révisée.** Le papier OpenJarvis (arXiv 2605.17172, `10 §2`)
+mesure ce que coûte la substitution naïve : remplacer un modèle frontière par un
+modèle local générique fait chuter la précision de **25 à 39 points** sur des
+tâches d'IA personnelle. Une pile **décomposée**, dont chaque primitive est
+optimisée séparément, revient à **3,2 points** du meilleur modèle cloud — pour
+un coût marginal environ **800× inférieur**.
+
+Autrement dit : « tout local » avec un modèle générique coûte de la fiabilité,
+et c'est précisément la fiabilité qui est notre produit.
+
+**Formulation retenue :**
+
+> **Les DONNÉES restent locales par défaut. Le CALCUL s'adapte.**
+
+Ce qui ne bouge pas :
+- aucun abonnement obligatoire pour l'usage quotidien ;
+- budget cloud par défaut **0 €** ;
+- le cloud reste **coupable globalement** (invariant I2) ;
+- une donnée RED ne sort **jamais**, quel que soit le gain de qualité.
+
+Ce qui devient explicite :
+- l'escalade vers le cloud est une **décision mesurée**, pas un aveu d'échec ;
+- quand elle a lieu, le cloud reçoit le **minimum nécessaire** — passages
+  pertinents, version anonymisée, résumé local, ou la seule question — jamais
+  le document entier par défaut ;
+- l'objectif chiffré devient **0 € marginal sur 80 à 95 % des interactions**,
+  ce qui est mesurable, plutôt que « 0 € », qui ne l'était qu'au prix d'une
+  dégradation non dite.
+
+*Réserve : ces chiffres proviennent du résumé du papier, pas d'une lecture
+intégrale de sa section expérimentale (`10 §5.3`).*
 
 ### R3 — Sécurité par architecture
 Un LLM peut demander `send_email(...)`. Il ne peut jamais décider que l'action est

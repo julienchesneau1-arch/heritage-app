@@ -447,3 +447,149 @@ tard :
 (fuites mémoire non maîtrisées, redémarrages fréquents en usage réel), le noyau est
 suffisamment contractuel pour qu'un portage progressif vers Go reste possible —
 composant par composant, pas en réécriture.
+
+---
+
+## ADR-017 — Data-local-first + compute-adaptive
+
+**Statut : RATIFIÉ** *(9 août 2026)* — remplace la formulation « tout local »
+
+**Contexte.** OpenJarvis (arXiv 2605.17172) mesure ce que coûte la substitution
+naïve d'un modèle frontière par un modèle local générique : **25 à 39 points**
+de précision sur des tâches d'IA personnelle. Une pile décomposée revient à
+**3,2 points** pour un coût marginal ~**800×** inférieur.
+
+**Décision.** Les **données** restent locales par défaut ; le **calcul** s'adapte.
+Le cloud reste coupable globalement, et une donnée RED ne sort jamais. Quand
+l'escalade a lieu, le cloud reçoit le minimum nécessaire — passages pertinents,
+version anonymisée, résumé local — jamais le document entier par défaut.
+
+**Conséquences.** L'objectif économique devient « 0 € marginal sur 80–95 % des
+interactions », mesurable, au lieu de « 0 € », qui masquait une dégradation.
+
+**Condition de révision.** Lecture intégrale de la section expérimentale du
+papier (`10 §5.3`) : si la méthodologie ne tient pas, revenir à la formulation
+d'origine.
+
+---
+
+## ADR-018 — Deux axes de classification mémoire
+
+**Statut : RATIFIÉ** *(9 août 2026)*
+
+**Contexte.** `provenance` conflait deux questions distinctes : « cette valeur
+peut-elle alimenter un paramètre sensible ? » (sécurité) et « quel crédit
+mérite cette information ? » (épistémologie). Conséquence concrète : « Julien
+préfère le matin » déclaré et le même énoncé déduit étaient indistinguables une
+fois écrits.
+
+**Décision.** Deux colonnes, deux rôles :
+
+- `provenance` — axe de **sécurité**, consommé par le Policy Gate. Inchangé.
+- `source_type` — axe **épistémique** : `USER_EXPLICIT`, `USER_INFERRED`,
+  `MODEL_INFERRED`, `TOOL_VERIFIED`, `EXTERNAL_SOURCE`, `SYSTEM`.
+
+La provenance est **dérivée** de l'origine, jamais fournie : déclarer une source
+externe avec une provenance de confiance devient impossible, et la base impose
+la même cohérence (`source_matches_provenance`).
+
+Deux plafonds de confiance indépendants — par crédit et par origine — dont on
+applique le minimum.
+
+**Conséquences.** Le Guard peut désormais refuser à un proposant de s'attribuer
+l'explicitness : sans confirmation, `USER_EXPLICIT` redevient `USER_INFERRED`.
+
+**Condition de révision.** Aucune. Cette décision devait être prise avant la
+première donnée réelle ; elle ne se rattrape pas.
+
+---
+
+## ADR-019 — Toute mutation capture de quoi être annulée
+
+**Statut : RATIFIÉ** *(9 août 2026)*
+
+**Contexte.** Le contrat d'outil décrivait `rollback` comme une **chaîne de
+description**, pas comme du code. La réversibilité était documentée, pas
+outillée. Or annuler exige d'avoir capturé l'état antérieur **au moment de
+l'écriture** : une action exécutée sans capture est définitivement non annulable.
+
+**Décision.** Deux mécaniques, choisies selon la nature de la mutation :
+
+- **`INVERSE_OPERATION`** — création. On stocke l'appel qui défait. Aucune
+  donnée métier n'est copiée.
+- **`STATE_RESTORE`** — modification. On copie les valeurs antérieures, avec
+  leur propre classification de confidentialité.
+- **`NOT_UNDOABLE`** — déclaré explicitement, jamais par omission.
+
+Les instantanés **expirent** (7 jours) : un instantané n'est pas un archivage.
+
+**Conséquences.** L'interface « annule la dernière action » peut arriver plus
+tard sans rien coûter. La capture, elle, est le coût irrécupérable.
+
+**Condition de révision.** Aucune sur le principe.
+
+---
+
+## ADR-020 — Memory Inbox : une proposition non confirmée attend
+
+**Statut : RATIFIÉ** *(9 août 2026)*
+
+**Contexte.** Le Guard refusait une préférence non confirmée — et la
+proposition était **perdue**. Jarvis ne pouvait jamais dire « j'ai remarqué
+ceci, dois-je le retenir ? ».
+
+**Décision.** Table `memory_candidates`. Une `PREFERENCE` ou une `RULE` non
+confirmée y est déposée plutôt que refusée. Déduplication sur les candidats en
+attente ; expiration à 30 jours.
+
+**Conséquences.** L'interface de confirmation viendra plus tard. La file, non :
+sans elle, chaque mois d'usage serait un mois d'apprentissage non rattrapable.
+
+**Condition de révision.** Si la file se révèle ignorée en usage réel, revoir la
+présentation — pas le mécanisme.
+
+---
+
+## ADR-021 — Registre des dérivés
+
+**Statut : RATIFIÉ** *(9 août 2026)*
+
+**Contexte.** « Oublie ça » doit supprimer la mémoire **et tous ses dérivés**.
+Aujourd'hui l'embedding vit sur la même ligne, donc il disparaît en cascade —
+ce ne sera plus vrai au premier index externe ou au premier cache.
+
+**Décision.** Tout artefact dérivé est enregistré à sa création, avec son
+emplacement et le fait qu'il disparaisse ou non en cascade.
+
+**Conséquences.** La garantie de suppression reste vraie quand l'architecture
+s'étendra, au lieu qu'on découvre alors qu'on ne sait plus où sont les copies.
+
+**Condition de révision.** Aucune.
+
+---
+
+## ADR-022 — OpenClaw n'est pas notre Tool Bus
+
+**Statut : RATIFIÉ** *(9 août 2026)*
+
+**Contexte.** OpenClaw est le projet open source le plus proche de « assistant
+personnel qui agit réellement » : passerelle auto-hébergée, multi-canaux,
+multi-modèles, très forte adoption. La question de l'adopter comme couche
+d'outils s'est posée sérieusement.
+
+**Décision. Non.** Deux faits, vérifiés en `10 §1.4` :
+
+- l'accès **shell** est une fonctionnalité centrale — invariant **S2** violé ;
+- il route vers le cloud par défaut, et le papier OpenJarvis le cite nommément
+  comme pile envoyant des données locales sensibles au cloud — invariant **I5**
+  violé.
+
+On ne pose pas une politique au-dessus d'une couche dont la valeur principale
+est de ne pas en avoir : le Policy Engine deviendrait décoratif.
+
+**Conséquences.** Ses **connecteurs de canaux** (WhatsApp, Signal, iMessage)
+restent intéressants et pourront devenir un `MessagingProvider` **derrière**
+notre Tool Gateway. À rouvrir en Phase 3+, pas avant.
+
+**Condition de révision.** Si OpenClaw introduit un mode sans exécution shell et
+sans routage cloud par défaut, réévaluer le connecteur — jamais le bus.

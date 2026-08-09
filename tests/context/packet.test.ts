@@ -22,6 +22,8 @@ function memory(
     content: 'contenu de test',
     confidence: 0.9,
     source: 'test',
+    sourceType: 'USER_EXPLICIT',
+    dataCategory: 'PERSONAL_MEMORY',
     provenance: 'USER',
     privacyClass: 'ORANGE' as PrivacyClass,
     state: 'ACTIVE',
