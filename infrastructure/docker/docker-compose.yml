@@ -1,0 +1,41 @@
+# PostgreSQL 16 + pgvector, pour tester Jarvis sans rien installer.
+#
+# Référence : ADR-001 (base unique), ADR-002 (voie sémantique).
+#
+#   docker compose -f infrastructure/docker/docker-compose.yml up -d
+#   pnpm setup
+#   pnpm jarvis
+#
+# L'image `pgvector/pgvector:pg16` est PostgreSQL 16 officiel avec l'extension
+# déjà compilée : c'est ce qui évite l'étape d'installation manuelle qui bloque
+# le plus souvent.
+#
+# ⚠ Ce fichier n'a PAS pu être exécuté dans l'environnement où il a été écrit
+#   (client Docker présent, démon absent). Le chemin PostgreSQL local, lui, est
+#   vérifié. Signalé plutôt que supposé.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: jarvis-postgres
+    restart: unless-stopped
+    environment:
+      # Mot de passe du superutilisateur, utilisé uniquement par `pnpm setup`
+      # pour créer les rôles applicatifs. Il ne sert jamais au noyau, qui se
+      # connecte avec `jarvis_app` (03, moindre privilège).
+      POSTGRES_PASSWORD: jarvis_local_superuser
+      POSTGRES_DB: postgres
+    ports:
+      # Exposé sur la boucle locale uniquement : aucune base ne doit être
+      # joignable depuis le réseau (PRD §30).
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - jarvis-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  jarvis-pgdata:

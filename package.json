@@ -8,7 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "jarvis": "tsx src/apps/cli/main.ts",
+    "jarvis": "tsx --env-file-if-exists=.env src/apps/cli/main.ts",
+    "jarvis:setup": "tsx --env-file-if-exists=.env ops/setup.ts",
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -23,15 +24,15 @@
     "test:tools": "vitest run tests/tools",
     "test:quarantine": "vitest run tests/quarantine",
     "test:intent": "vitest run tests/intent",
-    "db:bootstrap": "tsx ops/db/bootstrap.ts",
-    "db:migrate": "tsx ops/db/migrate.ts up",
-    "db:rollback": "tsx ops/db/migrate.ts down",
-    "db:status": "tsx ops/db/migrate.ts status",
+    "db:bootstrap": "tsx --env-file-if-exists=.env ops/db/bootstrap.ts",
+    "db:migrate": "tsx --env-file-if-exists=.env ops/db/migrate.ts up",
+    "db:rollback": "tsx --env-file-if-exists=.env ops/db/migrate.ts down",
+    "db:status": "tsx --env-file-if-exists=.env ops/db/migrate.ts status",
     "secrets:scan": "tsx ops/security/scan-secrets.ts",
-    "gate:phase0": "tsx ops/gates/phase0.ts",
-    "gate:phase1": "tsx ops/gates/phase1.ts",
-    "gate:phase2": "tsx ops/gates/phase2.ts",
-    "bench": "tsx ops/bench/run.ts"
+    "gate:phase0": "tsx --env-file-if-exists=.env ops/gates/phase0.ts",
+    "gate:phase1": "tsx --env-file-if-exists=.env ops/gates/phase1.ts",
+    "gate:phase2": "tsx --env-file-if-exists=.env ops/gates/phase2.ts",
+    "bench": "tsx --env-file-if-exists=.env ops/bench/run.ts"
   },
   "dependencies": {
     "@cedar-policy/cedar-wasm": "4.12.0",

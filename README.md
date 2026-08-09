@@ -48,18 +48,22 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 Prérequis : **Node 22+**, **pnpm 10+**, **PostgreSQL 16+** (avec `pgvector` pour
 la Phase 1).
 
+Guide pas à pas : [`QUICKSTART.md`](QUICKSTART.md).
+
 ```bash
 pnpm install
-cp .env.example .env        # puis renseigner les mots de passe
-pnpm db:bootstrap           # crée les rôles et la base (superutilisateur)
-pnpm db:migrate             # applique les migrations
+pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
+pnpm jarvis                 # l'interface texte
+
 pnpm test                   # 221 tests
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
 pnpm gate:phase2            # vérifie la porte de sortie Phase 2
-
-pnpm jarvis                 # lance l'interface texte
 ```
+
+Les tests tournent sur une base séparée (`jarvis_test`). Un garde-fou refuse de
+les lancer si la base visée ne contient pas « test » dans son nom : la suite
+recrée le schéma à chaque exécution.
 
 ```text
 > Ajoute du terreau à ma liste
