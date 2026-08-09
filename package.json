@@ -19,6 +19,8 @@
     "test:memory": "vitest run tests/memory",
     "test:context": "vitest run tests/context",
     "test:undo": "vitest run tests/undo",
+    "test:tools": "vitest run tests/tools",
+    "test:quarantine": "vitest run tests/quarantine",
     "db:bootstrap": "tsx ops/db/bootstrap.ts",
     "db:migrate": "tsx ops/db/migrate.ts up",
     "db:rollback": "tsx ops/db/migrate.ts down",
@@ -26,6 +28,7 @@
     "secrets:scan": "tsx ops/security/scan-secrets.ts",
     "gate:phase0": "tsx ops/gates/phase0.ts",
     "gate:phase1": "tsx ops/gates/phase1.ts",
+    "gate:phase2": "tsx ops/gates/phase2.ts",
     "bench": "tsx ops/bench/run.ts"
   },
   "dependencies": {

@@ -130,13 +130,32 @@ Et, avant chaque implémentation :
 - Les 5 premiers outils : `memory_add`, `memory_search`, `task_create`, `task_list`,
   `note_create`.
 
-**Porte de sortie.**
-- [ ] Une commande répétée pour cause d'erreur réseau ne crée pas de doublon.
-- [ ] Une mutation dont la vérification échoue est rapportée comme `FAILED`, jamais
-      comme un succès.
-- [ ] Aucun outil ne reçoit un secret via le modèle.
-- [ ] Un paramètre sensible provenant d'une source non fiable déclenche une
-      confirmation.
+**Porte de sortie — franchie le 9 août 2026, vérifiable par `pnpm gate:phase2`.**
+- [x] Une commande répétée pour cause d'erreur réseau ne crée pas de doublon. Le
+      rejeu **relit l'état réel** au lieu de rejouer un résultat mémorisé : un
+      rejeu ne peut donc pas affirmer un succès que le monde ne confirme plus.
+- [x] Une mutation dont la vérification échoue est rapportée comme `FAILED`,
+      jamais comme un succès. `CONFIRMED` n'est produit qu'à un seul endroit du
+      code, et cette fonction exige une preuve en argument.
+- [x] Aucun outil ne reçoit un secret via le modèle. Un outil qui ne déclare
+      aucun secret reçoit une carte vide, pas le coffre.
+- [x] Un paramètre sensible provenant d'une source non fiable déclenche une
+      confirmation **portant sur la valeur concrète**. Un paramètre dont la
+      provenance n'est pas déclarée est traité comme non fiable.
+
+> **Notes de mise en œuvre.**
+> — `egress` est **dérivé du contrat d'outil**, jamais fourni par l'appelant :
+> sinon il suffirait de mentir sur ce champ pour contourner le mode privé.
+> — L'ordre des étapes du Gateway est la sécurité elle-même. Deux inversions
+> seraient fatales : injecter les secrets avant la politique donnerait une clé à
+> une action qui va être refusée ; journaliser avant la vérification écrirait un
+> succès que rien ne prouve.
+> — La capture d'annulation (ADR-019) est câblée, mais **son exécution ne l'est
+> pas** : les `inverseToolId` désignent des outils qui arriveront avec l'Undo
+> Engine. La capture est un enregistrement, pas une exécution — et c'est elle
+> qui ne se rattrape pas.
+> — Un timeout produit `UNKNOWN`, jamais `FAILED` : l'action a peut-être abouti
+> côté fournisseur.
 
 ---
 

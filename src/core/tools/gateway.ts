@@ -23,6 +23,7 @@ import type { PolicyOutcome } from '../policy/types.js';
 import type { SecretVault } from '../secrets/vault.js';
 import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
+import { createSnapshotStore } from '../undo/snapshots.js';
 import type { VerificationEngine } from '../verification/engine.js';
 import type {
   RegisteredTool,
@@ -119,6 +120,7 @@ export function createToolGateway(deps: {
   verifier: VerificationEngine;
 }): ToolGateway {
   const tools = new Map<string, RegisteredTool>();
+  const snapshots = createSnapshotStore(deps.db);
 
   return {
     register(tool: RegisteredTool): Result<void> {
@@ -360,8 +362,31 @@ export function createToolGateway(deps: {
       if (!verified.ok) return verified;
       const verification = verified.value;
 
-      /* --- 7. Registre d'opérations + journal ----------------------------- */
+      /* --- 7. Capture d'état antérieur (ADR-019) --------------------------
+         Avant le journal, et seulement si l'exécution a produit une ressource.
+         Une capture qui échoue ne fait PAS échouer l'action — l'action a déjà
+         eu lieu. Elle rend simplement l'annulation impossible, ce que le
+         journal doit refléter. */
       const resource = executed.value.resource;
+      let undoCaptured = false;
+
+      if (executed.value.undo !== undefined && resource !== undefined) {
+        const undo = executed.value.undo;
+        const captured = await snapshots.capture({
+          operationId: call.operationId,
+          resourceKind: resource.kind,
+          resourceId: resource.id,
+          undoKind: undo.kind,
+          ...(undo.kind === 'INVERSE_OPERATION'
+            ? { inverseToolId: undo.inverseToolId, inverseInput: undo.inverseInput }
+            : {}),
+          ...(undo.kind === 'STATE_RESTORE' ? { priorState: undo.priorState } : {}),
+          privacyClass: def.privacyClass,
+        });
+        undoCaptured = captured.ok;
+      }
+
+      /* --- 8. Registre d'opérations + journal ----------------------------- */
       const recorded = await deps.db.query(
         `INSERT INTO tool_operations
            (operation_id, tool_id, tool_version, status, resource_kind,
@@ -383,7 +408,9 @@ export function createToolGateway(deps: {
 
       const event = await deps.ledger.append({
         actor: call.actor,
-        eventType: def.auditEvent,
+        eventType: undoCaptured
+          ? def.auditEvent
+          : `${def.auditEvent}_NO_UNDO`,
         tool: def.id,
         policyDecision: 'ALLOW',
         autonomyLevel: policy.effectiveAutonomy,

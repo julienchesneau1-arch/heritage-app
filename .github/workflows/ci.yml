@@ -97,6 +97,12 @@ jobs:
       - name: Tests undo
         run: pnpm test:undo
 
+      - name: Tests outils
+        run: pnpm test:tools
+
+      - name: Tests quarantaine
+        run: pnpm test:quarantine
+
       - name: Tests unitaires
         run: pnpm test:unit
 
@@ -105,3 +111,6 @@ jobs:
 
       - name: Porte de sortie Phase 1
         run: pnpm gate:phase1
+
+      - name: Porte de sortie Phase 2
+        run: pnpm gate:phase2

@@ -100,6 +100,27 @@ export interface ToolContext {
   readonly actor: Actor;
 }
 
+/**
+ * De quoi annuler l'exécution (ADR-019).
+ *
+ * C'est l'OUTIL qui sait comment se défaire — pas le Gateway, qui ignore la
+ * sémantique de la ressource. Le Gateway se contente de capturer ce que
+ * l'outil déclare, avant même que l'Undo Engine existe.
+ */
+export type UndoCapture =
+  | {
+      readonly kind: 'INVERSE_OPERATION';
+      /**
+       * Outil qui défait. Peut désigner un outil pas encore enregistré : la
+       * capture est un enregistrement, pas une exécution. L'Undo Engine
+       * vérifiera l'existence au moment d'annuler.
+       */
+      readonly inverseToolId: string;
+      readonly inverseInput: unknown;
+    }
+  | { readonly kind: 'STATE_RESTORE'; readonly priorState: unknown }
+  | { readonly kind: 'NOT_UNDOABLE' };
+
 /** Résultat d'une exécution, avant vérification. */
 export interface ToolExecution {
   readonly output: unknown;
@@ -107,6 +128,11 @@ export interface ToolExecution {
   readonly resource?: { readonly kind: string; readonly id: string };
   /** Preuve fournisseur, pour `PROVIDER_PROOF`. */
   readonly proof?: string;
+  /**
+   * Comment défaire. Obligatoire dès qu'il y a mutation : une action exécutée
+   * sans capture est définitivement non annulable (ADR-019).
+   */
+  readonly undo?: UndoCapture;
 }
 
 export interface VerificationOutcome {

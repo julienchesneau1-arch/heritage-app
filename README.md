@@ -1,7 +1,7 @@
 # JARVIS — Personal Operating System
 
 **Pack de référence v0.2 — Architecture-first**
-Statut : **Phases 0 et 1 construites et vérifiées**, Phase 2 en cours.
+Statut : **Phases 0, 1 et 2 construites et vérifiées.** Jarvis est utilisable en texte.
 
 ---
 
@@ -52,9 +52,10 @@ pnpm install
 cp .env.example .env        # puis renseigner les mots de passe
 pnpm db:bootstrap           # crée les rôles et la base (superutilisateur)
 pnpm db:migrate             # applique les migrations
-pnpm test                   # 154 tests
+pnpm test                   # 194 tests
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
+pnpm gate:phase2            # vérifie la porte de sortie Phase 2
 ```
 
 `pgvector` est requis pour la voie sémantique. S'il est absent, `db:bootstrap`
@@ -75,8 +76,7 @@ Le banc de mesure se lance à part, sur la machine cible : `pnpm bench`
 
 ## L'état actuel du projet
 
-**Phases 0 et 1 franchies. Étape A (fondations de données) posée. Phase 2 gelée
-à mi-parcours, prête à reprendre.**
+**Phases 0, 1 et 2 franchies. Étape A (fondations de données) posée.**
 
 Ce qui existe et tourne : schéma PostgreSQL avec migrations réversibles, Event
 Ledger append-only chaîné par hash, Policy Gate L0–L4 adossé à Cedar, Memory
@@ -85,9 +85,14 @@ Engine avec détection d'ambiguïté, Memory Inbox, capture d'état antérieur,
 registre des dérivés, interfaces fournisseurs avec test de contrat bloquant,
 coffre à secrets, banc de mesure, CI. **154 tests passent.**
 
-Ce qui n'existe pas encore : Tool Gateway, Verification Engine, séparation
-Privileged/Quarantined, Data Firewall, Model Router, voix, iOS. Voir `docs/02`
-et l'analyse d'écarts en `docs/09`.
+S'y ajoutent le Tool Gateway et ses contrats, le Verification Engine, la
+séparation Privileged/Quarantined (ADR-004) et les cinq premiers outils —
+`memory_add`, `memory_search`, `task_create`, `task_list`, `note_create`.
+**194 tests passent.**
+
+Ce qui n'existe pas encore : Undo Engine (la capture existe, pas l'exécution),
+Data Firewall complet, Model Router, Cost Engine, modes cognitifs, voix, iOS.
+Voir `docs/02` et l'analyse d'écarts en `docs/09`.
 
 Le document 08 conclut qu'environ **80 % de la machinerie** peut être assemblée à partir
 de briques open source matures, et identifie les **20 %** — la couche de confiance — qui
