@@ -48,8 +48,13 @@ constituent réellement notre propriété logicielle. Il impose aussi **six corr
 la v0.2, dont une majeure : *le Policy Engine seul ne suffit pas contre l'injection
 indirecte.*
 
-La construction ne démarre qu'après validation de cet arbitrage et résolution des deux
-décisions bloquantes (ADR-005 et ADR-016).
+Les deux décisions bloquantes sont tranchées (9 août 2026) : **Cedar** pour l'évaluation
+de politique (ADR-005), **TypeScript + Swift** pour l'implémentation (ADR-016).
+
+Restent avant Phase 0 : la validation de la frontière assembler / développer, et le
+**banc de mesure** — sept questions que l'audit ne peut pas trancher par la lecture
+(WER français, latence de bout en bout, qualité de récupération, appel d'outils en
+français…). Voir `docs/08 §7`.
 
 La règle qui en découle est permanente :
 

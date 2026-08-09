@@ -13,6 +13,11 @@ local-first. À ce jour : **aucun code applicatif**. C'est délibéré.
 
 Avant d'écrire du code, lire dans l'ordre : `docs/00`, `docs/01`, `docs/08`.
 
+**Stack ratifiée** (ADR-016) : TypeScript pour le noyau, Swift pour iOS, runtimes
+d'inférence hors processus. Validation runtime obligatoire aux frontières (Zod) — un
+`as` sur une frontière est un défaut.
+**Politique** (ADR-005) : Cedar évalue, notre code décide (échelle L0–L4).
+
 ---
 
 ## Les cinq règles qui ne se négocient pas

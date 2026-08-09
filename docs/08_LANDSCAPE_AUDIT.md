@@ -342,14 +342,22 @@ en tirer parti explicitement, tout en maintenant la règle **MCP ≠ sécurité*
 
 ---
 
-## 6. Ce que cet audit ne tranche pas
+## 6. Décisions tranchées à l'issue de l'audit
 
-Deux décisions restent ouvertes et **bloquent le démarrage** :
+Les deux décisions bloquantes identifiées par cet audit ont été arbitrées le
+**9 août 2026** :
 
-| # | Décision | Pourquoi elle bloque |
+| # | Décision | Arbitrage |
 |---|---|---|
-| **ADR-016** | **Stack d'implémentation du noyau** | Rien ne peut être écrit avant. Recommandation : TypeScript (noyau) + Swift (iOS), runtimes d'inférence hors processus — le facteur décisif étant le **coût de maintenance à long terme**, qui est un objectif produit explicite |
-| **ADR-005** | **Moteur d'évaluation de politique** | Cedar par défaut ; conditionne l'écriture des premières politiques |
+| **ADR-016** | Stack d'implémentation du noyau | **TypeScript (noyau) + Swift (iOS)**, runtimes d'inférence hors processus. Facteur décisif : le coût de maintenance à long terme, objectif produit explicite |
+| **ADR-005** | Moteur d'évaluation de politique | **Cedar** — déclaratif, formellement vérifié. L'échelle L0–L4 et la porte restent notre code |
+
+Trois conséquences de l'ADR-016 sont à tenir dès la Phase 0 : validation runtime
+systématique aux frontières (Zod, jamais de `as`), discipline opérationnelle sur la
+tenue en service long, et calcul maintenu hors du noyau. Détail dans l'ADR.
+
+**Reste ouvert :** la validation de la frontière assembler / développer, et le banc de
+mesure (§7).
 
 ---
 

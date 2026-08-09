@@ -131,7 +131,7 @@ Tests adversariaux le justifient.
 
 ## ADR-005 — Le Policy Engine : moteur d'évaluation assemblé, logique de porte développée
 
-**Statut : PROPOSÉ**
+**Statut : RATIFIÉ** *(9 août 2026)*
 
 **Contexte.** Trois options : tout coder ; embarquer OPA/Rego ; embarquer Cedar.
 Rego est puissant mais son modèle logique (Datalog) est difficile à relire six mois
@@ -139,7 +139,7 @@ plus tard sur un projet personnel. Cedar est déclaratif, formellement vérifié
 nettement plus rapide, mais sa communauté est plus jeune. Casbin est le plus léger et
 s'embarque partout.
 
-**Décision proposée.** Séparer deux choses que l'on confond souvent :
+**Décision.** Séparer deux choses que l'on confond souvent :
 
 - **L'évaluation** (« cette action, dans ce contexte, est-elle permise ? ») → moteur
   externe, déclaratif, testable isolément. **Cedar** par défaut, pour la vérification
@@ -155,8 +155,6 @@ séparément du code. Le risque de couplage à Cedar est contenu par une interfa
 **Condition de révision.** Si l'écriture des premières politiques réelles montre que
 Cedar ne peut pas exprimer un besoin (par exemple des conditions temporelles riches),
 basculer sur OPA — la décision d'interface le permet sans réécriture.
-
-**⚠ À valider avant Phase 0.**
 
 ---
 
@@ -407,7 +405,7 @@ métier vers ces couches (à vérifier à chaque revue d'architecture).
 
 ## ADR-016 — Stack d'implémentation du noyau
 
-**Statut : PROPOSÉ — décision bloquante avant Phase 0**
+**Statut : RATIFIÉ** *(9 août 2026)*
 
 **Contexte.** Aucun langage n'est imposé par le pack v0.1, et le dépôt est vide. Le
 noyau est un service local de longue durée, orienté orchestration et E/S : le calcul
@@ -419,8 +417,8 @@ lourd vit dans des processus séparés (whisper.cpp, Ollama). Trois options cré
 | **Python** | proximité maximale avec l'écosystème ML ; Pydantic | packaging et gestion de versions pénibles pour un service auto-mis-à-jour |
 | **Go / Rust** | binaire unique, excellente tenue en service long, distribution simple | vitesse d'itération plus lente ; deuxième langage à maintenir avec Swift |
 
-**Décision proposée.** **TypeScript pour le noyau, Swift pour iOS**, les runtimes
-d'inférence traités comme services hors processus.
+**Décision.** **TypeScript pour le noyau, Swift pour iOS**, les runtimes d'inférence
+traités comme services hors processus.
 
 Le facteur décisif n'est pas la performance brute — le noyau n'est pas le goulot — mais
 le **coût de maintenance à long terme** pour un système personnel qui doit rester
@@ -430,4 +428,22 @@ pas une préférence.
 **Conséquences.** L'ADR-003 devient d'autant plus important : les runtimes sont
 consommés via HTTP/IPC, ce qui renforce naturellement leur remplaçabilité.
 
-**⚠ À valider avant toute ligne de code.** Ce choix conditionne tout le reste.
+Trois conséquences à assumer dès la Phase 0, parce qu'elles ne se rattrapent pas plus
+tard :
+
+- **Typage aux frontières.** TypeScript ne valide rien à l'exécution. Tout ce qui entre
+  dans le noyau — entrée utilisateur, sortie de modèle, réponse d'outil, ligne de base
+  de données — passe par un schéma runtime (Zod). Un `as` sur une frontière est un
+  défaut, pas un raccourci.
+- **Tenue en service long.** C'est la faiblesse relative de Node face à Go ou Rust. Elle
+  se compense par de la discipline opérationnelle : surveillance mémoire, redémarrage
+  supervisé, et le fait que l'auto-maintenance a explicitement le droit de redémarrer un
+  service (`07 §14`).
+- **Distance à l'écosystème ML.** Assumée et neutralisée par construction : le calcul
+  vit dans des processus séparés (whisper.cpp, Ollama), consommés via HTTP/IPC. Le
+  noyau orchestre, il ne calcule pas.
+
+**Condition de révision.** Si la tenue en service long devient un problème mesuré
+(fuites mémoire non maîtrisées, redémarrages fréquents en usage réel), le noyau est
+suffisamment contractuel pour qu'un portage progressif vers Go reste possible —
+composant par composant, pas en réécriture.

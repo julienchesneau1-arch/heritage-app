@@ -28,8 +28,11 @@ Et, avant chaque implémentation :
 - [x] Chaque brique candidate est évaluée : maturité, licence, données vues, stratégie
       de remplacement.
 - [x] La frontière assembler/développer est explicite et justifiée.
-- [ ] **Julien valide l'arbitrage.** ← *en attente*
-- [ ] ADR-005 (moteur de politique) et ADR-016 (stack) sont tranchés.
+- [x] ADR-005 (moteur de politique → **Cedar**) et ADR-016 (stack → **TypeScript +
+      Swift**) sont tranchés — 9 août 2026.
+- [ ] **Julien valide la frontière assembler / développer.** ← *en attente*
+- [ ] Banc de mesure exécuté (`08 §7`) — 7 questions ouvertes, dont le WER français et
+      la latence de bout en bout.
 
 ---
 
