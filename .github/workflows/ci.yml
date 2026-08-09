@@ -88,8 +88,17 @@ jobs:
       - name: Tests de sécurité
         run: pnpm test:security
 
+      - name: Tests mémoire
+        run: pnpm test:memory
+
+      - name: Tests contexte
+        run: pnpm test:context
+
       - name: Tests unitaires
         run: pnpm test:unit
 
       - name: Porte de sortie Phase 0
         run: pnpm gate:phase0
+
+      - name: Porte de sortie Phase 1
+        run: pnpm gate:phase1

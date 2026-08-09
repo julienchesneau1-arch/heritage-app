@@ -81,6 +81,22 @@ export interface ModelProvider extends Provider {
   embeddings(texts: readonly string[]): Promise<Result<readonly number[][]>>;
 }
 
+/**
+ * Embeddings.
+ *
+ * Interface distincte de `ModelProvider` : le modèle d'embedding n'est pas
+ * celui de conversation, il change à un rythme différent, et son indisponibilité
+ * ne doit dégrader que la voie sémantique (ADR-002).
+ */
+export interface EmbeddingProvider extends Provider {
+  /** Dimension produite. Doit correspondre à la colonne `vector(n)` du schéma. */
+  readonly dimensions: number;
+  /** Identifiant du modèle, stocké avec chaque vecteur pour éviter de comparer
+   *  des vecteurs de familles différentes. */
+  readonly model: string;
+  embed(texts: readonly string[]): Promise<Result<readonly number[][]>>;
+}
+
 /** ADR-007 — Ollama, llama.cpp, MLX… derrière une interface unique. */
 export interface LocalModelRuntime extends Provider {
   listModels(): Promise<Result<readonly string[]>>;

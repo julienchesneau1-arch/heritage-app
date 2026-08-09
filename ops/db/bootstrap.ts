@@ -117,7 +117,21 @@ async function main(): Promise<void> {
   });
   await inDb.connect();
   try {
+    // Les extensions exigent un privilège que le rôle de migration ne possède
+    // pas — et ne doit pas posséder. C'est donc ici, avec le superutilisateur,
+    // et une seule fois par base.
     await inDb.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+    try {
+      await inDb.query('CREATE EXTENSION IF NOT EXISTS vector');
+      console.log('  extension pgvector : disponible');
+    } catch {
+      console.warn(
+        '  ⚠ pgvector absent : la voie sémantique sera indisponible.\n' +
+          '    Installer le paquet (par exemple `postgresql-16-pgvector` ou\n' +
+          '    `brew install pgvector`) puis relancer `pnpm db:bootstrap`.\n' +
+          '    Les voies structurée et lexicale fonctionnent sans lui.',
+      );
+    }
     await inDb.query(`GRANT ALL ON SCHEMA public TO ${ownerUser}`);
     await inDb.query(`GRANT USAGE ON SCHEMA public TO ${appUser}`);
     console.log('  extensions et privilèges de schéma : appliqués');

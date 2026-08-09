@@ -88,13 +88,32 @@ Et, avant chaque implémentation :
 - Context Engine : résolution de « celui-ci », « le projet », « Paul », « comme la
   dernière fois » ; détection d'ambiguïté ; **paquet de contexte minimal**.
 
-**Porte de sortie.**
-- [ ] Un email affirmant « Julien aime X » devient `EXTERNAL_CLAIM`, jamais une
-      préférence.
-- [ ] Face à trois « Pierre » connus, Jarvis demande — il ne choisit pas.
-- [ ] Le contexte envoyé au modèle est borné et mesuré ; jamais un vidage de base.
-- [ ] Recherche mémoire fonctionnelle **réseau coupé**.
-- [ ] Les trois voies de récupération sont mesurées séparément (précision, rappel).
+**Porte de sortie — franchie le 9 août 2026, vérifiable par `pnpm gate:phase1`.**
+- [x] Un email affirmant « Julien aime X » devient `EXTERNAL_CLAIM`, jamais une
+      préférence. Le type est *coercé* de `PREFERENCE` vers `SEMANTIC` et la
+      confiance plafonnée à 0,4 — une préférence dicte le comportement futur,
+      elle ne peut pas naître d'une lecture.
+- [x] Face à trois « Pierre » connus, Jarvis demande — il ne choisit pas. Il ne
+      tranche que sur **preuve contextuelle** (une seule des homonymes évoquée
+      dans la session), jamais sur une heuristique de popularité.
+- [x] Le contexte envoyé au modèle est borné et mesuré ; jamais un vidage de
+      base. Ce qui est écarté est **déclaré**, pas tronqué en silence.
+- [x] Recherche mémoire fonctionnelle **réseau coupé** — testée sur les deux
+      chemins : fournisseur absent et fournisseur en panne.
+- [x] Les trois voies de récupération sont rapportées séparément, avec leur
+      temps d'exécution.
+
+> **Notes de mise en œuvre.**
+> — L'extension `pgvector` est créée au *bootstrap*, pas en migration : elle
+> exige un privilège que le rôle de migration ne doit pas posséder. La migration
+> vérifie sa présence et échoue avec un message clair si elle manque.
+> — La dimension du vecteur est figée à 768 (EmbeddingGemma). Descendre est
+> possible par troncature Matryoshka ; monter (BGE-M3 = 1024) exigera une
+> migration et un réencodage. Le coût est documenté dans la migration plutôt que
+> découvert plus tard.
+> — Chaque vecteur porte le modèle qui l'a produit, et la recherche filtre
+> dessus : un changement de modèle ne peut pas comparer silencieusement des
+> vecteurs de familles différentes.
 
 ---
 

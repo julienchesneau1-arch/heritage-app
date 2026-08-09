@@ -48,9 +48,13 @@ pnpm install
 cp .env.example .env        # puis renseigner les mots de passe
 pnpm db:bootstrap           # crée les rôles et la base (superutilisateur)
 pnpm db:migrate             # applique les migrations
-pnpm test                   # 75 tests
+pnpm test                   # 121 tests
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
+pnpm gate:phase1            # vérifie la porte de sortie Phase 1
 ```
+
+`pgvector` est requis pour la voie sémantique. S'il est absent, `db:bootstrap`
+le signale et les voies structurée et lexicale continuent de fonctionner.
 
 Trois rôles PostgreSQL distincts, par moindre privilège :
 
@@ -67,15 +71,16 @@ Le banc de mesure se lance à part, sur la machine cible : `pnpm bench`
 
 ## L'état actuel du projet
 
-**Phase 0 franchie (11/11 contrôles). Phase 1 — Mémoire et Contexte — à démarrer.**
+**Phases 0 et 1 franchies. Phase 2 — Outils et vérification — à démarrer.**
 
 Ce qui existe et tourne : schéma PostgreSQL avec migrations réversibles, Event
-Ledger append-only chaîné par hash, Policy Gate L0–L4 adossé à Cedar, interfaces
-fournisseurs avec test de contrat bloquant, coffre à secrets, scan de secrets,
-banc de mesure, CI. **75 tests passent.**
+Ledger append-only chaîné par hash, Policy Gate L0–L4 adossé à Cedar, Memory
+Guard, recherche hybride à trois voies, Context Engine avec détection
+d'ambiguïté, interfaces fournisseurs avec test de contrat bloquant, coffre à
+secrets, banc de mesure, CI. **121 tests passent.**
 
-Ce qui n'existe pas encore : Memory Engine, Context Engine, Tool Gateway,
-Verification Engine, Data Firewall, voix, iOS. Voir `docs/02`.
+Ce qui n'existe pas encore : Tool Gateway, Verification Engine, séparation
+Privileged/Quarantined, Data Firewall, voix, iOS. Voir `docs/02`.
 
 Le document 08 conclut qu'environ **80 % de la machinerie** peut être assemblée à partir
 de briques open source matures, et identifie les **20 %** — la couche de confiance — qui

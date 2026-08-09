@@ -16,12 +16,15 @@
     "test:contracts": "vitest run tests/contracts",
     "test:security": "vitest run tests/security",
     "test:policy": "vitest run tests/policy",
+    "test:memory": "vitest run tests/memory",
+    "test:context": "vitest run tests/context",
     "db:bootstrap": "tsx ops/db/bootstrap.ts",
     "db:migrate": "tsx ops/db/migrate.ts up",
     "db:rollback": "tsx ops/db/migrate.ts down",
     "db:status": "tsx ops/db/migrate.ts status",
     "secrets:scan": "tsx ops/security/scan-secrets.ts",
     "gate:phase0": "tsx ops/gates/phase0.ts",
+    "gate:phase1": "tsx ops/gates/phase1.ts",
     "bench": "tsx ops/bench/run.ts"
   },
   "dependencies": {

@@ -47,16 +47,53 @@ export const PATTERNS: readonly Pattern[] = [
  */
 const ALLOWLIST: readonly RegExp[] = [
   /^tests\/security\/secrets\.test\.ts$/,
+  // Contient les échantillons de référence des motifs. Sans cette entrée, le
+  // scan se signale lui-même — ce qu'il a d'ailleurs fait dès son premier
+  // passage après commit, preuve qu'il ne se contente pas de l'arbre de travail.
+  /^tests\/security\/secret-scan-patterns\.test\.ts$/,
   /^tests\/fixtures\//,
   /^ops\/security\/scan-secrets\.ts$/,
   /^src\/core\/observability\/logger\.ts$/,
   /^\.env\.example$/,
 ];
 
+/**
+ * Exceptions nominatives (fichier + motif), avec justification.
+ *
+ * Volontairement plus étroit qu'une entrée de liste blanche : blanchir un
+ * fichier entier ferait passer un vrai secret ajouté plus tard au même endroit.
+ * Ici, seule la combinaison fichier + motif est levée, et elle doit s'expliquer.
+ */
+interface PatternException {
+  readonly file: RegExp;
+  readonly pattern: string;
+  readonly why: string;
+}
+
+const PATTERN_EXCEPTIONS: readonly PatternException[] = [
+  {
+    file: /^tests\/unit\/config\.test\.ts$/,
+    pattern: 'Mot de passe en dur',
+    why:
+      'Valeur factice « canary_pw », utilisée précisément pour vérifier ' +
+      "qu'aucun secret ne fuit dans la configuration publique.",
+  },
+];
+
+function isExcepted(file: string, pattern: string): boolean {
+  return PATTERN_EXCEPTIONS.some(
+    (e) => e.pattern === pattern && e.file.test(file),
+  );
+}
+
 function git(args: readonly string[]): string {
   return execFileSync('git', [...args], {
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
+    // `git show HEAD:<fichier>` échoue bruyamment pour un fichier non encore
+    // commité. C'est un cas normal, traité par l'appelant : on n'inonde pas la
+    // sortie d'erreurs qui ne sont pas des erreurs.
+    stdio: ['ignore', 'pipe', 'ignore'],
   });
 }
 
@@ -66,9 +103,10 @@ interface Finding {
   readonly excerpt: string;
 }
 
-function scanText(where: string, text: string): Finding[] {
+function scanText(where: string, text: string, file: string): Finding[] {
   const findings: Finding[] = [];
   for (const { name, regex } of PATTERNS) {
+    if (isExcepted(file, name)) continue;
     const match = regex.exec(text);
     if (match !== null) {
       const excerpt = match[0].slice(0, 12);
@@ -102,7 +140,7 @@ function main(): void {
     } catch {
       continue; // fichier non encore commité
     }
-    findings.push(...scanText(file, content));
+    findings.push(...scanText(file, content, file));
   }
 
   // 3. Historique complet — un secret supprimé y demeure.
@@ -113,31 +151,30 @@ function main(): void {
     console.warn('  (historique illisible — scan limité à l\'arbre de travail)');
   }
   if (history !== '') {
-    for (const { name, regex } of PATTERNS) {
-      // On ignore les motifs des fichiers de la liste blanche : ils y sont par
-      // conception, et leur diff apparaît dans l'historique.
-      const global = new RegExp(regex.source, 'g');
-      let match: RegExpExecArray | null;
-      while ((match = global.exec(history)) !== null) {
-        const line = match[0];
-        const context = history.slice(
-          Math.max(0, match.index - 400),
-          match.index,
-        );
-        const inAllowlisted = ALLOWLIST.some((r) => {
-          const files = /\+\+\+ b\/(.+)/g;
-          let m: RegExpExecArray | null;
-          let last: string | null = null;
-          while ((m = files.exec(context)) !== null) last = m[1] ?? null;
-          return last !== null && r.test(last);
-        });
-        if (inAllowlisted) continue;
-        findings.push({
-          where: 'historique git',
-          pattern: name,
-          excerpt: `${line.slice(0, 12)}…`,
-        });
-        break; // une occurrence par motif suffit à alerter
+    // On découpe le diff par section `diff --git a/x b/y` plutôt que de
+    // chercher le nom de fichier à rebours depuis chaque correspondance : le
+    // rattachement fichier↔contenu devient exact, et la liste blanche cesse
+    // d'être approximative.
+    const seen = new Set<string>();
+
+    for (const section of history.split(/^diff --git /m).slice(1)) {
+      const header = /^a\/(\S+) b\/(\S+)/.exec(section);
+      const file = header?.[2];
+      if (file === undefined) continue;
+      if (ALLOWLIST.some((r) => r.test(file))) continue;
+
+      // Seules les lignes AJOUTÉES nous intéressent : une ligne supprimée a
+      // déjà été signalée au commit qui l'a introduite.
+      const added = section
+        .split('\n')
+        .filter((l) => l.startsWith('+') && !l.startsWith('+++'))
+        .join('\n');
+
+      for (const finding of scanText(`historique git — ${file}`, added, file)) {
+        const key = `${file}:${finding.pattern}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        findings.push(finding);
       }
     }
   }
