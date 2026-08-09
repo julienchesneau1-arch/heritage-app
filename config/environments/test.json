@@ -1,0 +1,8 @@
+{
+  "database": {
+    "name": "jarvis_test"
+  },
+  "ledger": {
+    "verifyChainOnStartup": false
+  }
+}

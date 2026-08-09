@@ -51,14 +51,24 @@ Et, avant chaque implémentation :
 - Coffre à secrets (keychain OS), jamais dans le dépôt.
 - Harnais de test + CI (lint, unit, contrats, sécurité, politiques).
 
-**Porte de sortie.**
-- [ ] Migration et rollback testés dans les deux sens.
-- [ ] Le journal est inaltérable : un `UPDATE` ou `DELETE` échoue au niveau des
-      permissions PostgreSQL, pas de l'application.
-- [ ] Le test de contrat fournisseur échoue bien quand on l'enfreint volontairement
-      (test négatif).
-- [ ] Aucun secret dans l'historique git (scan automatisé).
-- [ ] La CI tourne sur chaque commit.
+**Porte de sortie — franchie le 9 août 2026, vérifiable par `pnpm gate:phase0`.**
+- [x] Migration et rollback testés dans les deux sens.
+- [x] Le journal est inaltérable : un `UPDATE` ou `DELETE` échoue au niveau des
+      permissions PostgreSQL, pas de l'application. Vérifié sur **trois**
+      barrières — permissions, trigger (y compris pour le propriétaire), et
+      détection d'altération par chaînage de hash lorsque les deux premières
+      sont désactivées.
+- [x] Le test de contrat fournisseur échoue bien quand on l'enfreint volontairement
+      (test négatif sur `tests/fixtures/violating-core-file.ts.fixture`).
+- [x] Aucun secret dans l'historique git (scan automatisé, motifs testés).
+- [x] La CI tourne sur chaque commit.
+
+> **Note de mise en œuvre.** L'immuabilité du journal rend les tests
+> non idempotents : les scénarios de détection d'altération laissent
+> délibérément une chaîne rompue, qu'un journal append-only ne permet pas de
+> réparer. La suite repart donc d'un schéma recréé à chaque exécution
+> (`tests/global-setup.ts`), ce qui vérifie au passage les migrations dans les
+> deux sens.
 
 ---
 

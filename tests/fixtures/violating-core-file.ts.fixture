@@ -1,0 +1,19 @@
+// FIXTURE DE TEST — n'est pas compilé (extension .fixture).
+//
+// Ce fichier représente délibérément une infraction à l'ADR-003 : un fichier du
+// noyau qui importerait directement un SDK de fournisseur. Il sert au test
+// négatif de tests/contracts/provider-isolation.test.ts, dont le rôle est de
+// prouver que la garde se déclenche vraiment.
+//
+// Ne jamais « corriger » ce fichier : son incorrection est le test.
+
+import OpenAI from 'openai';
+import { readFileSync } from 'node:fs';
+import { somethingLegit } from './relative-module.js';
+
+export function leakyCore(): void {
+  const client = new OpenAI({ apiKey: 'ne-jamais-faire-ca' });
+  void client;
+  void readFileSync;
+  void somethingLegit;
+}

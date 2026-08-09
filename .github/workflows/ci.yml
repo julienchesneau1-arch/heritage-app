@@ -1,0 +1,95 @@
+name: CI
+
+# `02` — Phase 0 : « La CI tourne sur chaque commit. »
+# `PRD §101` — lint, unit, integration, security, policy, model, tool contract.
+#
+# Les étapes sont volontairement séparées : quand la CI casse, on doit savoir
+# immédiatement si c'est le typage, une politique, ou une garde de sécurité.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci_superuser_pw
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      JARVIS_ENV: test
+      JARVIS_DB_HOST: 127.0.0.1
+      JARVIS_DB_PORT: '5432'
+      JARVIS_DB_NAME: jarvis_test
+      JARVIS_DB_USER: jarvis_app
+      JARVIS_DB_PASSWORD: ci_app_pw
+      JARVIS_DB_OWNER_USER: jarvis_owner
+      JARVIS_DB_OWNER_PASSWORD: ci_owner_pw
+      JARVIS_DB_SUPERUSER: postgres
+      JARVIS_DB_SUPERUSER_PASSWORD: ci_superuser_pw
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Le scan de secrets inspecte l'historique complet : un clone
+          # superficiel le rendrait aveugle à ce qu'il cherche.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typage strict
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Aucun secret dans le dépôt ni l'historique
+        run: pnpm secrets:scan
+
+      - name: Base de données — bootstrap
+        run: pnpm db:bootstrap
+
+      - name: Migrations — aller
+        run: pnpm db:migrate
+
+      - name: Migrations — retour puis aller (rollback vérifié)
+        run: |
+          pnpm db:rollback
+          pnpm db:rollback
+          pnpm db:migrate
+
+      - name: Tests de contrat (isolation des fournisseurs)
+        run: pnpm test:contracts
+
+      - name: Tests de politique
+        run: pnpm test:policy
+
+      - name: Tests de sécurité
+        run: pnpm test:security
+
+      - name: Tests unitaires
+        run: pnpm test:unit
+
+      - name: Porte de sortie Phase 0
+        run: pnpm gate:phase0

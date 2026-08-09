@@ -1,0 +1,42 @@
+{
+  "name": "jarvis-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Jarvis — Personal Operating System. Noyau local-first.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:contracts": "vitest run tests/contracts",
+    "test:security": "vitest run tests/security",
+    "test:policy": "vitest run tests/policy",
+    "db:bootstrap": "tsx ops/db/bootstrap.ts",
+    "db:migrate": "tsx ops/db/migrate.ts up",
+    "db:rollback": "tsx ops/db/migrate.ts down",
+    "db:status": "tsx ops/db/migrate.ts status",
+    "secrets:scan": "tsx ops/security/scan-secrets.ts",
+    "gate:phase0": "tsx ops/gates/phase0.ts",
+    "bench": "tsx ops/bench/run.ts"
+  },
+  "dependencies": {
+    "@cedar-policy/cedar-wasm": "4.12.0",
+    "pg": "8.16.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.36.0",
+    "@types/node": "22.18.1",
+    "@types/pg": "8.15.5",
+    "eslint": "9.36.0",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.44.0",
+    "vitest": "3.2.4"
+  }
+}

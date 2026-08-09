@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets — jamais dans le dépôt (03 §9)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Artefacts locaux
+coverage/
+.vitest/
+ops/bench/results/
+*.log

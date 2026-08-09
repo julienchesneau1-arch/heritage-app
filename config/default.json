@@ -1,0 +1,28 @@
+{
+  "environment": "dev",
+  "policy": {
+    "directory": "policies",
+    "defaultDecision": "deny"
+  },
+  "cloud": {
+    "budgetMonthlyEur": 0,
+    "alertAtPercent": 50,
+    "hardBlockAtPercent": 100,
+    "enabled": false
+  },
+  "privacy": {
+    "startInPrivateMode": false,
+    "externalTelemetry": false
+  },
+  "ledger": {
+    "verifyChainOnStartup": true
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "jarvis_dev",
+    "user": "jarvis_app",
+    "poolMax": 10,
+    "statementTimeoutMs": 15000
+  }
+}

@@ -38,9 +38,44 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 
 ---
 
+## Démarrage
+
+Prérequis : **Node 22+**, **pnpm 10+**, **PostgreSQL 16+** (avec `pgvector` pour
+la Phase 1).
+
+```bash
+pnpm install
+cp .env.example .env        # puis renseigner les mots de passe
+pnpm db:bootstrap           # crée les rôles et la base (superutilisateur)
+pnpm db:migrate             # applique les migrations
+pnpm test                   # 75 tests
+pnpm gate:phase0            # vérifie la porte de sortie Phase 0
+```
+
+Trois rôles PostgreSQL distincts, par moindre privilège :
+
+| Rôle | Usage | Droits sur le journal |
+|---|---|---|
+| `jarvis_superuser` | `db:bootstrap` uniquement | — |
+| `jarvis_owner` | migrations uniquement | bloqué par trigger |
+| `jarvis_app` | le noyau | `SELECT`, `INSERT` — **jamais** `UPDATE`/`DELETE` |
+
+Le banc de mesure se lance à part, sur la machine cible : `pnpm bench`
+(voir [`ops/bench/README.md`](ops/bench/README.md)).
+
+---
+
 ## L'état actuel du projet
 
-**Phase : audit terminé, construction non commencée.**
+**Phase 0 franchie (11/11 contrôles). Phase 1 — Mémoire et Contexte — à démarrer.**
+
+Ce qui existe et tourne : schéma PostgreSQL avec migrations réversibles, Event
+Ledger append-only chaîné par hash, Policy Gate L0–L4 adossé à Cedar, interfaces
+fournisseurs avec test de contrat bloquant, coffre à secrets, scan de secrets,
+banc de mesure, CI. **75 tests passent.**
+
+Ce qui n'existe pas encore : Memory Engine, Context Engine, Tool Gateway,
+Verification Engine, Data Firewall, voix, iOS. Voir `docs/02`.
 
 Le document 08 conclut qu'environ **80 % de la machinerie** peut être assemblée à partir
 de briques open source matures, et identifie les **20 %** — la couche de confiance — qui

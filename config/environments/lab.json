@@ -1,0 +1,11 @@
+{
+  "database": {
+    "name": "jarvis_lab"
+  },
+  "cloud": {
+    "enabled": false
+  },
+  "privacy": {
+    "startInPrivateMode": true
+  }
+}
