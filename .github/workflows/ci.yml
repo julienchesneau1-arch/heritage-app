@@ -103,6 +103,9 @@ jobs:
       - name: Tests quarantaine
         run: pnpm test:quarantine
 
+      - name: Tests intention
+        run: pnpm test:intent
+
       - name: Tests unitaires
         run: pnpm test:unit
 

@@ -406,11 +406,16 @@ export function createToolGateway(deps: {
       );
       if (!recorded.ok) return recorded;
 
+      // Le suffixe ne s'applique qu'à une MUTATION restée sans capture. Une
+      // lecture n'a rien à annuler : la suffixer polluerait le journal d'audit
+      // d'un signal d'alerte permanent et sans objet.
+      const undoExpected = resource !== undefined;
       const event = await deps.ledger.append({
         actor: call.actor,
-        eventType: undoCaptured
-          ? def.auditEvent
-          : `${def.auditEvent}_NO_UNDO`,
+        eventType:
+          !undoExpected || undoCaptured
+            ? def.auditEvent
+            : `${def.auditEvent}_NO_UNDO`,
         tool: def.id,
         policyDecision: 'ALLOW',
         autonomyLevel: policy.effectiveAutonomy,

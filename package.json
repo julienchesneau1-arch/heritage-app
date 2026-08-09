@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "jarvis": "tsx src/apps/cli/main.ts",
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -21,6 +22,7 @@
     "test:undo": "vitest run tests/undo",
     "test:tools": "vitest run tests/tools",
     "test:quarantine": "vitest run tests/quarantine",
+    "test:intent": "vitest run tests/intent",
     "db:bootstrap": "tsx ops/db/bootstrap.ts",
     "db:migrate": "tsx ops/db/migrate.ts up",
     "db:rollback": "tsx ops/db/migrate.ts down",

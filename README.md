@@ -1,7 +1,8 @@
 # JARVIS — Personal Operating System
 
 **Pack de référence v0.2 — Architecture-first**
-Statut : **Phases 0, 1 et 2 construites et vérifiées.** Jarvis est utilisable en texte.
+Statut : **Jarvis fonctionne.** Interface texte, cinq outils, mémoire — sans Internet
+et sans aucun modèle installé.
 
 ---
 
@@ -52,10 +53,32 @@ pnpm install
 cp .env.example .env        # puis renseigner les mots de passe
 pnpm db:bootstrap           # crée les rôles et la base (superutilisateur)
 pnpm db:migrate             # applique les migrations
-pnpm test                   # 194 tests
+pnpm test                   # 221 tests
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
 pnpm gate:phase2            # vérifie la porte de sortie Phase 2
+
+pnpm jarvis                 # lance l'interface texte
+```
+
+```text
+> Ajoute du terreau à ma liste
+  ✓ C'est fait.
+
+> Retiens que Jean travaille chez Orano
+  ✓ C'est fait.
+
+> Que sais-tu sur Orano
+  ✓ C'est fait.
+  (recherche sans la voie sémantique — aucun modèle d'embeddings)
+  • Jean travaille chez Orano  [FACT]
+
+> Qu'as-tu fait aujourd'hui ?
+  Depuis le journal d'exécution :
+      1 × MEMORY_ADDED [CONFIRMED]
+      1 × MEMORY_SEARCHED [CONFIRMED]
+      1 × TASK_CREATED [CONFIRMED]
+  Chaîne d'audit intacte (3 événements).
 ```
 
 `pgvector` est requis pour la voie sémantique. S'il est absent, `db:bootstrap`
@@ -86,9 +109,11 @@ registre des dérivés, interfaces fournisseurs avec test de contrat bloquant,
 coffre à secrets, banc de mesure, CI. **154 tests passent.**
 
 S'y ajoutent le Tool Gateway et ses contrats, le Verification Engine, la
-séparation Privileged/Quarantined (ADR-004) et les cinq premiers outils —
-`memory_add`, `memory_search`, `task_create`, `task_list`, `note_create`.
-**194 tests passent.**
+séparation Privileged/Quarantined (ADR-004), les cinq premiers outils —
+`memory_add`, `memory_search`, `task_create`, `task_list`, `note_create` — et
+une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
+aucun modèle requis).
+**221 tests passent.**
 
 Ce qui n'existe pas encore : Undo Engine (la capture existe, pas l'exécution),
 Data Firewall complet, Model Router, Cost Engine, modes cognitifs, voix, iOS.
