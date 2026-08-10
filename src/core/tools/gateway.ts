@@ -309,6 +309,9 @@ export function createToolGateway(deps: {
           `Une tentative de ${def.id} était en cours et son sort est inconnu. ` +
             'Je ne peux pas confirmer si l\'action a été exécutée, et je ne vais ' +
             'pas la rejouer automatiquement pour éviter un doublon.',
+          // L'outil ne sait pas vérifier : c'est la cause RACINE de l'ignorance,
+          // plus informative que « le processus a planté ».
+          'VERIFICATION_UNAVAILABLE',
         ),
         `Reprise depuis ${prior.state} : aucune vérification de tentative disponible.`,
       );
@@ -322,6 +325,7 @@ export function createToolGateway(deps: {
         verificationOutcome.unknown(
           `La vérification de la tentative a échoué (${verdict.error.message}). ` +
             'Je ne rejoue pas : le doute ne justifie pas un doublon.',
+          'PROCESS_CRASH',
         ),
         'Reprise : vérification indisponible.',
       );
@@ -361,6 +365,8 @@ export function createToolGateway(deps: {
             `Vérification non concluante : ${verdict.value.detail}. ` +
               'Je ne peux pas confirmer si l\'action a été exécutée. Je ne la ' +
               'rejoue pas automatiquement.',
+            // Le fournisseur a répondu, mais son état ne tranche pas.
+            'EXTERNAL_STATE',
           ),
           'Reprise : vérification non concluante.',
         );
@@ -572,10 +578,10 @@ export function createToolGateway(deps: {
 
         const verification: VerificationOutcome = reVerified.ok
           ? reVerified.value
-          : {
-              status: 'UNKNOWN',
-              detail: `Rejeu : relecture impossible (${reVerified.error.message}).`,
-            };
+          : verificationOutcome.unknown(
+              `Rejeu : relecture impossible (${reVerified.error.message}).`,
+              'NO_OBSERVATION',
+            );
 
         const event = await deps.ledger.append({
           actor: call.actor,
@@ -678,7 +684,9 @@ export function createToolGateway(deps: {
           call.operationId,
           terminal,
           terminal === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
-          executed.error.message.slice(0, 500),
+          // La raison est écrite au registre : la reprise en aura besoin, et
+          // l'audit doit pouvoir distinguer un timeout d'un plantage.
+          `${terminal === 'UNKNOWN' ? 'PROVIDER_TIMEOUT' : 'FAILED'} — ${executed.error.message}`.slice(0, 500),
         ],
       );
       await deps.ledger.append({

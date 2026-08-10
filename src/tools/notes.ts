@@ -97,7 +97,7 @@ export function noteCreateTool(): RegisteredTool {
 
     async readBack(execution, ctx): Promise<Result<VerificationOutcome>> {
       if (execution.resource === undefined) {
-        return ok(verificationOutcome.unknown('Aucune ressource à relire.'));
+        return ok(verificationOutcome.unknown('Aucune ressource à relire.', 'NO_OBSERVATION'));
       }
       const found = await ctx.db.query<NoteRow>(
         'SELECT id, content, privacy_class FROM notes WHERE id = $1',

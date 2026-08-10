@@ -100,7 +100,7 @@ export function taskCreateTool(): RegisteredTool {
 
     async readBack(execution, ctx): Promise<Result<VerificationOutcome>> {
       if (execution.resource === undefined) {
-        return ok(verificationOutcome.unknown('Aucune ressource à relire.'));
+        return ok(verificationOutcome.unknown('Aucune ressource à relire.', 'NO_OBSERVATION'));
       }
       const found = await ctx.db.query<TaskRow>(
         'SELECT id, title, state, due_at FROM tasks WHERE id = $1',

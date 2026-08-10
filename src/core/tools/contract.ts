@@ -9,6 +9,7 @@
  * donc pas une omission de forme — c'est une décision de sécurité non prise.
  */
 import { z } from 'zod';
+import type { UnknownReason } from '../verification/engine.js';
 import type { Db } from '../db/client.js';
 import type {
   Actor,
@@ -161,6 +162,13 @@ export interface VerificationOutcome {
   readonly status: VerificationStatus;
   readonly detail: string;
   readonly proof?: string;
+  /**
+   * Renseigné si et seulement si `status === 'UNKNOWN'`.
+   *
+   * Ne sert jamais à décider d'un rejeu — seulement à savoir quoi demander à
+   * l'utilisateur, et quelle politique de reprise appliquer (`docs/14 §2`).
+   */
+  readonly unknownReason?: UnknownReason;
 }
 
 /**

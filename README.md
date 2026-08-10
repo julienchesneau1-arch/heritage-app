@@ -43,6 +43,11 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 10 | [`docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md`](docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md) | **Build vs Buy** sur les systèmes personnels complets (OpenClaw, OpenJarvis, SemaClaw…) | avant d'adopter une orchestration existante |
 | 11 | [`docs/11_RED_TEAM_AUDIT.md`](docs/11_RED_TEAM_AUDIT.md) | **Audit et red team** : ce qui est vrai, ce qui est faux, ce qui est dangereux — avec preuves exécutables | avant de faire confiance à ce dépôt |
 | 12 | [`docs/12_TRUTH_AND_TRACEABILITY.md`](docs/12_TRUTH_AND_TRACEABILITY.md) | **Architecture de vérité** : le contrat `SOURCE → … → OBSERVATION`, la matrice adversariale, le journal d'intention | avant de brancher le contexte ou un modèle |
+| 13 | [`docs/13_THREAT_MODEL.md`](docs/13_THREAT_MODEL.md) | **Modèle de menace** : biens, attaquants, frontières de confiance, et la règle `FAIL CLOSED` | avant d'ouvrir une surface d'attaque |
+| 14 | [`docs/14_DATA_CLASSIFICATION.md`](docs/14_DATA_CLASSIFICATION.md) | **Classification des données** : cinq niveaux, et l'ordre qui interdit au coût de décider de la confidentialité | vous manipulez une donnée personnelle |
+| 15 | [`docs/15_MODEL_PROVIDER_CONTRACT.md`](docs/15_MODEL_PROVIDER_CONTRACT.md) | **Contrat de fournisseur** : capacités et non modèles, quatre verbes, quatre règles non négociables | vous branchez un modèle |
+| 16 | [`docs/16_VERIFICATION_CAPABILITIES.md`](docs/16_VERIFICATION_CAPABILITIES.md) | **Capacités de vérification** : ce qu'un outil doit déclarer, et pourquoi la déclaration doit être vérifiée | vous écrivez un outil |
+| 17 | [`docs/17_REAL_WORLD_FAILURE_MATRIX.md`](docs/17_REAL_WORLD_FAILURE_MATRIX.md) | **Défaillances du monde réel** : ce qui est prouvé, partiel, ou intestable — et pourquoi | avant de croire que ça tient sous panne |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.

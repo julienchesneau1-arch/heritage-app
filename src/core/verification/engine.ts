@@ -18,6 +18,7 @@
  * « jamais de succès non vérifié » cesse ainsi d'être une consigne pour devenir
  * une propriété du type.
  */
+import { z } from 'zod';
 import type { VerificationStatus } from '../types/domain.js';
 import { ok, type Result } from '../types/result.js';
 import type {
@@ -26,6 +27,40 @@ import type {
   ToolExecution,
   VerificationOutcome,
 } from '../tools/contract.js';
+
+/**
+ * POURQUOI on ne sait pas.
+ *
+ * Référence : `docs/14 §2`, mandat Foundation 2.2 §1.
+ *
+ * `UNKNOWN` seul ne suffit pas. « Gmail n'a pas répondu » et « le processus est
+ * mort pendant l'appel » sont deux incertitudes différentes, qui appellent deux
+ * conduites de reprise différentes et deux phrases différentes à l'utilisateur.
+ *
+ * Aucune de ces raisons n'autorise un rejeu automatique. Elles servent à
+ * DÉCIDER QUOI DEMANDER, pas à contourner le refus.
+ */
+export const UnknownReason = z.enum([
+  /** L'action est partie, rien n'a pu être observé ensuite. */
+  'NO_OBSERVATION',
+  /** Le fournisseur n'a pas répondu dans le délai. Il a pu traiter quand même. */
+  'PROVIDER_TIMEOUT',
+  /** Le processus est mort pendant l'appel — reprise depuis `EXECUTING`. */
+  'PROCESS_CRASH',
+  /** Le fournisseur répond, mais son état ne permet pas de trancher. */
+  'EXTERNAL_STATE',
+  /** L'outil ne sait pas vérifier une tentative (`attemptVerification: NONE`). */
+  'VERIFICATION_UNAVAILABLE',
+  /**
+   * Deux observations se contredisent.
+   *
+   * ⚠ NON ATTEIGNABLE aujourd'hui : il n'existe qu'une source d'observation par
+   * outil. Déclaré maintenant pour que le jour où une seconde apparaît, le cas
+   * ait déjà un nom plutôt qu'un `else`.
+   */
+  'CONFLICTING_EVIDENCE',
+]);
+export type UnknownReason = z.infer<typeof UnknownReason>;
 
 /** Preuve d'un changement d'état réel. Sans elle, pas de CONFIRMED. */
 export interface Evidence {
@@ -44,8 +79,8 @@ function confirmed(evidence: Evidence): VerificationOutcome {
   };
 }
 
-function unknown(detail: string): VerificationOutcome {
-  return { status: 'UNKNOWN', detail };
+function unknown(detail: string, reason: UnknownReason): VerificationOutcome {
+  return { status: 'UNKNOWN', detail, unknownReason: reason };
 }
 
 function probable(detail: string, proof?: string): VerificationOutcome {
@@ -94,6 +129,7 @@ export function createVerificationEngine(): VerificationEngine {
               unknown(
                 `Relecture impossible après ${id} : ${outcome.error.message}. ` +
                   'L\'action a peut-être abouti ; le système ne l\'affirme pas.',
+                'NO_OBSERVATION',
               ),
             );
           }
@@ -107,6 +143,7 @@ export function createVerificationEngine(): VerificationEngine {
               unknown(
                 `${id} exige une preuve du fournisseur et n'en a pas fourni. ` +
                   "Statut non promu, quelle qu'ait été la réponse HTTP.",
+                'NO_OBSERVATION',
               ),
             );
           }
@@ -131,7 +168,10 @@ export function createVerificationEngine(): VerificationEngine {
         default: {
           // Stratégie inconnue : on ne devine pas.
           return ok(
-            unknown(`Stratégie de vérification inconnue pour ${id}.`),
+            unknown(
+              `Stratégie de vérification inconnue pour ${id}.`,
+              'VERIFICATION_UNAVAILABLE',
+            ),
           );
         }
       }
