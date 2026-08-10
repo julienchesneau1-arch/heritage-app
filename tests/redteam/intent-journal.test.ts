@@ -179,6 +179,7 @@ function verifiableTool(verdict: () => AttemptVerdict) {
       requiredSecrets: [],
       rollback: null,
       attemptVerification: 'BY_OPERATION_KEY',
+      effect: 'LOCAL_TRANSACTIONAL',
     },
     inputSchema: z.object({ marker: z.string() }),
     execute(input, ctx: ToolContext): Promise<Result<ToolExecution>> {
@@ -249,6 +250,7 @@ describe.skipIf(skip)('RED TEAM — vérification idempotente auprès du fournis
         requiredSecrets: [],
         rollback: null,
         attemptVerification: 'BY_OPERATION_KEY',
+      effect: 'LOCAL_TRANSACTIONAL',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),

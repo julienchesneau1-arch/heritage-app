@@ -44,6 +44,7 @@ function faulty(
       requiredSecrets: [],
       rollback: null,
       attemptVerification: 'NONE',
+      effect: 'LOCAL_TRANSACTIONAL',
     },
     inputSchema: z.object({ valeur: z.string() }),
     async execute() {

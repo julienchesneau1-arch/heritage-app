@@ -28,6 +28,7 @@
     "test:intent": "vitest run tests/intent",
     "test:server": "vitest run tests/server",
     "test:redteam": "vitest run tests/redteam",
+    "test:lab": "vitest run tests/lab",
     "db:bootstrap": "tsx --env-file-if-exists=.env ops/db/bootstrap.ts",
     "db:migrate": "tsx --env-file-if-exists=.env ops/db/migrate.ts up",
     "db:rollback": "tsx --env-file-if-exists=.env ops/db/migrate.ts down",

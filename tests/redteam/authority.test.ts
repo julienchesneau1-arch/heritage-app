@@ -48,6 +48,7 @@ function trap(
       requiredSecrets: [],
       rollback: null,
       attemptVerification: 'NONE',
+      effect: 'LOCAL_TRANSACTIONAL',
     },
     inputSchema: z.object({ cible: z.string(), note: z.string().default('') }),
     execute: () => {

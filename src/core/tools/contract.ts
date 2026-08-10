@@ -109,6 +109,30 @@ export interface ToolDefinition {
    * contrat, refusé à l'enregistrement.
    */
   readonly attemptVerification: 'NONE' | 'BY_OPERATION_KEY';
+
+  /**
+   * L'effet de cet outil est-il annulable par un `ROLLBACK` PostgreSQL ?
+   *
+   * Référence : `docs/16 §1` (où ce champ était spécifié), ADR-029.
+   *
+   *   `LOCAL_TRANSACTIONAL`  l'effet est écrit dans la MÊME base que le journal
+   *                          d'intention. Une erreur signifie un rollback, donc
+   *                          l'absence d'effet. `FAILED` est alors une
+   *                          affirmation légitime.
+   *
+   *   `EXTERNAL`             l'effet échappe à nos transactions : un email
+   *                          parti, un virement passé, un fichier écrit. Une
+   *                          erreur du fournisseur ne prouve RIEN sur l'effet.
+   *
+   * CE QUE CE CHAMP DÉCIDE, CONCRÈTEMENT
+   * ------------------------------------
+   * Le sort d'une exécution qui a rendu une erreur. Le banc de Foundation 3 a
+   * montré qu'un fournisseur peut produire l'effet PUIS répondre `500`. Sans ce
+   * champ, le Gateway concluait `FAILED` — c'est-à-dire qu'il affirmait
+   * l'absence d'effet sur la seule parole du fournisseur, exactement la faute
+   * symétrique de croire un `200`.
+   */
+  readonly effect: 'LOCAL_TRANSACTIONAL' | 'EXTERNAL';
 }
 
 /** Ce que le Gateway fournit à l'outil au moment de l'exécution. */

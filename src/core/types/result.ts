@@ -31,6 +31,17 @@ export type ErrorKind =
   | 'CONFIRMATION_REQUIRED' // action préparée, en attente de l'utilisateur
   | 'NOT_FOUND'
   | 'CONFLICT' // idempotence : l'opération existe déjà
+  /**
+   * Une opération de MÊME CLÉ est déjà engagée par un autre appelant.
+   *
+   * Volontairement distinct de `CONFLICT`, qui signale un défaut d'appelant
+   * (même clé, arguments différents). Ici il n'y a aucun défaut : deux appels
+   * légitimes ont couru, un seul a pris l'engagement.
+   *
+   * Ce n'est PAS un échec de l'action. L'appelant qui reçoit ceci n'a rien
+   * tenté, et ne sait rien de l'issue de celui qui a gagné.
+   */
+  | 'OPERATION_IN_FLIGHT'
   | 'PROVIDER_UNAVAILABLE'
   | 'TIMEOUT'
   | 'VERIFICATION_FAILED'

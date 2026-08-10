@@ -1071,3 +1071,141 @@ Voir `docs/12 §4`.
 **Condition de révision.** Si un fournisseur impose une sémantique de reprise
 incompatible, elle s'exprime dans son adaptateur via `verifyAttempt` — jamais en
 assouplissant le Gateway.
+
+---
+
+## ADR-028 — Un effet externe se déclare, il ne se devine pas
+
+**Statut :** accepté (Foundation 3).
+**Contexte :** `docs/16 §1` avait spécifié un champ `effect` sans le mettre en
+vigueur. Le banc de défaillance a montré ce que son absence coûtait.
+
+Le Tool Gateway concluait `FAILED` de toute erreur d'exécution qui n'était pas
+un timeout. Autrement dit, il **affirmait l'absence d'effet sur la parole du
+fournisseur**. Le banc met en scène le cas qui l'invalide : un fournisseur qui
+produit l'effet, puis répond `500`.
+
+**Décision.** Tout outil déclare :
+
+```ts
+effect: 'LOCAL_TRANSACTIONAL' | 'EXTERNAL'
+```
+
+`LOCAL_TRANSACTIONAL` signifie que l'effet est écrit dans la même base que le
+journal d'intention. Une erreur y entraîne un `ROLLBACK`, et l'absence d'effet
+est garantie **par PostgreSQL, pas par une déclaration**. `FAILED` reste alors
+légitime.
+
+`EXTERNAL` signifie que l'effet échappe à nos transactions. Une erreur ne prouve
+rien : le seul état honnête est `UNKNOWN`.
+
+**Arbitrage.** On aurait pu déduire ce champ de `networkRequired`. Refusé :
+ce sont deux questions différentes. Un outil d'écriture de fichier local est
+`networkRequired: false` et pourtant non transactionnel. Faire porter une
+décision de vérité par un champ qui parle de réseau aurait fonctionné jusqu'au
+premier outil de ce genre.
+
+**Ce que cette décision NE fait pas.** Elle n'interdit pas encore d'enregistrer
+un outil `EXTERNAL` avec `attemptVerification: 'NONE'`. `docs/16 §3` recommande
+cette garde ; elle exclurait des familles entières d'outils légitimes et relève
+d'un choix produit, pas d'une correction. Elle reste ouverte.
+
+**Condition de révision.** Si une troisième catégorie apparaît — un effet
+externe mais transactionnel, via un protocole à deux phases — elle s'ajoute
+comme valeur, jamais comme exception dans le Gateway.
+
+---
+
+## ADR-029 — Le journal d'intention protège du temps ; il fallait aussi le protéger de l'espace
+
+**Statut :** accepté (Foundation 3).
+**Contexte :** ADR-027 a rendu Jarvis correct face au TEMPS — un crash, un
+redémarrage, un rejeu plus tard. `docs/17 §6` nommait la concurrence comme « le
+plus probable prochain endroit où une faille se cache ». Elle s'y cachait.
+
+### Ce que le banc a mesuré
+
+Sur une même clé d'opération, avec un outil à effet réellement externe :
+
+| Appels simultanés | Effets produits |
+|---|---|
+| 2 | 1 |
+| 10 | 1 |
+| **100** | **20** |
+| 1 000 | 1 |
+
+Le défaut est **dépendant de la charge**. Un banc qui n'aurait éprouvé que
+1 000 appels aurait conclu que tout allait bien.
+
+### La cause
+
+Trois écritures d'état étaient des `UPDATE` **inconditionnels**, et une lecture
+précédait une insertion :
+
+```text
+SELECT … WHERE operation_id = $1       ← N appelants lisent « rien »
+INSERT …                               ← N appelants concluent « je suis le premier »
+UPDATE … SET state='COMMITTED'         ← aucune garde
+UPDATE … SET state='EXECUTING'         ← aucune garde
+```
+
+Correct dans le temps, inopérant dans l'espace.
+
+### La décision
+
+Toute transition d'état d'une opération est un **compare-and-swap en base** :
+
+```sql
+INSERT … ON CONFLICT (operation_id) DO NOTHING
+
+UPDATE tool_operations SET state = 'COMMITTED_TO_EXECUTION'
+ WHERE operation_id = $1 AND state = 'PLANNED'
+
+UPDATE tool_operations SET state = 'EXECUTING', attempts = attempts + 1
+ WHERE operation_id = $1 AND state = 'COMMITTED_TO_EXECUTION'
+```
+
+`rowCount = 0` signifie « un autre appelant a pris l'engagement ». Cet appelant
+reçoit `OPERATION_IN_FLIGHT` — une famille d'erreur distincte de `CONFLICT`,
+parce que ce n'est pas un défaut d'appelant et que **rien n'a été tenté**.
+
+### Le cas qui a exigé un numéro de version
+
+Le retour à `PLANNED` du chemin `NO_EFFECT` était lui aussi inconditionnel. Sur
+des reprises concurrentes, il pouvait **ramener en arrière une opération
+qu'une autre reprise venait d'engager**, rouvrant l'exécution d'un appel déjà
+en vol.
+
+Une garde d'état ne suffit pas ici : `EXECUTING` ne dit pas si l'exécutant est
+mort ou bien vivant. `attempts` sert donc de numéro de version, et la reprise
+ne rembobine que ce qu'elle a elle-même observé :
+
+```sql
+UPDATE … SET state = 'PLANNED'
+ WHERE operation_id = $1
+   AND state IN ('EXECUTING','UNKNOWN')
+   AND attempts = <valeur lue au départ>
+```
+
+**Arbitrage.** Un verrou en mémoire aurait été plus simple et aurait passé le
+test intra-processus. Il se serait effondré au premier second processus — un
+worker, un cron, le CLI et l'application mobile ouverts ensemble. Le goulot doit
+être là où l'état est partagé : en base.
+
+Un `SELECT … FOR UPDATE` tenu pendant l'appel aurait aussi fonctionné, au prix
+de garder une connexion PostgreSQL ouverte pendant un appel réseau de 30 s.
+Refusé.
+
+**Conséquence acceptée.** Sur N appels simultanés, un seul agit et N−1
+reçoivent un refus explicite. C'est le comportement des API à clé
+d'idempotence, et c'est `FAIL CLOSED` appliqué à la concurrence : on ne sait
+pas, donc on n'agit pas, et on le dit.
+
+**Ce que cette décision ne couvre pas.** Elle protège une CLÉ. Un appelant qui
+frappe une nouvelle clé pour « réessayer ailleurs » n'effectue pas un repli : il
+lance une seconde action, et le noyau ne peut pas le deviner. C'est l'invariant
+que Foundation 4 doit rendre structurel — voir `docs/19 §3`.
+
+**Condition de révision.** Si Jarvis devient multi-machines, la garantie repose
+toujours sur PostgreSQL comme point de sérialisation unique. Le jour où la base
+serait répliquée en écriture, cet ADR doit être rouvert avant tout autre travail.

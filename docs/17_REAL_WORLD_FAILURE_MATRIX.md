@@ -8,20 +8,29 @@ sans jamais confondre les trois.
 
 ## 1. La métrique fondamentale
 
+> ⚠ **Corrigée par Foundation 3.** L'énoncé initial de cette section était faux
+> dès qu'un outil aurait plusieurs cibles. Voir `docs/18 §2`.
+
 Toutes les lignes de ce document se ramènent à une seule mesure :
 
 ```text
 Pour toute opération déclarée AT_MOST_ONCE :
 
-    operation_key = X   ⟹   external_effect_count ≤ 1
+    (operation_key = X, cible = C)   ⟹   external_effect_count ≤ 1
 ```
 
-Ce n'est pas une métaphore. C'est ce que compte la sonde
-`tests/redteam/probes/crash-probe.ts` : le nombre de lignes réellement créées
-dans le monde, après un processus tué et redémarré.
+La mention de la **cible** n'est pas un raffinement. Un envoi à cinq
+destinataires produit légitimement cinq effets : sans elle, l'inégalité est
+violée par une opération parfaitement correcte. Elle est restée invisible tant
+qu'aucun outil n'avait plusieurs cibles — elle était fausse quand même.
 
-Tout le reste — journal d'intention, `UNKNOWN` qualifié, refus de rejeu — n'est
-que le moyen de tenir cette inégalité.
+Ce n'est pas une métaphore. C'est ce que comptent les sondes
+`tests/redteam/probes/crash-probe.ts` et `tests/lab/world.ts` : le nombre
+d'effets réellement produits dans le monde, après un processus tué, redémarré,
+ou concurrencé par vingt autres.
+
+Tout le reste — journal d'intention, `UNKNOWN` qualifié, refus de rejeu,
+compare-and-swap — n'est que le moyen de tenir cette inégalité.
 
 ---
 
@@ -82,30 +91,61 @@ par absence du composant.
 | Double commande, même clé | ≤ 1 effet | ✅ | `tools/idempotency` |
 | Même clé, arguments différents | refus | ✅ | `tools/idempotency` |
 
-### Défaillances de fournisseur — **aucune n'est testable aujourd'hui**
+### Défaillances de fournisseur — **éprouvées depuis Foundation 3**
 
-Il n'existe **aucun fournisseur distant** dans le dépôt (`docs/11 §2`).
+Le banc `tests/lab/` fournit désormais un fournisseur hostile capable de
+produire ces pathologies à la demande, avec contrôle du moment de l'effet.
 
-| Incident | Attendu | État |
-|---|---|---|
-| Réponse perdue | `UNKNOWN`, aucun rejeu | ⏳ |
-| Réponse dupliquée | ≤ 1 effet | ⏳ |
-| Réponses réordonnées | ≤ 1 effet | ⏳ |
-| `500` après l'effet | `UNKNOWN` | ⏳ |
-| `429` | aucun effet supplémentaire, aucun rejeu | ⏳ |
-| Succès partiel (3 destinataires sur 5) | **`PARTIAL`** | ⏳ — **le statut n'existe pas** |
-| Fournisseur indisponible | dégradation propre, **aucun repli interdit** | ⏳ |
-| Modèle indisponible | refus, jamais d'escalade vers un palier non autorisé | ⏳ |
-| Partition réseau | sécurité conservée | ⏳ |
+| Incident | Attendu | État | Preuve |
+|---|---|---|---|
+| Réponse perdue | `UNKNOWN`, aucun rejeu | ✅ | `lab/provider-lies` |
+| `500` après l'effet | `UNKNOWN`, jamais `FAILED` | ✅ | `lab/provider-lies` — **défaut HIGH-8 corrigé** |
+| `429` / `503` | aucun effet, aucun rejeu | ✅ | `lab/provider-lies` |
+| Succès annoncé sans effet | jamais `CONFIRMED` | ✅ | `lab/provider-lies` |
+| Fournisseur indisponible | `UNKNOWN`, aucun repli automatique | ✅ | `lab/provider-fallback` |
+| Repli A → B, même clé | ≤ 1 effet | ✅ | `lab/provider-fallback` |
+| Repli A → B, **nouvelle clé** | ≤ 1 effet | ❌ | **trou nommé** — `docs/19 §3`, INV-R1 |
+| Succès partiel (3 sur 5) | **`PARTIAL`** | ❌ | `lab/partial` — **le statut n'existe pas** |
+| Effet différé après la réponse | réconciliation | ❌ | `lab/provider-lies` — **dette nommée** |
+| Réponses réordonnées | ≤ 1 effet | ⏳ | non simulé |
+| Modèle indisponible | refus, jamais d'escalade | ⏳ | aucun routeur |
+| Partition réseau | sécurité conservée | ⏳ | non simulé |
 
-Trois de ces lignes sont **bloquantes pour Foundation 4** :
+Trois lignes restent **bloquantes pour Foundation 4** :
 
 - **succès partiel** — `PARTIAL` doit exister avant le premier outil capable de
-  réussir à moitié. Après, la migration coûtera cher ;
-- **fournisseur indisponible** — c'est le test décisif de `docs/14 §4` : le
-  système doit refuser plutôt qu'escalader ;
-- **réponse dupliquée** — le seul cas où l'inégalité `≤ 1` peut être violée par
-  le fournisseur lui-même, sans faute de Jarvis.
+  réussir à moitié. Spécifié en `docs/19 §2` ; après, la migration coûtera cher ;
+- **repli à nouvelle clé** — le seul cas mesuré où l'inégalité est violée sans
+  faute du Gateway. C'est un invariant de routeur, pas un défaut du noyau ;
+- **effet différé** — un fournisseur asynchrone fait dire `FAILED` à Jarvis
+  d'une action qui aboutira. Exige une réconciliation qui n'existe pas.
+
+### Concurrence — **section ouverte par Foundation 3**
+
+`docs/17 §6` annonçait ce manque comme « le plus probable prochain endroit où
+une faille se cache ». Elle s'y cachait.
+
+| Incident | Attendu | État | Preuve |
+|---|---|---|---|
+| 2 / 10 / 100 / 1 000 appels simultanés, même clé | ≤ 1 effet | ✅ | `lab/concurrency` — **défaut CRIT-3 corrigé** |
+| 4 processus distincts, même clé | 1 seul engagement | ✅ | `lab/multiprocess` |
+| Reprise concurrente depuis `PLANNED` | ≤ 1 effet | ✅ | `lab/concurrency` |
+| Reprise concurrente après crash post-effet | ≤ 1 effet | ✅ | `lab/crash-concurrency` |
+| Reprise concurrente `NO_EFFECT` | ≤ 1 effet | ✅ | `lab/crash-concurrency` — **défaut CRIT-4 corrigé** |
+| Perdant d'une course | « rien tenté », jamais « échec » | ✅ | `lab/multiprocess` |
+| Concurrence multi-**machines** | ≤ 1 effet | ⏳ | non architecturé |
+
+### Exfiltration — **mesurée, plus seulement déclarée**
+
+| Incident | Attendu | État | Preuve |
+|---|---|---|---|
+| Donnée sensible traitée localement | 0 sortie réseau | ✅ | `lab/exfiltration` |
+| Cloud activé, traitement local | 0 sortie réseau | ✅ | `lab/exfiltration` |
+| Résolution DNS pendant un traitement local | aucune | ✅ | `lab/exfiltration` |
+| La sentinelle voit réellement une sortie | témoin négatif | ✅ | `lab/exfiltration` |
+
+Mesuré en interceptant `net.Socket.prototype.connect` et `dns.lookup` — donc
+**sous** le code applicatif, et non sur la foi du Policy Gate.
 
 ### Sécurité sous panne
 
@@ -124,15 +164,24 @@ Trois de ces lignes sont **bloquantes pour Foundation 4** :
 
 ## 4. Décompte honnête
 
-| | Nombre |
-|---|---|
-| ✅ prouvé par un test nommé | **26** |
-| ◐ partiel | **3** |
-| ⏳ intestable — composant absent | **10** |
+| | Foundation 2.2 | **Foundation 3** |
+|---|---|---|
+| ✅ prouvé par un test nommé | 26 | **45** |
+| ◐ partiel | 3 | **3** |
+| ❌ trou ou dette **nommés** | 1 | **4** |
+| ⏳ intestable — composant absent | 10 | **4** |
 
-**Les 10 `⏳` ne sont pas des lacunes de test. Ce sont des lacunes de produit.**
-Aucun ne deviendra testable en écrivant un test : il faut d'abord qu'un
-fournisseur distant existe.
+Les six lignes passées de `⏳` à `✅` ne l'ont pas été en écrivant des tests
+contre un vrai fournisseur : le banc en fournit un **hostile**, capable de
+produire à volonté ce qu'un vrai ne produit qu'une fois par mois.
+
+Les quatre `❌` sont des **lacunes de produit**, pas de test : `PARTIAL`
+n'existe pas, le routeur n'existe pas, la réconciliation différée n'existe pas.
+Elles sont désormais nommées et spécifiées (`docs/19`), ce qui est la seule
+chose qui les distingue d'un oubli.
+
+Les quatre `⏳` restants exigent une architecture absente : multi-machines,
+réordonnancement, partition réseau, escalade de modèle.
 
 ---
 
@@ -180,7 +229,13 @@ distribuée avec le fournisseur, qu'aucune API réelle n'offre.
 sémantique d'idempotence entre deux versions, sans préavis. Aucun test écrit
 aujourd'hui ne le détectera — seule une surveillance continue le ferait.
 
-**La charge.** Rien n'a été éprouvé au-delà de quelques opérations séquentielles.
-Le comportement sous concurrence — deux appels sur la même clé d'opération en
-parallèle — n'est **pas testé**. C'est un manque nommé, et le plus probable
-prochain endroit où une faille se cache.
+**La charge.** ~~Rien n'a été éprouvé au-delà de quelques opérations
+séquentielles.~~ **Résolu par Foundation 3** — et la faille annoncée y était
+bien : 20 effets pour une clé unique à 100 appels simultanés (`docs/18 §1`).
+Éprouvé désormais jusqu'à 1 000 appels intra-processus et 100 appels répartis
+sur quatre processus.
+
+Ce qui reste hors de portée : la concurrence **multi-machines**. Toutes les
+garanties reposent sur PostgreSQL comme point de sérialisation unique. Une base
+répliquée en écriture les invaliderait toutes, sans qu'aucun test actuel ne
+s'en aperçoive.

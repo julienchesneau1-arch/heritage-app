@@ -24,7 +24,7 @@ import type { SecretVault } from '../secrets/vault.js';
 import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
-import type { VerificationEngine } from '../verification/engine.js';
+import type { UnknownReason, VerificationEngine } from '../verification/engine.js';
 import { verificationOutcome } from '../verification/engine.js';
 import type {
   RegisteredTool,
@@ -117,6 +117,27 @@ const NEVER_CALLED: ReadonlySet<OperationState> = new Set<OperationState>([
   'PLANNED',
   'COMMITTED_TO_EXECUTION',
 ]);
+
+/**
+ * Réponse au PERDANT d'une course sur une clé d'opération.
+ *
+ * La formulation est la partie qui compte. Cet appelant n'a pas échoué : il n'a
+ * RIEN TENTÉ. Et il ne sait rien de l'issue de celui qui a pris l'engagement —
+ * affirmer « c'est fait » comme « ça a échoué » serait également mensonger.
+ *
+ * C'est `FAIL CLOSED` appliqué à la concurrence : on ne sait pas, donc on
+ * n'agit pas, et on le dit.
+ */
+function inFlight(call: ToolCall, toolId: string): Result<never> {
+  return err(
+    jarvisError(
+      'OPERATION_IN_FLIGHT',
+      `Une opération de même clé (${call.operationId}) est déjà engagée. ` +
+        "Je n'ai rien tenté, et je n'affirme rien sur l'issue de l'autre appel.",
+      { tool: toolId },
+    ),
+  );
+}
 
 /** Exécute avec un plafond de temps. Un outil qui ne rend pas la main ne bloque pas Jarvis. */
 async function withTimeout<T>(
@@ -274,10 +295,14 @@ export function createToolGateway(deps: {
       verification: VerificationOutcome,
       detail: string,
     ): Promise<Result<GatewayResult>> => {
+      // Garde d'état (ADR-029) : on ne clôt que ce qui est encore en suspens.
+      // Sans elle, une reprise lente écraserait le `SUCCEEDED` qu'une autre
+      // reprise vient d'établir — Jarvis dirait « je ne sais pas » d'une
+      // action qu'il vient pourtant de confirmer.
       await deps.db.query(
         `UPDATE tool_operations
             SET state = $2, status = $3, observed_at = now(), recovery_detail = $4
-          WHERE operation_id = $1`,
+          WHERE operation_id = $1 AND state IN ('EXECUTING', 'UNKNOWN')`,
         [call.operationId, state, verification.status, detail.slice(0, 500)],
       );
       const event = await deps.ledger.append({
@@ -346,15 +371,39 @@ export function createToolGateway(deps: {
         );
 
       case 'NO_EFFECT': {
-        // Le seul chemin qui autorise une nouvelle exécution — et il exige une
-        // affirmation POSITIVE du fournisseur, jamais une absence de preuve.
-        const reset = await deps.db.query(
+        /* Le seul chemin qui autorise une nouvelle exécution — et il exige une
+           affirmation POSITIVE du fournisseur, jamais une absence de preuve.
+
+           LE DÉFAUT QUE FOUNDATION 3 A MESURÉ ICI
+           ---------------------------------------
+           Ce retour à `PLANNED` était un `UPDATE` inconditionnel. Sur des
+           reprises CONCURRENTES, il pouvait ramener en arrière une opération
+           qu'une autre reprise venait d'engager : la seconde reprise rouvrait
+           l'exécution d'un appel déjà en vol, et le monde changeait deux fois.
+
+           La garde combine deux conditions, et il faut les deux :
+
+             state IN ('EXECUTING','UNKNOWN')   l'opération est encore en suspens
+             attempts = <valeur lue au départ>  personne ne l'a reprise depuis
+
+           `attempts` sert ici de NUMÉRO DE VERSION. L'état seul ne suffit pas :
+           il ne dit pas si le `EXECUTING` qu'on observe est celui d'un
+           processus mort ou celui d'un appelant bien vivant. Le compteur, lui,
+           les distingue. */
+        const rewound = await deps.db.query(
           `UPDATE tool_operations
-              SET state = 'PLANNED', recovery_detail = $2
-            WHERE operation_id = $1`,
-          [call.operationId, `Reprise : ${verdict.value.detail}`],
+              SET state = 'PLANNED', recovery_detail = $3
+            WHERE operation_id = $1
+              AND state IN ('EXECUTING', 'UNKNOWN')
+              AND attempts = $2`,
+          [call.operationId, prior.attempts, `Reprise : ${verdict.value.detail}`],
         );
-        if (!reset.ok) return reset;
+        if (!rewound.ok) return rewound;
+        if ((rewound.value.rowCount ?? 0) === 0) {
+          // Une autre reprise a pris la main entre notre lecture et notre
+          // écriture. On ne rejoue pas derrière elle.
+          return inFlight(call, def.id);
+        }
         return gateway.invoke(call);
       }
 
@@ -521,14 +570,51 @@ export function createToolGateway(deps: {
        (§4 bis). L'absence de ligne devient alors une information fiable, et
        non un pari. */
     const digest = inputDigest(parsed.value);
-    const existing = await deps.db.query<OperationRow>(
-      'SELECT * FROM tool_operations WHERE operation_id = $1',
-      [call.operationId],
-    );
-    if (!existing.ok) return existing;
 
-    const prior = existing.value.rows[0];
-    if (prior !== undefined) {
+    /* --- 3a. INSCRIPTION ATOMIQUE DE L'INTENTION (ADR-029) --------------
+       L'ancien code lisait, puis insérait si rien n'existait. Entre les deux
+       instants, N appels concurrents lisaient tous « rien » et concluaient
+       tous « je suis le premier ».
+
+       Le banc de Foundation 3 a mesuré 20 effets externes pour une clé unique
+       à 100 appels simultanés — et 1 seul à 1 000, ce qui rendait le défaut
+       invisible à qui ne testait qu'une seule charge.
+
+       `ON CONFLICT DO NOTHING` supprime la fenêtre : sur N appels simultanés,
+       PostgreSQL garantit qu'exactement un insère. Les autres l'apprennent par
+       `rowCount === 0` et passent par le chemin de reprise. */
+    const inscribed = await deps.db.query(
+      `INSERT INTO tool_operations
+         (operation_id, tool_id, tool_version, state, resource_kind,
+          resource_id, input_digest, actor, attempts)
+       VALUES ($1,$2,$3,'PLANNED',NULL,NULL,$4,$5,0)
+       ON CONFLICT (operation_id) DO NOTHING`,
+      [call.operationId, def.id, def.version, digest, call.actor],
+    );
+    if (!inscribed.ok) return inscribed;
+
+    if ((inscribed.value.rowCount ?? 0) === 0) {
+      /* --- 3b. La clé existait : rejeu, reprise, ou course ---------------- */
+      const existing = await deps.db.query<OperationRow>(
+        'SELECT * FROM tool_operations WHERE operation_id = $1',
+        [call.operationId],
+      );
+      if (!existing.ok) return existing;
+
+      const prior = existing.value.rows[0];
+      if (prior === undefined) {
+        // L'insertion a été refusée pour conflit, mais la ligne n'est pas
+        // lisible. On ne devine pas : on refuse d'agir.
+        return err(
+          jarvisError(
+            'INTEGRITY',
+            `La clé d'opération ${call.operationId} est en conflit mais ` +
+              'introuvable. Rien n\'a été tenté.',
+            { tool: def.id },
+          ),
+        );
+      }
+
       if (prior.input_digest !== digest) {
         // Même clé, arguments différents : ce n'est pas un rejeu, c'est un
         // défaut d'appelant. Exécuter serait pire que refuser.
@@ -549,25 +635,32 @@ export function createToolGateway(deps: {
         actor: call.actor,
       };
 
-      /* --- 3a. L'opération a pu avoir un effet : on NE REJOUE PAS ------- */
+      /* --- 3c. L'opération a pu avoir un effet : on NE REJOUE PAS ------- */
       if (EFFECT_POSSIBLE.has(prior.state)) {
         return await resumeUncertain(call, tool, prior, digest, policy, replayContext);
       }
 
-      /* --- 3b. Aucun appel n'a jamais été lancé : on peut exécuter ------ */
+      /* --- 3d. Aucun appel n'a jamais été lancé : on peut tenter -------- */
       if (NEVER_CALLED.has(prior.state)) {
-        // On repart de la ligne existante plutôt que d'en créer une seconde.
-        const reset = await deps.db.query(
-          `UPDATE tool_operations SET state = 'PLANNED', recovery_detail = $2
-             WHERE operation_id = $1`,
-          [
-            call.operationId,
-            `Reprise depuis ${prior.state} : aucun appel n'avait été lancé.`,
-          ],
-        );
-        if (!reset.ok) return reset;
+        if (prior.state === 'COMMITTED_TO_EXECUTION') {
+          // Arrêt entre les deux barrières : la décision était durable, l'appel
+          // n'est jamais parti. On ramène à `PLANNED` — par compare-and-swap,
+          // pour qu'un seul appelant le fasse et qu'aucun ne puisse ramener en
+          // arrière une opération qu'un autre vient d'engager.
+          const rewound = await deps.db.query(
+            `UPDATE tool_operations SET state = 'PLANNED', recovery_detail = $2
+               WHERE operation_id = $1 AND state = 'COMMITTED_TO_EXECUTION'`,
+            [
+              call.operationId,
+              "Reprise depuis COMMITTED_TO_EXECUTION : aucun appel n'était parti.",
+            ],
+          );
+          if (!rewound.ok) return rewound;
+        }
+        // `PLANNED` : rien à faire ici. Le compare-and-swap de l'étape 4 bis
+        // départagera les appelants concurrents.
       } else {
-        /* --- 3c. Rejeu d'une opération terminée : on relit l'état réel -- */
+        /* --- 3e. Rejeu d'une opération terminée : on relit l'état réel -- */
         const replayExecution: ToolExecution = {
           output: null,
           ...(prior.resource_id !== null && prior.resource_kind !== null
@@ -604,21 +697,52 @@ export function createToolGateway(deps: {
           replayed: true,
         });
       }
-    } else {
-      /* --- 3d. Première tentative : on INSCRIT L'INTENTION ------------- */
-      const planned = await deps.db.query(
-        `INSERT INTO tool_operations
-           (operation_id, tool_id, tool_version, state, resource_kind,
-            resource_id, input_digest, actor, attempts)
-         VALUES ($1,$2,$3,'PLANNED',NULL,NULL,$4,$5,0)`,
-        [call.operationId, def.id, def.version, digest, call.actor],
-      );
-      if (!planned.ok) return planned;
     }
 
-    /* --- 4. Secrets ----------------------------------------------------
-       Résolus ici, après la politique, et remis à l'outil seul. Le modèle
-       n'a jamais vu ni le nom résolu ni la valeur (invariant S3). */
+    /* --- 4. BARRIÈRE DE DURABILITÉ ET D'EXCLUSION (ADR-027, ADR-029) ----
+       Deux écritures, et l'ordre est la propriété :
+
+         COMMITTED_TO_EXECUTION   la décision d'appeler est durable ; l'appel
+                                  n'est pas encore parti
+         EXECUTING                l'appel part MAINTENANT
+
+       Un arrêt entre les deux laisse `COMMITTED_TO_EXECUTION` : on sait
+       qu'aucun effet n'existe, et la reprise peut exécuter sereinement.
+       Un arrêt après laisse `EXECUTING` : on ne sait pas, et la reprise ne
+       rejouera jamais d'elle-même.
+
+       CE QUE FOUNDATION 3 A AJOUTÉ
+       ----------------------------
+       Ces deux écritures étaient des `UPDATE` INCONDITIONNELS. Elles rendaient
+       le journal correct dans le TEMPS (un crash, un rejeu plus tard) et
+       inopérant dans l'ESPACE (deux appels au même instant) : N appelants
+       passaient tous les deux barrières et exécutaient tous.
+
+       Chacune est désormais un COMPARE-AND-SWAP — `UPDATE … WHERE state = …`.
+       PostgreSQL sérialise les écritures sur une même ligne et réévalue la
+       condition après le verrou : exactement un appelant transite, les autres
+       reçoivent `rowCount = 0`.
+
+       C'est le seul goulot d'étranglement du système, et il est en base — pas
+       dans un verrou en mémoire, qui ne survivrait ni à plusieurs processus ni
+       à un redémarrage. */
+    const committed = await deps.db.query(
+      `UPDATE tool_operations
+          SET state = 'COMMITTED_TO_EXECUTION', committed_at = now()
+        WHERE operation_id = $1 AND state = 'PLANNED'`,
+      [call.operationId],
+    );
+    if (!committed.ok) return committed;
+    if ((committed.value.rowCount ?? 0) === 0) return inFlight(call, def.id);
+
+    /* --- 4 bis. Secrets ------------------------------------------------
+       Résolus APRÈS l'engagement et AVANT l'appel, et remis à l'outil seul.
+       Le modèle n'a jamais vu ni le nom résolu ni la valeur (invariant S3).
+
+       L'ordre importe : un secret manquant laisse l'opération en
+       `COMMITTED_TO_EXECUTION`, état qui garantit qu'aucun appel n'est parti.
+       Elle reste donc reprenable, au lieu d'être condamnée à `UNKNOWN` pour
+       une raison sans rapport avec le monde extérieur. */
     const secrets = new Map<string, string>();
     for (const name of def.requiredSecrets) {
       const secret = deps.vault.get(name);
@@ -633,36 +757,14 @@ export function createToolGateway(deps: {
       actor: call.actor,
     };
 
-    /* --- 4 bis. BARRIÈRE DE DURABILITÉ (ADR-027) -----------------------
-       Deux écritures, et l'ordre est la propriété :
-
-         COMMITTED_TO_EXECUTION   la décision d'appeler est durable ; l'appel
-                                  n'est pas encore parti
-         EXECUTING                l'appel part MAINTENANT
-
-       Un arrêt entre les deux laisse `COMMITTED_TO_EXECUTION` : on sait
-       qu'aucun effet n'existe, et le rejeu peut exécuter sereinement.
-       Un arrêt après laisse `EXECUTING` : on ne sait pas, et le rejeu ne
-       rejouera jamais de lui-même.
-
-       Le biais est délibéré : le journal penche vers `UNKNOWN`, jamais vers la
-       réexécution. Un doute coûte une question à l'utilisateur ; une
-       réexécution coûte un second virement. */
-    const committed = await deps.db.query(
-      `UPDATE tool_operations
-          SET state = 'COMMITTED_TO_EXECUTION', committed_at = now()
-        WHERE operation_id = $1`,
-      [call.operationId],
-    );
-    if (!committed.ok) return committed;
-
     const executing = await deps.db.query(
       `UPDATE tool_operations
           SET state = 'EXECUTING', executing_at = now(), attempts = attempts + 1
-        WHERE operation_id = $1`,
+        WHERE operation_id = $1 AND state = 'COMMITTED_TO_EXECUTION'`,
       [call.operationId],
     );
     if (!executing.ok) return executing;
+    if ((executing.value.rowCount ?? 0) === 0) return inFlight(call, def.id);
 
     /* --- 5. Exécution --------------------------------------------------- */
     const executed = await withTimeout(
@@ -672,10 +774,38 @@ export function createToolGateway(deps: {
     );
 
     if (!executed.ok) {
-      // Un timeout n'est pas un échec constaté : l'outil a peut-être abouti.
-      // L'état reflète cette différence, parce que la reprise en dépendra.
+      /* Un timeout n'est pas un échec constaté : l'outil a peut-être abouti.
+         L'état reflète cette différence, parce que la reprise en dépendra.
+
+         CE QUE FOUNDATION 3 A CORRIGÉ ICI
+         ---------------------------------
+         Seul le timeout donnait `UNKNOWN`. Toute autre erreur donnait `FAILED`
+         — c'est-à-dire que Jarvis AFFIRMAIT l'absence d'effet sur la seule
+         parole du fournisseur. Le banc a mis en scène le cas qui l'invalide :
+         un fournisseur qui produit l'effet, puis répond `500`.
+
+         Croire un `500` sur parole est exactement la faute symétrique de croire
+         un `200`. La règle est la même dans les deux sens :
+
+             une réponse de fournisseur est une OBSERVATION, jamais une preuve.
+
+         Pour un effet `LOCAL_TRANSACTIONAL`, `FAILED` reste légitime : l'erreur
+         a fait un rollback, et l'absence d'effet est garantie par PostgreSQL —
+         pas par la parole de qui que ce soit. */
       const terminal: OperationState =
-        executed.error.kind === 'TIMEOUT' ? 'UNKNOWN' : 'FAILED';
+        executed.error.kind === 'TIMEOUT' || def.effect === 'EXTERNAL'
+          ? 'UNKNOWN'
+          : 'FAILED';
+      // La CAUSE de l'ignorance est écrite au registre : la reprise en aura
+      // besoin, et l'audit doit pouvoir distinguer un délai dépassé d'un
+      // fournisseur qui a répondu sans trancher.
+      const cause: UnknownReason | 'FAILED' =
+        terminal === 'FAILED'
+          ? 'FAILED'
+          : executed.error.kind === 'TIMEOUT'
+            ? 'PROVIDER_TIMEOUT'
+            : 'EXTERNAL_STATE';
+
       await deps.db.query(
         `UPDATE tool_operations
             SET state = $2, status = $3, observed_at = now(), recovery_detail = $4
@@ -684,9 +814,7 @@ export function createToolGateway(deps: {
           call.operationId,
           terminal,
           terminal === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
-          // La raison est écrite au registre : la reprise en aura besoin, et
-          // l'audit doit pouvoir distinguer un timeout d'un plantage.
-          `${terminal === 'UNKNOWN' ? 'PROVIDER_TIMEOUT' : 'FAILED'} — ${executed.error.message}`.slice(0, 500),
+          `${cause} — ${executed.error.message}`.slice(0, 500),
         ],
       );
       await deps.ledger.append({
@@ -695,8 +823,9 @@ export function createToolGateway(deps: {
         tool: def.id,
         policyDecision: 'ALLOW',
         autonomyLevel: policy.effectiveAutonomy,
-        // Un timeout n'est pas un échec constaté : on ne sait pas.
-        status: executed.error.kind === 'TIMEOUT' ? 'UNKNOWN' : 'FAILED',
+        // Le journal dit la même chose que le registre : ni plus affirmatif,
+        // ni moins. Deux sources qui divergent, c'est une source de moins.
+        status: terminal === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
         operationId: call.operationId,
         payloadDigest: digest,
       });

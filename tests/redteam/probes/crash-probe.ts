@@ -110,6 +110,7 @@ function effectTool(point: CrashPoint) {
       requiredSecrets: [],
       rollback: null,
       attemptVerification: 'NONE',
+      effect: 'LOCAL_TRANSACTIONAL',
     },
     inputSchema: z.object({ marker: z.string() }),
 

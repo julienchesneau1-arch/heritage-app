@@ -70,6 +70,9 @@ export function memoryAddTool(
       // effet : ils n'écrivent pas la clé d'opération dans la ressource créée.
       // La reprise conclura donc UNKNOWN, et refusera de rejouer (ADR-027).
       attemptVerification: 'NONE',
+      // Écrit dans la même base que le journal d'intention : une erreur
+      // signifie un rollback, donc l'absence d'effet (ADR-029).
+      effect: 'LOCAL_TRANSACTIONAL',
     },
     inputSchema: MemoryAddInput,
 
@@ -180,6 +183,9 @@ export function memorySearchTool(search: HybridSearch): RegisteredTool {
       // effet : ils n'écrivent pas la clé d'opération dans la ressource créée.
       // La reprise conclura donc UNKNOWN, et refusera de rejouer (ADR-027).
       attemptVerification: 'NONE',
+      // Écrit dans la même base que le journal d'intention : une erreur
+      // signifie un rollback, donc l'absence d'effet (ADR-029).
+      effect: 'LOCAL_TRANSACTIONAL',
     },
     inputSchema: MemorySearchInput,
 
