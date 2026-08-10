@@ -53,6 +53,7 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 20 | [`docs/20_CHAOS_AND_TRUST_BOUNDARY.md`](docs/20_CHAOS_AND_TRUST_BOUNDARY.md) | **Chaos et preuve** : hiérarchie `CONFIRMED`/`FAILED`/`UNKNOWN`, dix invariants, bail d'exécution | avant de croire qu'un défaut se voit à la relecture |
 | 21 | [`docs/21_LEASE_ADVERSARIAL_REPORT.md`](docs/21_LEASE_ADVERSARIAL_REPORT.md) | **Le bail ne mesure pas la vie** : contrat d'effet, et la frontière avec le monde extérieur | avant de rejouer quoi que ce soit après un `UNKNOWN` |
 | 22 | [`docs/22_EXTERNAL_REALITY_LAB_DESIGN.md`](docs/22_EXTERNAL_REALITY_LAB_DESIGN.md) | **Conception du banc de réalité extérieure** : six invariants, jeton de cloisonnement, deux mondes, matrice de vérité | avant d'écrire la moindre ligne de Foundation 5 |
+| 23 | [`docs/23_CLOCK_AND_FENCING_MEASUREMENTS.md`](docs/23_CLOCK_AND_FENCING_MEASUREMENTS.md) | **Couche 01 mesurée** : les trois horloges, le défaut latent de l'estampille, l'absence de cloisonnement | avant de toucher au bail ou d'envelopper le Gateway dans une transaction |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.
@@ -72,9 +73,9 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 442 tests
+pnpm test                   # 450 tests
 pnpm test:redteam           # les 83 tests d'audit et de red team
-pnpm test:lab               # les 70 tests du banc (chaos + épreuve du bail)
+pnpm test:lab               # les 78 tests du banc (chaos, bail, horloge)
 JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
 pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
