@@ -26,6 +26,7 @@ import { buildLabStack, labCall, labDb } from '../harness.js';
 import { createHostileProvider } from '../hostile-provider.js';
 import { createHostileTool } from '../hostile-tool.js';
 import { worldDb } from '../world.js';
+import { fromStorage } from '../../../src/core/tools/identity.js';
 
 const [key = 'sonde', rawCount = '10', rawLatency = '25'] = process.argv.slice(2);
 const count = Number(rawCount);
@@ -50,7 +51,7 @@ async function main(): Promise<void> {
   );
 
   const results = await Promise.all(
-    Array.from({ length: count }, () => stack.gateway.invoke(labCall(key))),
+    Array.from({ length: count }, () => stack.gateway.invoke(labCall(fromStorage(key)))),
   );
 
   /* Quatre issues possibles, et TROIS d'entre elles sont correctes.

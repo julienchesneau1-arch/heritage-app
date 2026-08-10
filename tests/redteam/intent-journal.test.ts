@@ -13,6 +13,7 @@
  * un SECOND processus rejoue la même clé d'opération. C'est un vrai
  * redémarrage, pas une simulation.
  */
+import { fromStorage } from '../../src/core/tools/identity.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -62,6 +63,18 @@ async function probe(point: string, opId: string): Promise<string> {
 async function crashThenRecover(point: string): Promise<Observation> {
   const opId = `crash-${point}-${String(Date.now())}-${String(Math.random()).slice(2, 8)}`;
   await probe(point, opId);
+
+  /* ATTENTE DU BAIL D'EXÉCUTION — ADR-032.
+
+     Depuis Foundation 4, une reprise ne peut pas prendre la main tant que le
+     bail de l'exécutant précédent n'a pas expiré : de l'extérieur, « mort il y
+     a une seconde » est indiscernable de « encore en train de tourner ».
+
+     Ce `sleep` n'est donc pas une commodité de test — il matérialise une
+     propriété du système. Une reprise immédiate reçoit `OPERATION_IN_FLIGHT`,
+     ce que `lab/crash-concurrency` vérifie explicitement. */
+  await new Promise((resolve) => setTimeout(resolve, 5_400));
+
   const out = await probe('recover', opId);
   const line = out.trim().split('\n').at(-1) ?? '{}';
   const parsed: unknown = JSON.parse(line);
@@ -173,13 +186,14 @@ function verifiableTool(verdict: () => AttemptVerdict) {
       parameters: [{ name: 'marker', sensitive: false }],
       idempotency: 'OPERATION_KEY',
       verification: 'READ_BACK',
-      timeoutMs: 3000,
+      timeoutMs: 200,
       maxRetries: 0,
       auditEvent: 'VERIFIABLE_EFFECT',
       requiredSecrets: [],
       rollback: null,
       attemptVerification: 'BY_OPERATION_KEY',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
     },
     inputSchema: z.object({ marker: z.string() }),
     execute(input, ctx: ToolContext): Promise<Result<ToolExecution>> {
@@ -214,15 +228,21 @@ describe.skipIf(skip)('RED TEAM — vérification idempotente auprès du fournis
         toolId: 'verifiable_effect',
         input: { marker: opId },
         parameterProvenance: { marker: 'USER' },
-        operationId: opId,
+        operationId: fromStorage(opId),
         actor: 'USER',
         context: callContext(),
       })
       .then(() => undefined);
     void digest;
+    /* On simule un exécutant MORT, pas un exécutant en vol.
+       `executing_at` est donc reculé au-delà du bail (ADR-032) : sans cela,
+       l'opération serait considérée comme encore en cours, et la reprise
+       refuserait de prendre la main — ce qui est le comportement correct, mais
+       pas celui que ce test cherche à éprouver. */
     const forced = await db.query(
       `UPDATE tool_operations
-          SET state = 'EXECUTING', status = NULL, observed_at = NULL
+          SET state = 'EXECUTING', status = NULL, observed_at = NULL,
+              executing_at = now() - interval '1 hour'
         WHERE operation_id = $1`,
       [opId],
     );
@@ -244,13 +264,14 @@ describe.skipIf(skip)('RED TEAM — vérification idempotente auprès du fournis
         parameters: [],
         idempotency: 'OPERATION_KEY',
         verification: 'READ_BACK',
-        timeoutMs: 1000,
+        timeoutMs: 200,
         maxRetries: 0,
         auditEvent: 'MENTEUR',
         requiredSecrets: [],
         rollback: null,
         attemptVerification: 'BY_OPERATION_KEY',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),

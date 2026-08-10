@@ -75,20 +75,102 @@ function confirmed(evidence: Evidence): VerificationOutcome {
   return {
     status: 'CONFIRMED',
     detail: `État réel vérifié : ${evidence.observed}`,
+    evidence: 'POSITIVE_PRESENCE',
     ...(evidence.proof === undefined ? {} : { proof: evidence.proof }),
   };
 }
 
 function unknown(detail: string, reason: UnknownReason): VerificationOutcome {
-  return { status: 'UNKNOWN', detail, unknownReason: reason };
+  return { status: 'UNKNOWN', detail, unknownReason: reason, evidence: 'NONE' };
 }
 
 function probable(detail: string, proof?: string): VerificationOutcome {
   return { status: 'PROBABLE', detail, ...(proof === undefined ? {} : { proof }) };
 }
 
-function failed(detail: string): VerificationOutcome {
-  return { status: 'FAILED', detail };
+/**
+ * Preuve POSITIVE qu'aucun effet n'a eu lieu.
+ *
+ * Symétrique de `Evidence`, et la symétrie est le fond du problème corrigé par
+ * Foundation 4 : `confirmed()` exigeait une preuve, `failed()` n'exigeait rien.
+ * On pouvait donc affirmer un échec sur un simple `500`.
+ */
+export interface Absence {
+  /** Ce qui a été observé, et qui établit que rien ne s'est produit. */
+  readonly observed: string;
+  /**
+   * Pourquoi cette observation est CONCLUANTE.
+   *
+   * C'est le champ qui coûte cher à remplir honnêtement, et c'est le point.
+   * « J'ai relu, il n'y a rien » ne suffit pas face à un fournisseur qui
+   * traite en file d'attente : la fenêtre d'observation doit être fermée.
+   */
+  readonly conclusiveBecause: string;
+}
+
+/** Seule fabrique de FAILED du système. Exige une preuve d'ABSENCE. */
+function failed(absence: Absence): VerificationOutcome {
+  return {
+    status: 'FAILED',
+    detail: `Absence d'effet vérifiée : ${absence.observed} (${absence.conclusiveBecause})`,
+    evidence: 'POSITIVE_ABSENCE',
+  };
+}
+
+/** Rien n'a été tenté. Distinct d'un échec, et distinct d'une ignorance. */
+function notAttempted(detail: string): VerificationOutcome {
+  return { status: 'NOT_ATTEMPTED', detail, evidence: 'POSITIVE_ABSENCE' };
+}
+
+/**
+ * BRIDE UN VERDICT À CE QUE L'OUTIL PEUT RÉELLEMENT PROUVER — ADR-030.
+ *
+ * Un outil déclare sa `verifiability`. Comme pour `attemptVerification`, on ne
+ * lui fait pas confiance sur parole : on VÉRIFIE que son verdict tient dans ce
+ * qu'il a déclaré pouvoir établir.
+ *
+ * Le cas qui compte est celui du fournisseur asynchrone, mesuré en
+ * `docs/18 §5` :
+ *
+ *   Jarvis → fournisseur → ACK → Jarvis relit → « rien » → FAILED
+ *                                                    ↓
+ *                                          300 ms plus tard : l'effet arrive
+ *
+ * « Je ne vois rien » n'est pas « il n'y a rien ». Seul un outil `VERIFIABLE`
+ * — dont la fenêtre d'observation est fermée — peut conclure à l'absence.
+ * Pour les autres, le verdict honnête est `UNKNOWN`.
+ *
+ * C'est un DURCISSEMENT, jamais un assouplissement : cette fonction ne peut
+ * que dégrader un verdict, exactement comme `strictest()` dans le Policy Gate.
+ */
+function constrainToVerifiability(
+  tool: RegisteredTool,
+  outcome: VerificationOutcome,
+): VerificationOutcome {
+  const { verifiability, id } = tool.definition;
+
+  if (verifiability === 'VERIFIABLE') return outcome;
+
+  if (outcome.status === 'FAILED') {
+    return unknown(
+      `${id} conclut à l'absence d'effet, mais se déclare ${verifiability} : ` +
+        'il ne peut pas prouver qu\'un effet différé n\'arrivera pas. ' +
+        'Je ne peux donc pas affirmer que l\'action a échoué.',
+      'EXTERNAL_STATE',
+    );
+  }
+
+  if (verifiability === 'UNVERIFIABLE' && outcome.status === 'CONFIRMED') {
+    // Un outil qui ne sait rien établir ne peut pas non plus établir un
+    // succès, quelle que soit la confiance de son implémentation.
+    return probable(
+      `${id} se déclare UNVERIFIABLE : son verdict de succès n'est pas ` +
+        'recoupé par une observation indépendante.',
+      outcome.proof,
+    );
+  }
+
+  return outcome;
 }
 
 export interface VerificationEngine {
@@ -133,7 +215,7 @@ export function createVerificationEngine(): VerificationEngine {
               ),
             );
           }
-          return ok(outcome.value);
+          return ok(constrainToVerifiability(tool, outcome.value));
         }
 
         /* ---------------------------------------------------------------- */
@@ -161,7 +243,7 @@ export function createVerificationEngine(): VerificationEngine {
               ),
             );
           }
-          return ok(outcome.value);
+          return ok(constrainToVerifiability(tool, outcome.value));
         }
 
         /* ---------------------------------------------------------------- */
@@ -185,6 +267,7 @@ export const verificationOutcome = {
   probable,
   unknown,
   failed,
+  notAttempted,
 } as const;
 
 /**

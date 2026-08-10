@@ -55,6 +55,9 @@ export function noteCreateTool(): RegisteredTool {
       // Écrit dans la même base que le journal d'intention : une erreur
       // signifie un rollback, donc l'absence d'effet (ADR-029).
       effect: 'LOCAL_TRANSACTIONAL',
+      // PostgreSQL ferme la fenêtre d'observation : une relecture qui ne
+      // trouve rien PROUVE l'absence (ADR-030).
+      verifiability: 'VERIFIABLE',
     },
     inputSchema: NoteCreateInput,
 
@@ -111,9 +114,14 @@ export function noteCreateTool(): RegisteredTool {
       const row = found.value.rows[0];
       if (row === undefined) {
         return ok(
-          verificationOutcome.failed(
-            `La note ${execution.resource.id} est introuvable après création.`,
-          ),
+          verificationOutcome.failed({
+            observed: `La note ${execution.resource.id} est introuvable après création.`,
+            // La fenêtre d'observation est FERMÉE : `notes` est dans la même
+            // base que le journal d'intention, et la lecture suit le commit.
+            // Rien ne peut apparaître après coup (ADR-030).
+            conclusiveBecause:
+              'lecture transactionnelle après commit, aucun effet différé possible',
+          }),
         );
       }
       return ok(

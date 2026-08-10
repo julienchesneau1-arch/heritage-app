@@ -49,6 +49,7 @@ function trap(
       rollback: null,
       attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
     },
     inputSchema: z.object({ cible: z.string(), note: z.string().default('') }),
     execute: () => {

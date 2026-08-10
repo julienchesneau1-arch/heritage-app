@@ -16,6 +16,7 @@ import { appDb, databaseAvailable } from '../helpers/db.js';
 import { buildStack, callContext, operationId, type Stack } from '../helpers/stack.js';
 import { createDb } from '../../src/core/db/client.js';
 import { defineTool } from '../../src/core/tools/contract.js';
+import { projectStatus } from '../../src/core/tools/outcome.js';
 import { err, ok, jarvisError } from '../../src/core/types/result.js';
 import { buildRuntime } from '../../src/apps/runtime.js';
 
@@ -45,6 +46,7 @@ function faulty(
       rollback: null,
       attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
     },
     inputSchema: z.object({ valeur: z.string() }),
     async execute() {
@@ -311,7 +313,52 @@ describe.skipIf(skip)('RED TEAM — modes de défaillance', () => {
       if (allowed.has(relative)) continue;
       if (/['"]CONFIRMED['"]/.test(readFileSync(file, 'utf8'))) offenders.push(relative);
     }
-    expect(offenders).toEqual([]);
+    expect(offenders).toEqual([
+      // `outcome.ts` PROJETTE un statut global à partir de statuts par cible.
+      // Il a donc légitimement besoin du mot — mais ce n'est pas une seconde
+      // porte vers « c'est fait » : le test suivant vérifie qu'il ne peut pas
+      // fabriquer un CONFIRMED sans preuve.
+      'src/core/tools/outcome.ts',
+    ]);
+  });
+
+  it(
+    'la projection par cible ne peut pas inventer un CONFIRMED sans preuve',
+    () => {
+      // La contrepartie comportementale de l'exception ci-dessus. Une cible qui
+      // se DIT confirmée sans porter `POSITIVE_PRESENCE` ne doit pas propager
+      // un succès : sinon un outil malveillant ou négligent contournerait le
+      // Verification Engine en écrivant directement dans le modèle par cible.
+      const menteuse = projectStatus([
+        { target: 'a', status: 'CONFIRMED', evidence: 'NONE', detail: '' },
+        { target: 'b', status: 'CONFIRMED', evidence: 'NONE', detail: '' },
+      ]);
+      expect(menteuse).not.toBe('CONFIRMED');
+      expect(menteuse).toBe('UNKNOWN');
+
+      // Avec la preuve, et seulement avec elle.
+      const honnete = projectStatus([
+        { target: 'a', status: 'CONFIRMED', evidence: 'POSITIVE_PRESENCE', detail: '' },
+        { target: 'b', status: 'CONFIRMED', evidence: 'POSITIVE_PRESENCE', detail: '' },
+      ]);
+      expect(honnete).toBe('CONFIRMED');
+    },
+  );
+
+  it('un FAILED sans preuve d\'absence ne se propage pas non plus', () => {
+    // Symétrie exacte : « le fournisseur a dit 500 » (INCONCLUSIVE) ne prouve
+    // pas l'absence d'effet, donc ne peut pas produire un FAILED global.
+    const sansPreuve = projectStatus([
+      { target: 'a', status: 'FAILED', evidence: 'INCONCLUSIVE', detail: '' },
+      { target: 'b', status: 'FAILED', evidence: 'INCONCLUSIVE', detail: '' },
+    ]);
+    expect(sansPreuve).toBe('UNKNOWN');
+
+    const avecPreuve = projectStatus([
+      { target: 'a', status: 'FAILED', evidence: 'POSITIVE_ABSENCE', detail: '' },
+      { target: 'b', status: 'FAILED', evidence: 'POSITIVE_ABSENCE', detail: '' },
+    ]);
+    expect(avecPreuve).toBe('FAILED');
   });
 });
 

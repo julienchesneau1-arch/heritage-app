@@ -9,6 +9,7 @@
  * répond 200 sans rien faire — et c'est la raison pour laquelle les assistants
  * du marché affirment parfois avoir envoyé un email qui n'est jamais parti.
  */
+import { fromStorage } from '../../src/core/tools/identity.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { defineTool } from '../../src/core/tools/contract.js';
@@ -78,6 +79,7 @@ describe.skipIf(skip)('Verification Engine', () => {
           rollback: 'Sans objet — rien n\'a été fait.',
           attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
         },
         inputSchema: z.object({}),
         // « HTTP 200 » : l'outil affirme avoir créé la note 404.
@@ -92,9 +94,10 @@ describe.skipIf(skip)('Verification Engine', () => {
         readBack: () =>
           Promise.resolve(
             ok(
-              verificationOutcome.failed(
-                'La note annoncée est introuvable : rien n\'a été créé.',
-              ),
+              verificationOutcome.failed({
+                observed: 'la note annoncée est introuvable',
+                conclusiveBecause: 'lecture transactionnelle après commit',
+              }),
             ),
           ),
       }),
@@ -159,6 +162,7 @@ describe.skipIf(skip)('Verification Engine', () => {
         rollback: 'Inconnu.',
         attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -171,7 +175,7 @@ describe.skipIf(skip)('Verification Engine', () => {
     const outcome = await engine.verify(
       tool,
       { output: null },
-      { db, secrets: new Map(), operationId: 'x', actor: 'USER' },
+      { db, secrets: new Map(), operationId: fromStorage('x'), actor: 'USER' },
     );
 
     expect(outcome.ok).toBe(true);
@@ -206,6 +210,7 @@ describe.skipIf(skip)('Verification Engine', () => {
         rollback: null,
         attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -214,7 +219,7 @@ describe.skipIf(skip)('Verification Engine', () => {
     const outcome = await engine.verify(
       tool,
       { output: null }, // aucune preuve
-      { db, secrets: new Map(), operationId: 'x', actor: 'USER' },
+      { db, secrets: new Map(), operationId: fromStorage('x'), actor: 'USER' },
     );
 
     expect(outcome.ok).toBe(true);
@@ -244,6 +249,7 @@ describe.skipIf(skip)('Verification Engine', () => {
         rollback: null,
         attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null, proof: 'msg-42' })),
@@ -253,7 +259,7 @@ describe.skipIf(skip)('Verification Engine', () => {
     const outcome = await engine.verify(
       tool,
       { output: null, proof: 'msg-42' },
-      { db, secrets: new Map(), operationId: 'x', actor: 'USER' },
+      { db, secrets: new Map(), operationId: fromStorage('x'), actor: 'USER' },
     );
 
     expect(outcome.ok).toBe(true);
@@ -288,6 +294,7 @@ describe.skipIf(skip)('Verification Engine', () => {
           rollback: 'Inconnu.',
           attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
         },
         inputSchema: z.object({}),
         execute: () =>

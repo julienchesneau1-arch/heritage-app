@@ -1209,3 +1209,193 @@ que Foundation 4 doit rendre structurel — voir `docs/19 §3`.
 **Condition de révision.** Si Jarvis devient multi-machines, la garantie repose
 toujours sur PostgreSQL comme point de sérialisation unique. Le jour où la base
 serait répliquée en écriture, cet ADR doit être rouvert avant tout autre travail.
+
+---
+
+## ADR-030 — Hiérarchie de preuve : `FAILED` doit se mériter autant que `CONFIRMED`
+
+**Statut :** accepté (Foundation 4).
+**Contexte :** `docs/18 §5` avait nommé le fournisseur asynchrone comme dette.
+Elle était plus grave qu'une dette : elle invalidait le sens de `FAILED`.
+
+```text
+Jarvis → fournisseur → ACK → Jarvis relit → « rien » → FAILED
+                                                ↓
+                                    300 ms plus tard : l'effet arrive
+```
+
+### La dissymétrie corrigée
+
+`confirmed()` exigeait une preuve depuis la Phase 2. `failed()` n'exigeait
+rien — une chaîne de caractères suffisait. On pouvait donc affirmer un échec
+sur un `500`, alors qu'affirmer un succès sur un `200` était interdit.
+
+**Décision.** Symétrie stricte :
+
+```text
+CONFIRMED  ← preuve POSITIVE d'effet          (POSITIVE_PRESENCE)
+FAILED     ← preuve POSITIVE d'ABSENCE        (POSITIVE_ABSENCE)
+UNKNOWN    ← aucune preuve suffisante
+```
+
+et quatre corollaires, tous testés :
+
+```text
+timeout           ≠ FAILED
+500               ≠ FAILED
+connection reset  ≠ FAILED
+ACK sans preuve   ≠ CONFIRMED
+```
+
+`failed()` prend désormais une `Absence`, qui exige un champ
+`conclusiveBecause` : **pourquoi cette observation tranche**. C'est le champ
+coûteux à remplir honnêtement, et c'est le point. « J'ai relu, il n'y a rien »
+ne suffit pas face à une file d'attente.
+
+### Trois catégories de vérifiabilité
+
+Le mandat demandait de ne pas interdire les outils non vérifiables, mais
+d'empêcher **l'illusion de fiabilité**. D'où :
+
+| `verifiability` | Peut prouver | Verdict maximal |
+|---|---|---|
+| `VERIFIABLE` | présence **et** absence | `CONFIRMED` / `FAILED` |
+| `OBSERVABLE` | présence seulement | `CONFIRMED` / jamais `FAILED` |
+| `UNVERIFIABLE` | ni l'une ni l'autre | `PROBABLE` au mieux |
+
+Le Verification Engine **bride** le verdict à la déclaration : un outil
+`OBSERVABLE` qui rend `FAILED` obtient `UNKNOWN`. Comme pour
+`attemptVerification`, on déclare puis on vérifie — on ne fait pas confiance.
+
+### La règle qui remplace une interdiction
+
+```text
+effet EXTERNAL + UNVERIFIABLE + autonomie automatique  →  REFUSÉ
+```
+
+L'outil reste possible ; il exige `L3` (approbation) ou `L4`. Un effet externe
+que le système ne sait pas observer ne se produit jamais sans qu'un humain
+l'ait voulu.
+
+### Identité d'opération immuable
+
+`OperationIdentity` est un type **marqué** : une chaîne ordinaire n'y est pas
+assignable. `mint()` représente une intention neuve, `sameOperation()` un
+repli. Écrire `invoke({ ...call, operationId: mint() })` dans un chemin de
+repli devient un acte visible, et l'invariant I5 vérifie que `mint()` n'est
+appelé qu'aux deux points d'entrée légitimes.
+
+**Ce qui reste ouvert.** Le type empêche la faute par accident ; il n'empêche
+pas quelqu'un de frapper délibérément une clé neuve. I5 le rend visible en
+revue, ce qui est la meilleure garantie disponible sans routeur.
+
+---
+
+## ADR-031 — L'unité d'effet est la CIBLE, pas l'opération
+
+**Statut :** accepté (Foundation 4). **Implémenté, non branché.**
+**Contexte :** `docs/19 §2` spécifiait `PARTIAL`. Le mandat a précisé ce qui
+manquait : un statut seul ne suffit pas, il faut un modèle d'effet.
+
+```text
+Opération
+ ├── cible A → CONFIRMED
+ ├── cible B → CONFIRMED
+ ├── cible C → UNKNOWN
+ ├── cible D → FAILED
+ └── cible E → NOT_ATTEMPTED
+        ↓
+     PARTIAL          ← projeté, jamais déclaré
+```
+
+**Décision.** `VerificationStatus` gagne deux valeurs, `PARTIAL` et
+`NOT_ATTEMPTED`, et `projectStatus()` calcule le statut global à partir des
+résultats par cible. Un outil ne peut pas se dire `PARTIAL` pour éviter de
+trancher — même discipline que `confirmed()`.
+
+**La garde qui a manqué de peu.** Le test structurel de `redteam/failure-modes`
+a signalé que `outcome.ts` pouvait *retourner* un `CONFIRMED`. Il avait raison.
+La réponse n'a pas été d'assouplir le test mais d'exiger la preuve : une cible
+`CONFIRMED` sans `POSITIVE_PRESENCE` ne compte pas dans la projection. La
+projection ne peut donc pas inventer un succès qu'aucune observation n'étaye.
+
+**Reprise par cible :**
+
+```text
+CONFIRMED      → jamais resservir
+NOT_ATTEMPTED  → exécutable
+FAILED         → exécutable, SEULEMENT sur POSITIVE_ABSENCE
+UNKNOWN        → vérifier, jamais rejouer
+PROBABLE       → jamais
+```
+
+**État réel.** Le module existe, il est testé, et il n'est **pas branché** au
+Tool Gateway — qui n'a aujourd'hui aucune notion de cible à lui transmettre.
+`redteam/wiring` le liste explicitement parmi les modules qu'aucun point
+d'entrée n'atteint, pour que la dette reste visible.
+
+---
+
+## ADR-032 — Un bail d'exécution, parce que le compteur ne distingue pas un mort d'un vivant
+
+**Statut :** accepté (Foundation 4).
+**Contexte :** trouvé par le chaos runner, pas par relecture.
+
+### Le contre-exemple minimal
+
+Trois appels simultanés, un outil capable de vérifier ses tentatives :
+
+```text
+A gagne le CAS, part exécuter (60 ms de latence)
+B lit EXECUTING, interroge le monde — encore VIDE
+B conclut NO_EFFECT, rembobine, exécute
+   → DEUX EFFETS
+```
+
+### Pourquoi ADR-029 ne suffisait pas
+
+ADR-029 utilisait `attempts` comme numéro de version, sur ce raisonnement
+écrit noir sur blanc :
+
+> « L'état seul ne suffit pas : il ne dit pas si le `EXECUTING` observé est
+> celui d'un processus mort ou d'un appelant bien vivant. Le compteur, lui,
+> les distingue. »
+
+**C'était faux.** Un exécutant vivant porte `EXECUTING, attempts = 1` —
+exactement ce que lit un repreneur qui croit succéder à un mort. Le
+raisonnement ne tenait que pour un crash, où plus personne ne bouge. Les tests
+de crash de Foundation 3 passaient donc, et masquaient le cas symétrique.
+
+### La décision
+
+Ce qui distingue réellement les deux est **le temps**. Le Gateway impose
+lui-même `withTimeout(def.timeoutMs)` : passé `executing_at + timeoutMs`, un
+exécutant vivant a forcément écrit un état terminal. Si l'opération est
+toujours en `EXECUTING` au-delà, il est mort.
+
+```sql
+SELECT executing_at > now() - ($2 || ' milliseconds')::interval AS live
+```
+
+Évalué **par la base**, jamais par l'horloge du processus : comparer avec une
+horloge locale introduirait une dérive entre machines, précisément là où le
+bail compte le plus.
+
+Avant expiration, la seule réponse honnête est `OPERATION_IN_FLIGHT` — « je
+n'ai rien tenté ».
+
+**Le prix, assumé.** Une reprise après crash n'est plus immédiate : elle est
+bornée par le `timeoutMs` de l'outil plus une marge de 5 s. On échange une
+latence de reprise contre la certitude de ne jamais doubler un effet.
+`lab/crash-concurrency` en fait une propriété testée plutôt qu'un effet de
+bord subi.
+
+**Arbitrage.** Un battement de cœur donnerait une détection plus rapide, au
+prix d'une écriture périodique par opération en vol et d'un nouveau mode de
+panne (le battement qui s'arrête sans que le processus soit mort). Refusé tant
+qu'aucune mesure ne montre que la latence de reprise gêne.
+
+**Condition de révision.** Si un outil doit déclarer un `timeoutMs` très long
+— un traitement de plusieurs minutes — le bail devient trop long pour être
+praticable. Il faudra alors un battement de cœur, et cet ADR doit être rouvert
+avant, pas après.

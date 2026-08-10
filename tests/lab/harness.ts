@@ -21,6 +21,7 @@ import {
 } from '../../src/providers/policy/cedar.js';
 import type { RegisteredTool } from '../../src/core/tools/contract.js';
 import type { ToolCall } from '../../src/core/tools/gateway.js';
+import { mint, type OperationIdentity } from '../../src/core/tools/identity.js';
 
 /** Connexion applicative avec un pool dimensionné pour la concurrence. */
 export function labDb(poolMax = 40): Db {
@@ -74,7 +75,7 @@ export function buildLabStack(db: Db): LabStack {
  * contourner ici sans le dire.
  */
 export function labCall(
-  operationId: string,
+  operationId: OperationIdentity,
   overrides: Partial<ToolCall> = {},
 ): ToolCall {
   return {
@@ -94,7 +95,7 @@ export function labCall(
 }
 
 let counter = 0;
-export function labKey(prefix = 'lab'): string {
+export function labKey(prefix = 'lab'): OperationIdentity {
   counter += 1;
-  return `${prefix}-${String(Date.now())}-${String(counter)}`;
+  return mint(`${prefix}-${String(counter)}`);
 }

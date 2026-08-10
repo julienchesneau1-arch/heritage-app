@@ -126,12 +126,83 @@ export function strictest(a: AutonomyLevel, b: AutonomyLevel): AutonomyLevel {
  * aucune fonction dans ce module capable de fabriquer un CONFIRMED.
  */
 export const VerificationStatus = z.enum([
-  'CONFIRMED', // état réel relu et conforme à l'attendu
-  'PROBABLE', // l'exécution a réussi mais la relecture est impossible
-  'UNKNOWN', // on ne sait pas — et on le dit
-  'FAILED', // échec constaté
+  'CONFIRMED', // preuve POSITIVE que l'effet a eu lieu
+  'PROBABLE', // le fournisseur atteste, aucune relecture indépendante
+  'PARTIAL', // certaines cibles confirmées, d'autres non — projection
+  'UNKNOWN', // aucune preuve suffisante dans un sens ni dans l'autre
+  'FAILED', // preuve POSITIVE que l'effet n'a PAS eu lieu
+  'NOT_ATTEMPTED', // rien n'a été tenté — distinct d'un échec
 ]);
 export type VerificationStatus = z.infer<typeof VerificationStatus>;
+
+/**
+ * LA HIÉRARCHIE DE PREUVE — Foundation 4.
+ *
+ * C'est la correction sémantique la plus importante du projet, et elle tient en
+ * une symétrie :
+ *
+ *   CONFIRMED   ← preuve positive d'EFFET
+ *   FAILED      ← preuve positive d'ABSENCE d'effet
+ *   UNKNOWN     ← aucune preuve suffisante
+ *
+ * `FAILED` cessait d'être vrai dès qu'un fournisseur traitait de façon
+ * asynchrone : « je ne vois rien » n'est pas « il n'y a rien ». Un accusé de
+ * réception suivi d'un traitement différé produisait `FAILED` pour une action
+ * qui aboutissait trois cents millisecondes plus tard.
+ *
+ * Quatre corollaires, tous testés :
+ *
+ *   timeout           ≠ FAILED
+ *   500               ≠ FAILED
+ *   connection reset  ≠ FAILED
+ *   ACK sans preuve   ≠ CONFIRMED
+ */
+export const EvidenceKind = z.enum([
+  /** L'effet a été OBSERVÉ. Seule preuve qui autorise `CONFIRMED`. */
+  'POSITIVE_PRESENCE',
+  /**
+   * L'absence d'effet a été observée, ET l'observation est CONCLUANTE.
+   *
+   * Elle ne l'est que si la fenêtre d'observation est fermée : un fournisseur
+   * synchrone, ou une ressource transactionnelle. Face à une file d'attente,
+   * « zéro ligne » ne prouve rien.
+   */
+  'POSITIVE_ABSENCE',
+  /** Une observation a eu lieu, elle ne tranche pas. */
+  'INCONCLUSIVE',
+  /** Aucune observation n'a été possible. */
+  'NONE',
+]);
+export type EvidenceKind = z.infer<typeof EvidenceKind>;
+
+/**
+ * Ce qu'un outil est CAPABLE de prouver — Foundation 4.
+ *
+ * Distinct de `verification`, qui dit COMMENT il s'y prend. Ici on déclare ce
+ * qu'il peut établir, et la déclaration est vérifiée à l'enregistrement.
+ *
+ *   VERIFIABLE     peut prouver la présence ET l'absence
+ *                  → fichier créé, ligne en base, événement d'agenda
+ *
+ *   OBSERVABLE     peut prouver la présence, JAMAIS l'absence
+ *                  → un email : on peut voir qu'il est parti, on ne peut pas
+ *                    prouver qu'il ne partira pas
+ *
+ *   UNVERIFIABLE   ne peut établir ni l'une ni l'autre
+ *                  → un webhook chez un tiers sans API de consultation
+ */
+export const Verifiability = z.enum(['VERIFIABLE', 'OBSERVABLE', 'UNVERIFIABLE']);
+export type Verifiability = z.infer<typeof Verifiability>;
+
+/**
+ * Un statut autorise-t-il à parler d'un effet accompli ?
+ *
+ * Volontairement séparé de `mayClaimSuccess` : `PARTIAL` décrit bien un effet
+ * réel sur certaines cibles, sans autoriser à dire « c'est fait ».
+ */
+export function hasAnyEffect(status: VerificationStatus): boolean {
+  return status === 'CONFIRMED' || status === 'PARTIAL';
+}
 
 /* -------------------------------------------------------------------------- */
 /* Acteurs — 03, PRD §127                                                     */

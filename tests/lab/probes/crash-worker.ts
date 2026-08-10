@@ -24,6 +24,7 @@
 import { buildLabStack, labCall, labDb } from '../harness.js';
 import { createHostileTool } from '../hostile-tool.js';
 import { commitEffect, worldDb } from '../world.js';
+import { fromStorage } from '../../../src/core/tools/identity.js';
 import type { HostileProvider, ProviderReceipt } from '../hostile-provider.js';
 import { ok, type Result } from '../../../src/core/types/result.js';
 import type { Db } from '../../../src/core/db/client.js';
@@ -48,6 +49,7 @@ function createSuicidalProvider(world: Db): HostileProvider {
     id: 'hostile-suicidaire',
     callCount: () => 1,
     reconfigure: () => undefined,
+    settle: () => Promise.resolve(),
     async send(operationKey: string, payload: string): Promise<Result<ProviderReceipt>> {
       if (point === 'AVANT_EFFET') die();
 
@@ -81,7 +83,7 @@ async function main(): Promise<void> {
     }),
   );
 
-  await stack.gateway.invoke(labCall(key));
+  await stack.gateway.invoke(labCall(fromStorage(key)));
 
   // Ne devrait jamais être atteint : la sonde est censée mourir.
   process.stdout.write('SURVECU\n');

@@ -43,7 +43,19 @@ export function announce(result: Reportable): string {
         `  ${result.detail}`
       );
 
+    case 'PARTIAL':
+      return (
+        'Partiellement fait — le détail par destinataire compte plus que ce ' +
+        'résumé.\n' +
+        `  ${result.detail}`
+      );
+
+    case 'NOT_ATTEMPTED':
+      return `Je n'ai rien tenté.\n  ${result.detail}`;
+
     case 'FAILED':
+      // Le mot est fort, et il ne s'emploie que sur PREUVE d'absence d'effet
+      // (ADR-030). Un timeout ou un 500 ne l'autorisent pas.
       return `Ça n'a pas marché.\n  ${result.detail}`;
   }
 }
@@ -57,6 +69,10 @@ export function mark(status: VerificationStatus): string {
       return '~';
     case 'UNKNOWN':
       return '?';
+    case 'PARTIAL':
+      return '±';
+    case 'NOT_ATTEMPTED':
+      return '·';
     case 'FAILED':
       return '✗';
   }

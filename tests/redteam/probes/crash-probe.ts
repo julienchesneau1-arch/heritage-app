@@ -14,6 +14,7 @@
  *   npx tsx crash-probe.ts <point> <operationId>   meurt au point demandé
  *   npx tsx crash-probe.ts recover <operationId>   rejoue, imprime le verdict
  */
+import { fromStorage } from '../../../src/core/tools/identity.js';
 import { z } from 'zod';
 import type pg from 'pg';
 import { createDb, type Db } from '../../../src/core/db/client.js';
@@ -104,13 +105,16 @@ function effectTool(point: CrashPoint) {
       parameters: [{ name: 'marker', sensitive: false }],
       idempotency: 'OPERATION_KEY',
       verification: 'READ_BACK',
-      timeoutMs: 5000,
+      // Court : le bail d'exécution (ADR-032) vaut `timeoutMs + marge`, et la
+      // sonde doit pouvoir être reprise dans un délai de test raisonnable.
+      timeoutMs: 200,
       maxRetries: 0,
       auditEvent: 'CRASH_EFFECT',
       requiredSecrets: [],
       rollback: null,
       attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
     },
     inputSchema: z.object({ marker: z.string() }),
 
@@ -167,7 +171,7 @@ async function main(): Promise<void> {
     toolId: 'crash_effect',
     input: { marker: `crash-${operationId}` },
     parameterProvenance: { marker: 'USER' },
-    operationId,
+    operationId: fromStorage(operationId),
     actor: 'USER',
     context: { mode: 'NORMAL', cloudEnabled: false, proactive: false, userConfirmed: false },
   });

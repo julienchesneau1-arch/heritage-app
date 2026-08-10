@@ -27,6 +27,7 @@ import type { EmbeddingProvider } from '../../src/providers/contract.js';
 import type { Ledger } from '../../src/core/ledger/ledger.js';
 import type { MemoryStore } from '../../src/core/memory/store.js';
 import type { RegisteredTool } from '../../src/core/tools/contract.js';
+import { mint, type OperationIdentity } from '../../src/core/tools/identity.js';
 
 export interface Stack {
   readonly gateway: ToolGateway;
@@ -86,9 +87,9 @@ export function buildStack(
 }
 
 let counter = 0;
-export function operationId(prefix = 'op'): string {
+export function operationId(prefix = 'op'): OperationIdentity {
   counter += 1;
-  return `${prefix}-${String(Date.now())}-${String(counter)}`;
+  return mint(`${prefix}-${String(counter)}`);
 }
 
 /** Contexte d'appel par défaut : local, explicite, hors mode privé. */

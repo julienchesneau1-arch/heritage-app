@@ -120,15 +120,32 @@ describe('RED TEAM — code mort en production', () => {
         // les exigences de log — identifiant de requête, latence, coût,
         // décision d'égression — ne sont satisfaites par personne.
         'src/core/observability/logger.ts',
+
+        // Modèle d'effet par cible (ADR-031). Spécifié, implémenté, testé —
+        // et PAS ENCORE BRANCHÉ au Tool Gateway, qui n'a aujourd'hui aucune
+        // notion de cible à lui transmettre.
+        //
+        // Il est listé ici volontairement plutôt que masqué : c'est la dette
+        // nommée de Foundation 4, et ce test la maintient visible jusqu'à ce
+        // qu'un outil multi-cibles existe. Voir `docs/20 §4`.
+        'src/core/tools/outcome.ts',
       ].sort(),
     );
   });
 
-  it('DÉMONSTRATION — quatre modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('cinq modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
-    expect(deadLogic).toHaveLength(4);
+    expect(deadLogic).toHaveLength(5);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
+  });
+
+  it('l\'identité d\'opération, elle, EST sur le chemin réel', () => {
+    // Contre-épreuve du test précédent, et la raison pour laquelle il compte.
+    // `identity.ts` a été introduit en même temps qu'`outcome.ts` : l'un est
+    // câblé jusqu'au type de `ToolCall`, l'autre non. Le test le distingue au
+    // lieu de les traiter également.
+    expect(orphans).not.toContain('src/core/tools/identity.ts');
   });
 
   it('le noyau de sécurité, lui, est bien sur le chemin', () => {

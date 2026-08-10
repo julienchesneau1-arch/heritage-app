@@ -23,6 +23,7 @@
  * pas spontanément à une requête déclenchée par un autre site : le vecteur
  * CSRF n'existe pas ici. C'est une raison de fond de ne pas utiliser de cookie.
  */
+import { fromClient } from '../../core/tools/identity.js';
 import { z } from 'zod';
 import { HTML, CSS, JS } from './ui.js';
 import { bearerToken, tokenMatches, type AuthLimiter } from './auth.js';
@@ -145,7 +146,10 @@ export function createHandler(deps: HandlerDeps) {
       const reply = await runtime.assistant.say(checked.data.text, {
         ...(checked.data.operationId === undefined
           ? {}
-          : { operationId: checked.data.operationId }),
+          : // Identité proposée par le client : frontière explicite (ADR-030).
+            // Un client qui renvoie la même clé après une coupure fait
+            // exactement ce qu'il faut — c'est ce qui empêche le double envoi.
+            { operationId: fromClient(checked.data.operationId) }),
         ...(checked.data.confirm === undefined ? {} : { confirm: checked.data.confirm }),
       });
 

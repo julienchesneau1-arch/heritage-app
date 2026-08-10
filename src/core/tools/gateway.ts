@@ -24,6 +24,7 @@ import type { SecretVault } from '../secrets/vault.js';
 import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
+import type { OperationIdentity } from './identity.js';
 import type { UnknownReason, VerificationEngine } from '../verification/engine.js';
 import { verificationOutcome } from '../verification/engine.js';
 import type {
@@ -46,7 +47,15 @@ export interface ToolCall {
    * traité comme `EXTERNAL_UNTRUSTED` : le défaut penche vers la prudence.
    */
   readonly parameterProvenance: Readonly<Record<string, Provenance>>;
-  readonly operationId: string;
+  /**
+   * Identité de l'INTENTION, pas de la tentative — ADR-030.
+   *
+   * Type marqué : une chaîne ordinaire n'y est pas assignable. Un repli sur un
+   * autre fournisseur doit donc réutiliser l'identité existante
+   * (`sameOperation`), et frapper une clé neuve devient un acte délibéré et
+   * visible plutôt qu'un réflexe.
+   */
+  readonly operationId: OperationIdentity;
   readonly actor: Actor;
   readonly context: {
     readonly mode: Mode;
@@ -105,6 +114,19 @@ export type OperationState =
   | 'SUCCEEDED'
   | 'FAILED'
   | 'UNKNOWN';
+
+/**
+ * Marge ajoutée au bail d'exécution — ADR-032.
+ *
+ * Le Gateway impose `withTimeout(def.timeoutMs)` : passé ce délai, un exécutant
+ * vivant a forcément écrit un état terminal. La marge couvre ce qui sépare
+ * l'expiration du minuteur de l'écriture effective — un aller-retour en base,
+ * une pause du ramasse-miettes, une horloge qui n'avance pas au même rythme.
+ *
+ * Se tromper d'un côté coûte une attente ; se tromper de l'autre coûte un
+ * second virement. La marge est donc large à dessein.
+ */
+const LEASE_MARGIN_MS = 5_000;
 
 /** Les états depuis lesquels un effet externe ne peut pas être exclu. */
 const EFFECT_POSSIBLE: ReadonlySet<OperationState> = new Set<OperationState>([
@@ -635,8 +657,52 @@ export function createToolGateway(deps: {
         actor: call.actor,
       };
 
-      /* --- 3c. L'opération a pu avoir un effet : on NE REJOUE PAS ------- */
+      /* --- 3c. L'opération a pu avoir un effet : on NE REJOUE PAS -------
+         BAIL D'EXÉCUTION — ADR-032.
+
+         Le chaos runner de Foundation 4 a trouvé ici un double effet que ni
+         les tests de crash ni ceux de concurrence n'avaient vu. Le
+         contre-exemple minimal tient en trois appels simultanés :
+
+           A gagne le CAS, part exécuter (60 ms de latence)
+           B trouve EXECUTING, appelle verifyAttempt
+             → le monde est encore VIDE : A n'a pas fini d'écrire
+             → verdict NO_EFFECT
+           B rembobine, gagne le CAS, exécute
+             → DEUX EFFETS
+
+         La correction de Foundation 3 utilisait `attempts` comme numéro de
+         version, sur ce raisonnement écrit noir sur blanc : « l'état seul ne
+         suffit pas, il ne dit pas si le EXECUTING observé est celui d'un
+         processus mort ou d'un appelant vivant ; le compteur, lui, les
+         distingue. »
+
+         C'ÉTAIT FAUX. Un exécutant VIVANT porte `EXECUTING, attempts = 1` —
+         exactement ce que lit un repreneur qui croit succéder à un mort. Le
+         raisonnement ne tenait que pour un crash, où plus personne ne bouge.
+
+         Ce qui distingue réellement les deux : LE TEMPS. Le Gateway impose
+         lui-même `withTimeout(def.timeoutMs)` à toute exécution. Passé
+         `executing_at + timeoutMs`, un exécutant vivant a donc forcément écrit
+         un état terminal. Si l'opération est TOUJOURS en `EXECUTING` au-delà,
+         c'est qu'il est mort.
+
+         Avant l'expiration du bail, la seule réponse honnête est « je n'ai
+         rien tenté » : on ne peut ni vérifier ni conclure pendant qu'un autre
+         appel est en vol. */
       if (EFFECT_POSSIBLE.has(prior.state)) {
+        if (prior.state === 'EXECUTING') {
+          // Évalué PAR LA BASE : comparer avec l'horloge du processus
+          // introduirait une dérive entre machines, et le bail deviendrait
+          // faux là où il compte le plus.
+          const lease = await deps.db.query<{ live: boolean }>(
+            `SELECT executing_at > now() - ($2 || ' milliseconds')::interval AS live
+               FROM tool_operations WHERE operation_id = $1`,
+            [call.operationId, String(def.timeoutMs + LEASE_MARGIN_MS)],
+          );
+          if (!lease.ok) return lease;
+          if (lease.value.rows[0]?.live === true) return inFlight(call, def.id);
+        }
         return await resumeUncertain(call, tool, prior, digest, policy, replayContext);
       }
 

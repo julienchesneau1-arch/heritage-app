@@ -50,6 +50,7 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 17 | [`docs/17_REAL_WORLD_FAILURE_MATRIX.md`](docs/17_REAL_WORLD_FAILURE_MATRIX.md) | **Défaillances du monde réel** : ce qui est prouvé, partiel, ou intestable — et pourquoi | avant de croire que ça tient sous panne |
 | 18 | [`docs/18_REAL_WORLD_FAILURE_REPORT.md`](docs/18_REAL_WORLD_FAILURE_REPORT.md) | **Rapport du banc de défaillance** : ce que la concurrence, les crashs et un fournisseur menteur ont réellement produit | avant de croire une garantie de ce dépôt |
 | 19 | [`docs/19_PARTIAL_AND_ROUTING.md`](docs/19_PARTIAL_AND_ROUTING.md) | **Succès partiel et routage** : `PARTIAL` par sous-cible, et les deux invariants de repli | avant d'écrire un outil multi-cibles ou un routeur |
+| 20 | [`docs/20_CHAOS_AND_TRUST_BOUNDARY.md`](docs/20_CHAOS_AND_TRUST_BOUNDARY.md) | **Chaos et preuve** : hiérarchie `CONFIRMED`/`FAILED`/`UNKNOWN`, dix invariants, bail d'exécution | avant de croire qu'un défaut se voit à la relecture |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.
@@ -69,9 +70,10 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 428 tests
+pnpm test                   # 436 tests
 pnpm test:redteam           # les 83 tests d'audit et de red team
-pnpm test:lab               # les 53 tests du banc de défaillance
+pnpm test:lab               # les 64 tests du banc (dont le chaos runner)
+JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
 pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1

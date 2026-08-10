@@ -6,6 +6,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { mint, type OperationIdentity } from '../../src/core/tools/identity.js';
 import { createDb } from '../../src/core/db/client.js';
 import { createLedger } from '../../src/core/ledger/ledger.js';
 import { createPolicyGate } from '../../src/core/policy/gate.js';
@@ -78,9 +79,9 @@ function stack(connection: Db) {
 }
 
 let seq = 0;
-function operationId(prefix: string): string {
+function operationId(prefix: string): OperationIdentity {
   seq += 1;
-  return `gate2-${prefix}-${String(Date.now())}-${String(seq)}`;
+  return mint(`gate2-${prefix}-${String(seq)}`);
 }
 
 const checks: readonly Check[] = [

@@ -60,6 +60,22 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
     await resetWorld(world);
   });
 
+  /**
+   * Attend l'expiration du bail d'exécution (ADR-032).
+   *
+   * CE QUE CETTE ATTENTE RÉVÈLE, et qu'il faut assumer : depuis Foundation 4,
+   * une reprise après crash n'est plus immédiate. Elle est bornée par le
+   * `timeoutMs` de l'outil plus la marge — parce qu'AUCUN moyen ne permet de
+   * distinguer « mort il y a une seconde » de « encore en train de tourner »
+   * sans battement de cœur.
+   *
+   * C'est un échange délibéré : on paie une latence de reprise pour ne jamais
+   * doubler un effet.
+   */
+  async function waitForLease(toolTimeoutMs = 300): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, toolTimeoutMs + 5_200));
+  }
+
   async function stateOf(key: string): Promise<string | undefined> {
     const row = await db.query<{ state: string }>(
       'SELECT state FROM tool_operations WHERE operation_id = $1',
@@ -81,7 +97,10 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
         }),
         world,
         canVerifyAttempt,
-        timeoutMs: 20_000,
+        // Court À DESSEIN : le bail vaut `timeoutMs + marge`, et ces tests
+        // portent sur la reprise, pas sur son délai. Le délai lui-même est
+        // vérifié par le test « le bail refuse une reprise prématurée ».
+        timeoutMs: 300,
       }),
     );
     return stack;
@@ -115,6 +134,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
       const key = labKey('crash-conc');
       await crash('APRES_EFFET', key);
       expect(await externalEffectCount(world, key)).toBe(1);
+      await waitForLease();
 
       // 30 reprises simultanées, sur un outil incapable de vérifier.
       const stack = recoveryStack(false);
@@ -143,6 +163,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
       const key = labKey('crash-verif');
       await crash('APRES_EFFET', key);
       expect(await externalEffectCount(world, key)).toBe(1);
+      await waitForLease();
 
       const stack = recoveryStack(true);
       const resumed = await stack.gateway.invoke(labCall(key));
@@ -163,6 +184,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
       const key = labKey('crash-noeffect');
       await crash('AVANT_EFFET', key);
       expect(await externalEffectCount(world, key)).toBe(0);
+      await waitForLease();
 
       // 25 reprises simultanées. Chacune obtiendra `NO_EFFECT` — le seul verdict
       // qui rouvre l'exécution. Si le compare-and-swap ne tenait pas, ce test
@@ -184,6 +206,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
     async () => {
       const key = labKey('crash-mature');
       await crash('APRES_EFFET', key);
+      await waitForLease();
 
       const stack = recoveryStack(false);
       for (let round = 0; round < 5; round += 1) {
@@ -197,10 +220,96 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
   );
 
   it(
+    'le bail REFUSE une reprise prématurée, et le dit honnêtement',
+    async () => {
+      /* La contrepartie assumée d'ADR-032. Juste après un crash, Jarvis ne
+         peut PAS savoir que le processus est mort : de l'extérieur, « mort il
+         y a une seconde » et « encore en train de tourner » sont identiques.
+
+         Il refuse donc de reprendre, et le formule sans mentir : « je n'ai
+         rien tenté ». C'est une latence de reprise échangée contre la
+         certitude de ne jamais doubler un effet. */
+      const key = labKey('crash-bail');
+      await crash('APRES_EFFET', key);
+      expect(await stateOf(key)).toBe('EXECUTING');
+
+      // Reprise IMMÉDIATE, bail encore vivant.
+      const stack = recoveryStack(true);
+      const premature = await stack.gateway.invoke(labCall(key));
+
+      expect(premature.ok).toBe(false);
+      if (premature.ok) return;
+      expect(premature.error.kind).toBe('OPERATION_IN_FLIGHT');
+      expect(premature.error.message).toContain("rien tenté");
+
+      // Et surtout : aucun effet supplémentaire n'a été produit.
+      expect(await externalEffectCount(world, key)).toBe(1);
+
+      // Une fois le bail expiré, la reprise redevient possible.
+      await waitForLease();
+      const resumed = await stack.gateway.invoke(labCall(key));
+      expect(resumed.ok).toBe(true);
+      if (resumed.ok) expect(resumed.value.status).toBe('CONFIRMED');
+      expect(await externalEffectCount(world, key)).toBe(1);
+    },
+    60_000,
+  );
+
+  it(
+    'RÉGRESSION F4 — un exécutant VIVANT n\'est jamais pris pour un mort',
+    async () => {
+      /* Contre-exemple minimal trouvé par le chaos runner (`docs/20 §2`).
+         Trois appels simultanés suffisaient à produire deux effets :
+
+           A gagne le CAS et part exécuter (60 ms)
+           B lit EXECUTING, interroge le monde — encore VIDE
+           B conclut NO_EFFECT, rembobine, exécute
+
+         Le compteur `attempts` ne départageait pas les deux cas : un exécutant
+         vivant porte la même valeur qu'un mort. Seul le TEMPS les distingue —
+         d'où le bail (ADR-032). */
+      const stack = buildLabStack(db);
+      stack.register(
+        createHostileTool({
+          provider: createHostileProvider(world, {
+            id: 'hostile-vivant',
+            behaviour: { kind: 'NORMAL' },
+            timing: 'BEFORE_RESPONSE',
+            // Assez long pour que les concurrents arrivent pendant l'appel.
+            latencyMs: 60,
+          }),
+          world,
+          // La vérification de tentative est CE QUI REND le défaut possible :
+          // sans elle, la reprise reste en UNKNOWN et ne rejoue jamais.
+          canVerifyAttempt: true,
+          timeoutMs: 5_000,
+        }),
+      );
+
+      const key = labKey('vivant');
+      await Promise.all(
+        Array.from({ length: 5 }, () => stack.gateway.invoke(labCall(key))),
+      );
+
+      expect(await externalEffectCount(world, key)).toBe(1);
+
+      const row = await db.query<{ attempts: number }>(
+        'SELECT attempts FROM tool_operations WHERE operation_id = $1',
+        [key],
+      );
+      expect(row.ok).toBe(true);
+      if (!row.ok) return;
+      expect(row.value.rows[0]?.attempts ?? 0).toBe(1);
+    },
+    60_000,
+  );
+
+  it(
     'le compteur de tentatives reste à 1 après un crash suivi de 20 reprises',
     async () => {
       const key = labKey('crash-attempts');
       await crash('APRES_EFFET', key);
+      await waitForLease();
 
       const stack = recoveryStack(false);
       await Promise.all(

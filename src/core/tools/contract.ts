@@ -14,10 +14,13 @@ import type { Db } from '../db/client.js';
 import type {
   Actor,
   AutonomyLevel,
+  EvidenceKind,
   PrivacyClass,
+  Verifiability,
   VerificationStatus,
 } from '../types/domain.js';
 import type { Result } from '../types/result.js';
+import type { OperationIdentity } from './identity.js';
 
 /** Comment un outil prouve que le monde a changé (03 §10, invariant S7). */
 export const VerificationStrategy = z.enum([
@@ -133,6 +136,20 @@ export interface ToolDefinition {
    * symétrique de croire un `200`.
    */
   readonly effect: 'LOCAL_TRANSACTIONAL' | 'EXTERNAL';
+
+  /**
+   * Ce que cet outil est CAPABLE de prouver — ADR-030.
+   *
+   *   `VERIFIABLE`     présence ET absence. Peut conclure `FAILED`.
+   *   `OBSERVABLE`     présence seulement. Ne peut JAMAIS conclure `FAILED` :
+   *                    un effet différé pourrait encore arriver.
+   *   `UNVERIFIABLE`   ni l'une ni l'autre. Plafonné à `PROBABLE`.
+   *
+   * Distinct de `verification`, qui dit COMMENT l'outil s'y prend. Ici on
+   * déclare ce qu'il peut établir — et le Verification Engine bride son verdict
+   * à cette déclaration, sans lui faire confiance.
+   */
+  readonly verifiability: Verifiability;
 }
 
 /** Ce que le Gateway fournit à l'outil au moment de l'exécution. */
@@ -143,7 +160,7 @@ export interface ToolContext {
    * L'outil n'a pas accès au coffre complet — moindre privilège jusqu'au bout.
    */
   readonly secrets: ReadonlyMap<string, string>;
-  readonly operationId: string;
+  readonly operationId: OperationIdentity;
   readonly actor: Actor;
 }
 
@@ -193,6 +210,13 @@ export interface VerificationOutcome {
    * l'utilisateur, et quelle politique de reprise appliquer (`docs/14 §2`).
    */
   readonly unknownReason?: UnknownReason;
+  /**
+   * Ce qui FONDE le statut — ADR-030.
+   *
+   * `CONFIRMED` exige `POSITIVE_PRESENCE`, `FAILED` exige `POSITIVE_ABSENCE`.
+   * Sans ce champ, les deux mots ne veulent rien dire de vérifiable.
+   */
+  readonly evidence?: EvidenceKind;
 }
 
 /**
@@ -229,7 +253,10 @@ export interface RegisteredTool {
    * Présente uniquement si `attemptVerification` vaut `BY_OPERATION_KEY`.
    * Appelée à la reprise, jamais pendant l'exécution normale.
    */
-  verifyAttempt?(operationId: string, ctx: ToolContext): Promise<Result<AttemptVerdict>>;
+  verifyAttempt?(
+    operationId: OperationIdentity,
+    ctx: ToolContext,
+  ): Promise<Result<AttemptVerdict>>;
 }
 
 /**
@@ -247,7 +274,7 @@ export function defineTool<I>(spec: {
     ctx: ToolContext,
   ) => Promise<Result<VerificationOutcome>>;
   verifyAttempt?: (
-    operationId: string,
+    operationId: OperationIdentity,
     ctx: ToolContext,
   ) => Promise<Result<AttemptVerdict>>;
 }): RegisteredTool {
@@ -373,6 +400,35 @@ export function validateDefinition(
   if (definition.attemptVerification === 'BY_OPERATION_KEY' && !hasVerifyAttempt) {
     problems.push(
       `${definition.id} déclare BY_OPERATION_KEY sans fournir verifyAttempt.`,
+    );
+  }
+
+  /* LA RÈGLE QUI REMPLACE UNE INTERDICTION — ADR-030.
+     Foundation 3 s'était demandé s'il fallait interdire un outil EXTERNAL
+     incapable de vérifier ses tentatives. Interdire aurait exclu des familles
+     entières d'outils légitimes — un webhook chez un tiers sans API de
+     consultation reste utile.
+     On n'interdit donc pas l'OUTIL : on interdit l'ILLUSION DE FIABILITÉ.
+     Un effet externe que le système ne sait pas observer ne peut pas se
+     produire sans qu'un humain l'ait voulu explicitement. */
+  if (
+    definition.effect === 'EXTERNAL' &&
+    definition.verifiability === 'UNVERIFIABLE' &&
+    (definition.autonomy === 'L1' || definition.autonomy === 'L2')
+  ) {
+    problems.push(
+      `${definition.id} produit un effet EXTERNAL qu'il ne sait pas vérifier ` +
+        `(UNVERIFIABLE) et se déclare ${definition.autonomy} : un effet non ` +
+        'observable ne peut pas être automatique. Exiger L3 (APPROVAL) ou L4.',
+    );
+  }
+
+  // Un outil en lecture seule ne prouve ni présence ni absence d'une mutation
+  // qu'il ne fait pas. Se déclarer VERIFIABLE y est un contresens.
+  if (definition.verification === 'NONE' && definition.verifiability !== 'VERIFIABLE') {
+    problems.push(
+      `${definition.id} est en lecture seule : sa vérifiabilité doit être ` +
+        'VERIFIABLE (la lecture EST son observation).',
     );
   }
 

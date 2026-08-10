@@ -52,6 +52,14 @@ export interface HostileToolOptions {
   readonly networkRequired?: boolean;
   /** Rend `payload` sensible, pour les scénarios de cérémonie. */
   readonly sensitivePayload?: boolean;
+  /**
+   * Ce que l'outil prétend pouvoir prouver.
+   *
+   * `OBSERVABLE` par défaut, et c'est le choix honnête : le monde du banc peut
+   * recevoir un effet différé (`timing: AFTER_RESPONSE`), donc « je ne vois
+   * rien » n'y prouve jamais « il n'y a rien ».
+   */
+  readonly verifiability?: 'VERIFIABLE' | 'OBSERVABLE' | 'UNVERIFIABLE';
 }
 
 /**
@@ -88,6 +96,7 @@ export function createHostileTool(options: HostileToolOptions): RegisteredTool {
         options.canVerifyAttempt === true ? 'BY_OPERATION_KEY' : 'NONE',
       // Le point du banc : un effet qu'aucun ROLLBACK ne défait.
       effect: 'EXTERNAL',
+      verifiability: options.verifiability ?? 'OBSERVABLE',
     },
 
     inputSchema: HostileInput,
@@ -128,23 +137,29 @@ export function createHostileTool(options: HostileToolOptions): RegisteredTool {
       }
 
       if (count === 0) {
-        // Le fournisseur a pu répondre « ACCEPTED ». Le monde dit non.
+        // Le fournisseur a pu répondre « ACCEPTED ». Le monde dit non — POUR
+        // L'INSTANT. Le Verification Engine dégradera ce verdict en UNKNOWN
+        // si l'outil n'est pas VERIFIABLE : c'est exactement la protection
+        // contre le fournisseur asynchrone (ADR-030).
         return ok(
-          verificationOutcome.failed(
-            `Aucun effet constaté dans le monde pour ${ctx.operationId}, ` +
-              "quelle qu'ait été la réponse du fournisseur.",
-          ),
+          verificationOutcome.failed({
+            observed: `aucun effet dans le monde pour ${ctx.operationId}`,
+            conclusiveBecause:
+              'lecture du monde après retour du fournisseur — concluante ' +
+              'uniquement si le fournisseur est synchrone',
+          }),
         );
       }
 
       if (count > 1) {
         // Ne devrait jamais arriver. Si cela arrive, c'est LE défaut que tout
-        // le sprint cherche : on ne le maquille pas en succès.
+        // le banc cherche : on ne le maquille pas en succès.
         return ok(
-          verificationOutcome.failed(
-            `${String(count)} effets constatés pour une opération unique — ` +
-              'violation de external_effect_count ≤ 1.',
-          ),
+          verificationOutcome.failed({
+            observed: `${String(count)} effets pour une opération unique`,
+            conclusiveBecause:
+              'violation mesurée de external_effect_count(clé, cible) ≤ 1',
+          }),
         );
       }
 
@@ -235,6 +250,8 @@ export function createBlindHostileTool(options: HostileToolOptions): RegisteredT
       rollback: null,
       attemptVerification: 'NONE',
       effect: 'EXTERNAL',
+      // Aucune relecture : cet outil ne peut rien établir du tout.
+      verifiability: 'UNVERIFIABLE',
     },
 
     inputSchema: HostileInput,

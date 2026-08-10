@@ -15,8 +15,8 @@
  *
  * D'où ce fichier : chaque défaut trouvé en usage devient un scénario doré.
  */
+import { mint } from '../../src/core/tools/identity.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { randomUUID } from 'node:crypto';
 import { createIntentEngine } from '../../src/core/intent/engine.js';
 import type { Db } from '../../src/core/db/client.js';
 import { appDb, databaseAvailable } from '../helpers/db.js';
@@ -61,7 +61,7 @@ describe.skipIf(skip)('phrase française → action vérifiée', () => {
       toolId: proposal.toolId,
       input: proposal.input,
       parameterProvenance: proposal.parameterProvenance,
-      operationId: randomUUID(),
+      operationId: mint(),
       actor: 'USER',
       context: {
         mode: 'NORMAL',

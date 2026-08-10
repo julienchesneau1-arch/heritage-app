@@ -311,6 +311,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
         rollback: null, // contredit reversible: true
         attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -347,6 +348,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
         rollback: null,
         attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -388,6 +390,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
           rollback: null,
           attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
         },
         inputSchema: z.object({}),
         execute: (_input, ctx) => {

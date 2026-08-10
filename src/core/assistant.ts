@@ -21,7 +21,7 @@
  * redérive la proposition, et on l'exécute confirmée. Aucune session à stocker,
  * donc aucune session à détourner.
  */
-import { randomUUID } from 'node:crypto';
+import { mint, type OperationIdentity } from './tools/identity.js';
 import type { IntentEngine } from './intent/engine.js';
 import type { ToolGateway } from './tools/gateway.js';
 import type { Mode, VerificationStatus } from './types/domain.js';
@@ -37,7 +37,7 @@ export type AssistantReply =
   | {
       readonly kind: 'CONFIRM';
       /** À renvoyer tel quel pour confirmer. */
-      readonly operationId: string;
+      readonly operationId: OperationIdentity;
       readonly reason: string;
       /** Les VALEURS concrètes sur lesquelles porte la confirmation (03 §3). */
       readonly values: Readonly<Record<string, string>>;
@@ -53,7 +53,7 @@ export type AssistantReply =
 
 export interface SayOptions {
   /** Fournie pour confirmer une action préparée. Sinon générée. */
-  readonly operationId?: string;
+  readonly operationId?: OperationIdentity;
   readonly confirm?: boolean;
   readonly mode?: Mode;
 }
@@ -85,7 +85,13 @@ export function createAssistant(deps: AssistantDeps): Assistant {
         };
       }
 
-      const operationId = options.operationId ?? randomUUID();
+      /* LE POINT DE FRAPPE UNIQUE — ADR-030.
+         Une intention utilisateur donne UNE identité d'opération. Tout ce qui
+         suit — reprise, vérification, et un jour repli sur un autre
+         fournisseur — doit la conserver.
+         `tests/lab/invariants.test.ts` (I5) vérifie que `mint()` n'est appelé
+         nulle part ailleurs dans `src/`. */
+      const operationId = options.operationId ?? mint();
       const confirm = options.confirm === true;
 
       // « Retiens que X » vaut confirmation par lui-même ; les autres non.

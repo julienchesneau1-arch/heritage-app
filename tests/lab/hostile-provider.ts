@@ -58,7 +58,42 @@ export type HostileBehaviour =
       readonly succeed: number;
     }
   | { readonly kind: 'CONNECTION_RESET' }
-  | { readonly kind: 'PROCESS_KILLED' };
+  | { readonly kind: 'PROCESS_KILLED' }
+  /* ---- Foundation 4 : les pathologies qui manquaient ------------------- */
+  /**
+   * SUCCÈS TARDIF — la plus dangereuse de toutes.
+   *
+   * Le fournisseur répond en erreur (ou ne répond pas), puis produit l'effet
+   * `afterMs` plus tard. Tout système qui conclut « échec » et rejoue produit
+   * alors DEUX effets, et le second arrive avant même le premier.
+   */
+  | { readonly kind: 'LATE_SUCCESS'; readonly afterMs: number }
+  /**
+   * ÉCHEC TARDIF — le miroir, et il trompe dans l'autre sens.
+   *
+   * Le fournisseur accuse réception, puis abandonne silencieusement. Un `ACK`
+   * n'a jamais valu preuve d'effet ; ce comportement le démontre.
+   */
+  | { readonly kind: 'LATE_FAILURE' }
+  /**
+   * RÉPONSES DÉSORDONNÉES.
+   *
+   * Chaque appel attend une durée tirée au hasard : sous concurrence, les
+   * réponses reviennent dans un ordre sans rapport avec celui des envois.
+   */
+  | { readonly kind: 'OUT_OF_ORDER'; readonly maxJitterMs: number }
+  /**
+   * LE FOURNISSEUR DISPARAÎT PUIS REVIENT.
+   *
+   * Sain pendant `healthyCalls`, absent pendant `outageCalls`, puis sain de
+   * nouveau. C'est la panne d'exploitation ordinaire — celle qui arrive
+   * vraiment, et pendant laquelle les reprises s'accumulent.
+   */
+  | {
+      readonly kind: 'DISAPPEARS';
+      readonly healthyCalls: number;
+      readonly outageCalls: number;
+    };
 
 export interface HostileConfig {
   readonly id: string;
@@ -89,6 +124,15 @@ export interface HostileProvider {
   callCount(): number;
   /** Reconfigure à chaud, pour les scénarios « le fournisseur change ». */
   reconfigure(patch: Partial<HostileConfig>): void;
+  /**
+   * Attend que les effets DIFFÉRÉS aient eu lieu.
+   *
+   * Indispensable dès qu'un scénario comporte un `LATE_SUCCESS` : sans cela le
+   * banc mesurerait le monde avant qu'il ait fini de changer, et conclurait à
+   * une absence d'effet qui n'existe pas. C'est le piège que ce simulateur est
+   * censé mettre en scène — il ne doit pas y tomber lui-même.
+   */
+  settle(): Promise<void>;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -108,6 +152,20 @@ export function createHostileProvider(
   let current: HostileConfig = config;
   let calls = 0;
   let failuresSoFar = 0;
+  /* Effets différés en vol. Le banc doit pouvoir les attendre : sinon un test
+     se terminerait avant que le monde ait fini de changer, et mesurerait une
+     photo prise trop tôt. */
+  const pending = new Set<Promise<void>>();
+
+  function schedule(work: () => Promise<void>, delayMs: number): void {
+    const promise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        void work().catch(() => undefined).finally(resolve);
+      }, delayMs);
+    });
+    pending.add(promise);
+    void promise.finally(() => pending.delete(promise));
+  }
 
   /** Écrit dans le monde. Irréversible, par construction. */
   async function effect(operationKey: string, payload: string, target = '-'): Promise<void> {
@@ -155,6 +213,13 @@ export function createHostileProvider(
       current = { ...current, ...patch };
     },
 
+    /** Attend que tous les effets différés aient eu lieu. */
+    async settle(): Promise<void> {
+      while (pending.size > 0) {
+        await Promise.all([...pending]);
+      }
+    },
+
     async send(
       operationKey: string,
       payload: string,
@@ -173,6 +238,44 @@ export function createHostileProvider(
         reference: `${current.id}:${operationKey}:${String(calls)}`,
         claims,
       });
+
+      /* --- Foundation 4 : effets DIFFÉRÉS -------------------------------- */
+
+      if (behaviour.kind === 'LATE_SUCCESS') {
+        // L'effet arrivera. Mais Jarvis reçoit une erreur MAINTENANT, et ne
+        // dispose d'aucun moyen de savoir que le monde changera plus tard.
+        schedule(() => produceEffect(operationKey, payload), behaviour.afterMs);
+        return err(
+          jarvisError(
+            'PROVIDER_UNAVAILABLE',
+            `${current.id} : erreur immédiate, traitement différé en file.`,
+          ),
+        );
+      }
+
+      if (behaviour.kind === 'LATE_FAILURE') {
+        // Accusé de réception, puis abandon silencieux. Aucun effet, jamais.
+        return ok(receipt());
+      }
+
+      if (behaviour.kind === 'DISAPPEARS') {
+        const cycle = behaviour.healthyCalls + behaviour.outageCalls;
+        const position = (calls - 1) % Math.max(1, cycle);
+        if (position >= behaviour.healthyCalls) {
+          return err(
+            jarvisError(
+              'PROVIDER_UNAVAILABLE',
+              `${current.id} : service momentanément indisponible.`,
+            ),
+          );
+        }
+      }
+
+      if (behaviour.kind === 'OUT_OF_ORDER') {
+        // Le désordre se fabrique par une attente tirée au hasard AVANT
+        // l'effet : deux appels concurrents s'entrelacent alors réellement.
+        await sleep(Math.floor(Math.random() * behaviour.maxJitterMs));
+      }
 
       /* --- Pannes AVANT tout effet -------------------------------------- */
 

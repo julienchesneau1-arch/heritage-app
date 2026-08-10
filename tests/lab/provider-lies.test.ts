@@ -86,28 +86,67 @@ describe.runIf(enabled)('banc — le fournisseur ment', () => {
     // Le monde n'a pas bougé.
     expect(await externalEffectCount(world, key)).toBe(0);
     // Donc Jarvis ne peut pas annoncer un succès.
-    expect(result.value.status).toBe('FAILED');
     expect(mayClaimSuccess(result.value.status)).toBe(false);
+
+    /* ⚠ CE TEST ATTENDAIT `FAILED` JUSQU'À FOUNDATION 4.
+       Il attend désormais `UNKNOWN`, et c'est un DURCISSEMENT, pas un recul.
+
+       L'outil est `OBSERVABLE` : il sait constater un effet, il ne sait pas
+       prouver qu'aucun effet différé n'arrivera. « Je ne vois rien » n'est pas
+       « il n'y a rien » (ADR-030).
+
+       Dire `FAILED` ici aurait autorisé une reprise — et si le fournisseur
+       traitait en file d'attente, cette reprise aurait doublé l'effet. */
+    expect(result.value.status).toBe('UNKNOWN');
+    expect(result.value.verification.unknownReason).toBe('EXTERNAL_STATE');
   });
 
   it(
-    'SUCCESS annoncé sans effet, et SANS relecture possible → PROBABLE au mieux',
-    async () => {
-      // Le cas d'un vrai service d'emailing sans API de consultation : la
-      // parole du fournisseur est la seule information disponible.
-      const stack = stackWith({ kind: 'SUCCESS_WITHOUT_EFFECT' }, 'NEVER', {
-        blind: true,
-      });
-      const key = labKey('lie-blind');
+    'un outil aveugle à effet externe ne peut plus être AUTOMATIQUE',
+    () => {
+      /* Foundation 3 laissait cet outil s'enregistrer en L2 et rendre
+         `PROBABLE`. Foundation 4 le REFUSE À L'ENREGISTREMENT :
 
+           effet EXTERNAL + UNVERIFIABLE + autonomie automatique
+             → illusion de fiabilité
+
+         On n'interdit pas l'outil — un service d'emailing sans API de
+         consultation reste utile. On interdit qu'il agisse sans qu'un humain
+         l'ait voulu (ADR-030). La barrière est à l'enregistrement, ce qui est
+         plus fort qu'une vérification à l'appel. */
+      expect(() =>
+        stackWith({ kind: 'SUCCESS_WITHOUT_EFFECT' }, 'NEVER', { blind: true }),
+      ).toThrow(/Contrat d'outil invalide/);
+    },
+  );
+
+  it(
+    'le même outil aveugle est ACCEPTÉ en L3, et plafonné à PROBABLE',
+    async () => {
+      // La voie de sortie honnête : l'outil existe, mais son exécution passe
+      // par une confirmation humaine, et son verdict ne dépasse jamais
+      // `PROBABLE` faute d'observation indépendante.
+      const stack = buildLabStack(db);
+      stack.register(
+        createBlindHostileTool({
+          id: 'lab_external_send',
+          autonomy: 'L3',
+          provider: createHostileProvider(world, {
+            id: 'hostile-aveugle',
+            behaviour: { kind: 'SUCCESS_WITHOUT_EFFECT' },
+            timing: 'NEVER',
+          }),
+          world,
+        }),
+      );
+
+      const key = labKey('lie-blind-l3');
       const result = await stack.gateway.invoke(labCall(key));
+
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(await externalEffectCount(world, key)).toBe(0);
-      // Une preuve non recoupée ne vaut jamais CONFIRMED. C'est la propriété
-      // structurelle du Verification Engine, et elle tient même face à un
-      // fournisseur qui affirme le contraire.
       expect(result.value.status).toBe('PROBABLE');
       expect(mayClaimSuccess(result.value.status)).toBe(false);
     },

@@ -18,7 +18,7 @@
  */
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { randomUUID } from 'node:crypto';
+import { mint } from '../../core/tools/identity.js';
 import { openRuntime, type Runtime } from '../runtime.js';
 import { auditReport, diagnosticReport, inboxReport } from '../reports.js';
 import type { AssistantReply } from '../../core/assistant.js';
@@ -243,7 +243,7 @@ async function handleText(
 ): Promise<void> {
   // La clé d'opération est fixée AVANT le premier essai : confirmer ne crée pas
   // une nouvelle opération, cela rejoue la même (idempotence, ADR-013).
-  const operationId = randomUUID();
+  const operationId = mint();
   let reply = await runtime.assistant.say(line, { operationId });
 
   if (reply.kind === 'CONFIRM') {

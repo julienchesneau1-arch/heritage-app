@@ -25,6 +25,7 @@ import { createHostileProvider } from './hostile-provider.js';
 import { createHostileTool } from './hostile-tool.js';
 import { createWorld, effectsFor, externalEffectCount, resetWorld, worldDb } from './world.js';
 import { VerificationStatus } from '../../src/core/types/domain.js';
+import { mayClaimSuccess } from '../../src/core/verification/engine.js';
 import type { Db } from '../../src/core/db/client.js';
 
 const enabled = databaseAvailable();
@@ -85,7 +86,7 @@ describe.runIf(enabled)('banc — succès partiel', () => {
   });
 
   it(
-    'AUJOURD\'HUI, ce succès partiel est rapporté comme un ÉCHEC TOTAL',
+    'le verdict global d\'un succès partiel reste non affirmatif',
     async () => {
       const key = labKey('partiel-verdict');
       const result = await partialStack(3).gateway.invoke(labCall(key));
@@ -93,14 +94,20 @@ describe.runIf(enabled)('banc — succès partiel', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      // Le verdict est `FAILED`. C'est faux dans les deux sens :
-      //   — trois personnes ONT reçu le message ;
-      //   — deux ne l'ont pas reçu, et ce n'est pas un échec constaté non plus.
-      //
-      // Dire « échec » ferait rejouer l'envoi aux cinq. Dire « succès »
-      // laisserait deux personnes sans message. Aucun des quatre statuts
-      // existants ne décrit la situation.
-      expect(result.value.status).toBe('FAILED');
+      /* Foundation 3 rendait `FAILED` — faux dans les deux sens : trois
+         personnes AVAIENT reçu le message.
+
+         Foundation 4 rend `UNKNOWN` : l'outil est `OBSERVABLE`, il ne peut pas
+         prouver que les deux autres ne recevront jamais. C'est moins faux,
+         mais toujours insuffisant — le verdict global perd l'information « qui
+         a reçu ».
+
+         `PARTIAL` et le modèle par cible existent désormais
+         (`src/core/tools/outcome.ts`). Les BRANCHER au Gateway est la dette
+         nommée que `docs/20 §4` porte : le Gateway n'a pas encore de notion de
+         cible à lui passer. */
+      expect(result.value.status).toBe('UNKNOWN');
+      expect(mayClaimSuccess(result.value.status)).toBe(false);
     },
   );
 
@@ -117,14 +124,17 @@ describe.runIf(enabled)('banc — succès partiel', () => {
         PROBABLE: 'suppose les cinq sans preuve — faux ET non vérifié',
         UNKNOWN: 'nie savoir, alors que trois sont CONFIRMÉS — perte d\'information',
         FAILED: 'affirme que personne n\'a reçu — faux',
+        NOT_ATTEMPTED: 'affirme qu\'on n\'a rien tenté — faux',
+        PARTIAL: 'DÉCRIT LA SITUATION — ajouté par Foundation 4',
       };
 
       expect(Object.keys(descriptions).sort()).toEqual(
         [...VerificationStatus.options].sort(),
       );
-      // Chacun est faux pour une raison différente. C'est la définition d'une
-      // valeur manquante, pas d'un mauvais choix parmi les valeurs existantes.
-      expect(Object.keys(descriptions).length).toBe(4);
+      // Le constat de Foundation 3 : quatre statuts, tous faux. Foundation 4
+      // en a ajouté deux, dont celui qui décrit réellement la situation.
+      expect(Object.keys(descriptions).length).toBe(6);
+      expect(VerificationStatus.options).toContain('PARTIAL');
     },
   );
 
