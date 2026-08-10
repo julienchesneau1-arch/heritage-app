@@ -52,6 +52,7 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 19 | [`docs/19_PARTIAL_AND_ROUTING.md`](docs/19_PARTIAL_AND_ROUTING.md) | **Succès partiel et routage** : `PARTIAL` par sous-cible, et les deux invariants de repli | avant d'écrire un outil multi-cibles ou un routeur |
 | 20 | [`docs/20_CHAOS_AND_TRUST_BOUNDARY.md`](docs/20_CHAOS_AND_TRUST_BOUNDARY.md) | **Chaos et preuve** : hiérarchie `CONFIRMED`/`FAILED`/`UNKNOWN`, dix invariants, bail d'exécution | avant de croire qu'un défaut se voit à la relecture |
 | 21 | [`docs/21_LEASE_ADVERSARIAL_REPORT.md`](docs/21_LEASE_ADVERSARIAL_REPORT.md) | **Le bail ne mesure pas la vie** : contrat d'effet, et la frontière avec le monde extérieur | avant de rejouer quoi que ce soit après un `UNKNOWN` |
+| 22 | [`docs/22_EXTERNAL_REALITY_LAB_DESIGN.md`](docs/22_EXTERNAL_REALITY_LAB_DESIGN.md) | **Conception du banc de réalité extérieure** : modèle de fournisseur, modèle de panne, matrice, et ce qui restera non garanti | avant d'écrire la moindre ligne de Foundation 5 |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.

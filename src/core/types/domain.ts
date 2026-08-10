@@ -247,32 +247,91 @@ export const EffectContract = z.enum([
 export type EffectContract = z.infer<typeof EffectContract>;
 
 /**
+ * LA CONDITION DE REJEU — ADR-034.
+ *
+ * La règle n'est PAS une liste de contrats. C'est une condition :
+ *
+ *   > Une opération externe après `UNKNOWN` n'est rejouable que si son contrat
+ *   > fournit une garantie DÉMONTRABLE que le rejeu ne peut produire un second
+ *   > effet.
+ *
+ * POURQUOI CETTE DISTINCTION N'EST PAS COSMÉTIQUE
+ * ----------------------------------------------
+ * ADR-033 écrivait « `PROVIDER_IDEMPOTENT` est le seul contrat externe
+ * rejouable ». C'est vrai aujourd'hui, et ce serait une erreur de l'encoder
+ * comme une vérité éternelle : d'autres mécanismes satisfont la même condition
+ * sans être une clé d'idempotence —
+ *
+ *   transaction distribuée à deux phases · réservation puis validation ·
+ *   déduplication portée par la ressource · opération intrinsèquement
+ *   idempotente (un `PUT` absolu) · compensation vérifiée
+ *
+ * Figer la liste aurait verrouillé l'architecture sur le premier mécanisme
+ * rencontré. On énonce donc la condition, et on tient le registre de ce qui la
+ * satisfait.
+ *
+ * CE QUE CHAQUE ENTRÉE DOIT JUSTIFIER
+ * -----------------------------------
+ * `independentOfObservation` est le champ qui coûte, et c'est lui qui trie.
+ * Une garantie qui dépend de ce que NOUS observons ne vaut rien face à une
+ * requête encore en vol : au moment où on regarde, il n'y a rien à voir
+ * (`docs/21 §2`).
+ */
+export interface ReplaySafety {
+  /** La garantie invoquée. Doit être démontrable, pas plausible. */
+  readonly guarantee: string;
+  /** Pourquoi elle ne dépend PAS de notre observation à l'instant t. */
+  readonly independentOfObservation: string;
+}
+
+/**
+ * Registre des contrats qui satisfont la condition, avec leur justification.
+ *
+ * `Partial<Record<…>>` sur l'énumération complète : ajouter un contrat sans
+ * décider s'il entre ici reste un choix visible, et l'omission vaut refus —
+ * `FAIL CLOSED` appliqué à l'extension du registre.
+ */
+const REPLAY_SAFE_CONTRACTS: Partial<Record<EffectContract, ReplaySafety>> = {
+  NO_EXTERNAL_EFFECT: {
+    guarantee: "aucun effet externe n'existe, donc aucun doublon n'est possible",
+    independentOfObservation: 'propriété de l\'opération elle-même',
+  },
+  LOCAL_TRANSACTIONAL: {
+    guarantee: 'une erreur entraîne un ROLLBACK PostgreSQL',
+    independentOfObservation:
+      'garanti par le moteur transactionnel ; aucune requête ne peut rester ' +
+      'en vol hors de la transaction',
+  },
+  PROVIDER_IDEMPOTENT: {
+    guarantee:
+      "le fournisseur refuse lui-même un second effet pour une même identité " +
+      "d'opération",
+    independentOfObservation:
+      "c'est le fournisseur qui dédoublonne, pas nous qui constatons — la " +
+      'garantie tient même si une requête antérieure aboutit dix minutes plus tard',
+  },
+};
+
+/**
  * Un rejeu est-il autorisé après un `UNKNOWN` ?
  *
- * Fonction TOTALE sur l'énumération : ajouter un contrat sans décider de sa
- * politique de rejeu ne compilera pas.
- *
- * Les deux `false` sont le cœur d'ADR-033. Ils disent qu'aucune durée écoulée,
- * aucun bail expiré, aucun redémarrage, aucune observation ponctuelle ne
- * transforme une ignorance en permission.
+ * Ne décide de rien par elle-même : elle CONSULTE le registre. Toute la
+ * substance est dans les justifications ci-dessus, et c'est voulu — un `switch`
+ * aurait caché le raisonnement derrière une liste de `return true`.
  */
 export function mayReplayAfterUnknown(contract: EffectContract): boolean {
-  switch (contract) {
-    case 'NO_EXTERNAL_EFFECT':
-      return true;
-    case 'LOCAL_TRANSACTIONAL':
-      // PostgreSQL a fait le rollback. Rien ne peut arriver après coup.
-      return true;
-    case 'PROVIDER_IDEMPOTENT':
-      // Sûr même si une requête antérieure aboutit plus tard : c'est le
-      // fournisseur qui dédoublonne, pas nous qui observons.
-      return true;
-    case 'EXTERNALLY_VERIFIABLE':
-      // On peut CONFIRMER, jamais rejouer.
-      return false;
-    case 'UNVERIFIABLE':
-      return false;
-  }
+  return REPLAY_SAFE_CONTRACTS[contract] !== undefined;
+}
+
+/**
+ * Pourquoi ce contrat autorise-t-il un rejeu ?
+ *
+ * Sert à répondre à « pourquoi refuses-tu de recommencer ? » — ou à
+ * « pourquoi t'autorises-tu à recommencer ? », question qu'on doit pouvoir
+ * poser tout autant.
+ */
+export function replaySafetyOf(contract: EffectContract): ReplaySafety | undefined {
+  return REPLAY_SAFE_CONTRACTS[contract];
 }
 
 /** Cet effet échappe-t-il à nos transactions ? */

@@ -1522,3 +1522,50 @@ effets** plutôt que de faire semblant. C'est la frontière du système :
 **Condition de révision.** Si un fournisseur permet de sceller une requête —
 un jeton à usage unique consommé côté serveur — la frontière recule d'un cran
 et ce contrat mérite une sixième valeur. Pas avant.
+
+---
+
+## ADR-034 — Le rejeu est une CONDITION, pas une liste
+
+**Statut :** accepté (avant Foundation 5). **Précise ADR-033.**
+
+ADR-033 écrivait : *« `PROVIDER_IDEMPOTENT` est le seul contrat externe
+rejouable »*. Vrai aujourd'hui, et dangereux comme énoncé d'architecture.
+
+**Décision.** La règle est une condition :
+
+> Une opération externe après `UNKNOWN` n'est rejouable que si son contrat
+> fournit une garantie **démontrable** que le rejeu ne peut produire un second
+> effet.
+
+`PROVIDER_IDEMPOTENT` est le **premier contrat concret** qui la satisfait, pas
+la définition de la condition. D'autres mécanismes la satisferaient sans être
+une clé d'idempotence :
+
+```text
+transaction distribuée à deux phases · réservation puis validation ·
+déduplication portée par la ressource · opération intrinsèquement idempotente ·
+compensation vérifiée
+```
+
+**Encodage.** `REPLAY_SAFE_CONTRACTS` est un registre où chaque entrée doit
+justifier deux choses :
+
+| Champ | Ce qu'il exige |
+|---|---|
+| `guarantee` | la garantie invoquée, démontrable et non plausible |
+| `independentOfObservation` | pourquoi elle ne dépend pas de ce que NOUS observons |
+
+Le second champ est celui qui trie. Une garantie fondée sur notre observation
+ne vaut rien face à une requête encore en vol : au moment où on regarde, il n'y
+a rien à voir (`docs/21 §2`).
+
+**Pourquoi un registre plutôt qu'un `switch`.** Un `switch` cache le
+raisonnement derrière des `return true`. Le registre oblige à écrire la
+justification à côté de la décision, et rend l'ajout d'un contrat futur
+lisible en revue. L'omission vaut refus : `FAIL CLOSED` appliqué à l'extension
+du registre lui-même.
+
+**Condition de révision.** Chaque nouveau contrat candidat doit d'abord passer
+par un contre-exemple : *quelle séquence rendrait cette garantie fausse ?* Si
+la question n'a pas de réponse écrite, le contrat n'entre pas au registre.
