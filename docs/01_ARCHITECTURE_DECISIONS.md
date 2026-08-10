@@ -733,3 +733,260 @@ jamais une règle de sécurité.
 traitée différemment, ce sera par une **vérification indépendante** de cette
 sortie — un outil qui relit l'état réel, comme le fait déjà le Verification
 Engine — jamais par une élévation de sa provenance.
+
+---
+
+## ADR-025 — Architecture de vérité : six étapes, et une observation à la fin
+
+**Statut : RATIFIÉ** *(10 août 2026)* — **deux arbitrages ouverts, §A et §B.**
+
+**Contexte.** Jusqu'ici, la chaîne était décrite en quatre temps :
+`LLM → proposition → Policy Engine → outil → exécution → vérification → journal`.
+Elle décrit correctement *qui décide*, mais pas *ce que Jarvis sait*. Or trois
+énoncés que le langage courant confond sont techniquement différents :
+
+> « J'ai envoyé le mail. »
+> « J'ai demandé à Gmail d'envoyer le mail. »
+> « Gmail confirme que le mail est parti. »
+
+C'est précisément là que les agents deviennent dangereux : ils prononcent le
+premier en n'ayant fait que le deuxième.
+
+**Décision.** Le pipeline devient une loi fondamentale à six étapes :
+
+```text
+SOURCE          d'où vient l'information brute
+   ↓
+EVIDENCE        ce qui a été réellement observé, avec sa provenance
+   ↓
+INTERPRETATION  ce qu'on en déduit — jamais confondu avec l'evidence
+   ↓
+DECISION        ce que le système décide de faire — le Policy Gate tranche ici
+   ↓
+ACTION          ce qui a été TENTÉ, avec sa clé d'opération
+   ↓
+OBSERVATION     ce qui a été CONSTATÉ après coup, indépendamment de l'outil
+```
+
+Les cinq états doivent rester techniquement distinguables jusque dans le
+journal :
+
+| Étape | Exemple concret | Ce qu'on ne doit jamais en conclure |
+|---|---|---|
+| `EVIDENCE` | « le document indique 4 130 € » | que c'est le bon document |
+| `INTERPRETATION` | « cela ressemble à deux mois de salaire » | que c'en est |
+| `DECISION` | « je propose de vérifier les bulletins » | que la vérification a eu lieu |
+| `ACTION` | « j'ai lancé la recherche » | qu'elle a abouti |
+| `OBSERVATION` | « le système externe confirme 2 résultats » | rien de plus que 2 résultats |
+
+**Ce que le noyau possède déjà, et qu'il faut nommer plutôt que reconstruire.**
+Une partie d'`OBSERVATION` existe : le Verification Engine distingue
+`READ_BACK` (relecture indépendante) de `PROVIDER_PROOF` (parole du
+fournisseur), et `confirmed()` exige une preuve. C'est exactement la
+distinction « l'outil a dit » / « j'ai constaté ». Trois manques subsistent :
+
+1. **`PARTIAL` n'existe pas.** Aucune façon d'exprimer « 3 destinataires sur
+   5 ». Ce statut doit exister **avant** le premier outil capable de réussir à
+   moitié — après, la migration coûtera cher.
+2. **L'observation n'a pas d'identité.** On sait *qu'*une relecture a eu lieu ;
+   on ne sait ni quand, ni contre quelle source, ni avec quel identifiant de
+   preuve. Une observation sans identité n'est pas rejouable.
+3. **`INTERPRETATION` n'est nulle part.** Aujourd'hui l'Intent Engine passe
+   directement de la phrase à l'appel d'outil. C'est acceptable au Tier 0
+   (règles déterministes, l'interprétation est le motif lui-même) et le
+   deviendra beaucoup moins dès qu'un modèle s'en mêlera.
+
+### §A — Arbitrage ouvert : les états de connaissance ne forment pas une énumération
+
+Le brief demande sept états :
+`KNOWN / UNKNOWN / CONFLICTING / STALE / UNVERIFIED / NOT_AUTHORIZED / OUT_OF_SCOPE`.
+
+**Je propose de ne pas en faire une seule énumération**, et voici pourquoi : ils
+ne répondent pas à la même question, et les mettre sur un même axe produira des
+cas indécidables dès la première semaine d'usage. Que vaut une information à la
+fois `CONFLICTING` et `STALE` ? Le code devra choisir, et choisira mal.
+
+Décomposition proposée — **trois axes indépendants** :
+
+```text
+VERDICT      KNOWN │ UNKNOWN │ CONFLICTING        ← mutuellement exclusifs
+QUALIFIERS   STALE │ UNVERIFIED │ LOW_CONFIDENCE  ← qualifient un KNOWN
+COVERAGE     NOT_AUTHORIZED │ OUT_OF_SCOPE │      ← disent ce qui n'a PAS été
+             UNREACHABLE                            consulté, et pourquoi
+```
+
+L'axe `COVERAGE` est le prolongement direct du `scope` posé au Sprint 1. Il
+répond à la question que l'utilisateur ne pense pas à poser :
+
+> « Sur quelles données as-tu réellement travaillé ? »
+
+Et il s'applique **aussi à un `KNOWN`** : « j'ai trouvé un devis à 4 800 € dans
+ta mémoire ; je n'ai pas consulté tes emails, tu ne m'y as pas autorisé » est
+une réponse plus honnête que « le devis est à 4 800 € ».
+
+Exemples, avec les trois axes :
+
+| Réponse de Jarvis | Verdict | Qualifiers | Coverage |
+|---|---|---|---|
+| « Devis de Pierre du 12 juillet : 4 800 € » | `KNOWN` | — | mémoire seule |
+| « J'ai 4 800 € et 5 200 €, sans savoir lequel est le dernier » | `CONFLICTING` | — | mémoire seule |
+| « 4 800 €, mais l'information date de 8 mois » | `KNOWN` | `STALE` | mémoire seule |
+| « Aucun devis dans ce à quoi j'ai accès » | `UNKNOWN` | — | `NOT_AUTHORIZED` (emails) |
+| « Je ne sais pas chercher dans tes documents » | `UNKNOWN` | — | `OUT_OF_SCOPE` |
+
+**Décision demandée :** valider cette décomposition, ou imposer l'énumération
+plate. Je recommande la décomposition ; je l'appliquerai telle quelle sauf
+instruction contraire.
+
+### §B — Arbitrage ouvert : une opération doit être enregistrée AVANT d'être tentée
+
+**Défaut trouvé en écrivant cet ADR**, et il appartient au domaine
+`ACTION → OBSERVATION`.
+
+`src/core/tools/gateway.ts` vérifie l'idempotence (ligne 342), exécute
+(ligne 427), puis enregistre l'opération (ligne 479). L'écriture dans
+`tool_operations` a donc lieu **après** l'exécution.
+
+Conséquence : si le processus meurt, si le réseau tombe ou si l'outil expire
+**pendant** l'exécution, aucune ligne n'existe. Un rejeu avec la même clé
+d'opération ne trouve rien — et **réexécute**.
+
+Pour les cinq outils actuels, l'effet est nul : ils écrivent dans PostgreSQL,
+de façon transactionnelle. Pour un outil d'envoi d'email, c'est un **double
+envoi**. C'est exactement la ligne « timeout APRÈS action → ne pas réessayer
+aveuglément » de la matrice adversariale.
+
+Correction proposée — **journal d'intention** (write-ahead) :
+
+```text
+        AUJOURD'HUI                        PROPOSÉ
+   vérifier l'idempotence            vérifier l'idempotence
+   exécuter                     →    enregistrer ATTEMPTED   ← avant
+   enregistrer                       exécuter
+                                     enregistrer l'observation
+```
+
+Un rejeu trouvant une ligne `ATTEMPTED` sans observation sait qu'il est dans le
+cas le plus délicat : *l'action a peut-être eu lieu*. Il ne réexécute pas, il
+**relit l'état réel** — ce que le Gateway sait déjà faire — et rend `UNKNOWN`
+si la relecture ne tranche pas.
+
+**Décision demandée :** cette correction touche le Tool Gateway, donc du code
+fonctionnel. Elle sort du gel. Je la spécifie ici et **ne l'implémente pas**
+sans accord.
+
+**Conséquences.** Nouveau document `docs/12`. `PARTIAL` et l'identité
+d'observation entrent dans le périmètre du Sprint 2 ; le journal d'intention
+attend un arbitrage.
+
+**Condition de révision.** Si un jour une étape supplémentaire s'impose entre
+`DECISION` et `ACTION` — une planification multi-outils —, elle s'insère sans
+casser les autres : chaque étape ne connaît que celle qui la précède.
+
+---
+
+## ADR-026 — Mémoire bitemporelle : l'ancienne information n'est pas fausse
+
+**Statut : RATIFIÉ** *(10 août 2026)* — **un arbitrage ouvert, §A.**
+
+**Contexte.** L'audit `docs/11` a établi qu'aucune gestion de contradiction
+n'existe : deux informations incompatibles cohabitent comme deux `FACT` de même
+confiance. Le réflexe serait d'ajouter `superseded_by` et de considérer
+l'ancienne comme périmée.
+
+**C'est le mauvais modèle**, et le brief a raison de s'en méfier :
+
+> « Le mariage est le 12 septembre » n'est pas devenu *faux*.
+> C'était *vrai jusqu'au 18 juin*.
+
+La différence n'est pas philosophique. Elle décide de ce que Jarvis peut
+répondre dans trois ans à :
+
+> « Pourquoi pensais-tu que le mariage était le 12 septembre ? »
+> — « Parce que c'est la date que tu m'as donnée le 4 juin. Elle a été
+> remplacée le 18 juin. »
+
+**Décision.** La mémoire devient **bitemporelle**. Ce n'est pas une invention :
+c'est un modèle établi (temps de validité vs temps de transaction, normalisé
+par SQL:2011), et le nommer permet d'en reprendre les pièges connus plutôt que
+de les redécouvrir.
+
+Deux axes de temps, indépendants :
+
+| Axe | Colonnes | Répond à |
+|---|---|---|
+| **Temps de validité** | `valid_from`, `valid_until` | *quand est-ce vrai dans le monde ?* |
+| **Temps de transaction** | `recorded_at`, `superseded_at` | *quand l'ai-je su ?* |
+
+Un fait n'est jamais modifié ni supprimé : il est **clos** (`valid_until`
+renseigné) et un nouveau est écrit. C'est la même discipline que l'Event
+Ledger, appliquée à la mémoire.
+
+```text
+Projet mariage — date
+
+  recorded_at 4 juin    valid_from 4 juin    valid_until 18 juin   12 septembre
+  recorded_at 18 juin   valid_from 18 juin   valid_until ∞         19 septembre
+```
+
+Quatre questions deviennent alors répondables, et aucune ne l'est aujourd'hui :
+
+- *que sais-tu ?* → l'état courant ;
+- *que savais-tu le 10 juin ?* → l'état tel que connu à cette date ;
+- *depuis quand le sais-tu ?* → `recorded_at` ;
+- *qu'est-ce qui a changé cette semaine ?* → le différentiel de transaction.
+
+### §A — Arbitrage ouvert : trois façons de dire la même chose se contrediront
+
+Le brief propose le jeu de champs suivant :
+
+```text
+value · valid_from · valid_until · recorded_at · source · confidence
+      · superseded_by · status
+```
+
+**Je propose de retirer `status`, et de dériver `superseded_by` au lieu de le
+stocker.** Raison : `valid_until`, `superseded_by` et `status` encodent tous
+les trois « ce fait n'est plus le courant ». Trois écritures pour une vérité,
+c'est trois occasions de diverger — et le jour où elles divergeront, aucune des
+trois ne fera autorité.
+
+Ce que je propose de conserver :
+
+```text
+value          la valeur
+valid_from     ┐ temps de validité
+valid_until    ┘ NULL = toujours vrai — c'est LE seul marqueur de « courant »
+recorded_at    ┐ temps de transaction
+superseded_at  ┘ NULL = jamais remplacé
+source         la provenance (ADR-024)
+confidence     plafonnée par origine
+subject/predicate  ce sur quoi porte le fait — nécessaire pour DÉTECTER le conflit
+```
+
+`status` se lit : `valid_until IS NULL`. `superseded_by` se retrouve par
+requête sur `(subject, predicate)`.
+
+**La contrepartie, qu'il faut assumer maintenant :** la bitemporalité rend
+**toute** requête plus difficile. Chaque `SELECT` doit désormais dire « à quelle
+date ? », sur deux axes. C'est une taxe permanente sur tout le code de lecture.
+
+Atténuation retenue : une vue `memories_current` (`valid_until IS NULL AND
+superseded_at IS NULL`) que le code ordinaire interroge sans y penser. Seules
+les questions historiques descendent au modèle complet. Sans cette vue, la
+bitemporalité se paiera à chaque ligne de code écrite pendant trois ans.
+
+**Ce que cette décision ne résout pas.** Détecter qu'une information *contredit*
+une autre est un problème distinct, et beaucoup plus difficile, que savoir la
+représenter. Le modèle bitemporel rend la contradiction *exprimable* ; il ne la
+détecte pas. La détection exige un `(subject, predicate)` structuré — donc une
+extraction — et c'est le vrai chantier du Sprint 2.
+
+**Décision demandée :** valider le retrait de `status` et de `superseded_by`.
+
+**Conséquences.** Migration à écrire (non écrite : gel). `docs/12 §3` en donne
+la forme et les tests exigés.
+
+**Condition de révision.** Si le coût de lecture se révèle insoutenable à
+l'usage, on peut dénormaliser un indicateur `is_current` — **calculé par
+trigger**, jamais écrit par l'applicatif. Jamais l'inverse.
