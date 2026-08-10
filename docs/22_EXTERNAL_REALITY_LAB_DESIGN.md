@@ -1,238 +1,309 @@
-# 22 — EXTERNAL REALITY LAB : conception
+# 22 — EXTERNAL REALITY & FAILURE LABORATORY : conception
 
 **Foundation 5, phase DISCOVERY.** Aucune ligne de banc n'est écrite. Ce
 document existe pour que la conception soit critiquable **avant** d'être
 coûteuse à changer.
 
----
-
-## 1. Ce que ce sprint doit prouver — et ce qu'il ne doit pas faire
-
-**Objectif unique :**
-
-> Prouver que le noyau se comporte correctement quand le monde extérieur se
-> comporte mal.
-
-**Hors périmètre, explicitement :** aucun outil produit, aucune intégration
-réelle, aucun email, aucun agenda, aucun paiement. Le banc ne teste pas des
-fonctionnalités : il teste la frontière.
-
-**La question posée à chaque scénario :**
+**Discipline appliquée à chaque affirmation de ce document :**
 
 ```text
-même intention · mêmes paramètres · même OperationIdentity
-                        ↓
-        conditions extérieures différentes
-                        ↓
-              résultat VÉRIFIABLE
+HYPOTHÈSE → CONTRE-EXEMPLE CHERCHÉ → PROPRIÉTÉ → TEST ENVISAGÉ
+          → GARANTIE RÉELLEMENT OBTENUE → LIMITE NON TESTABLE
 ```
+
+Aucune correction n'est apportée pendant cette phase. Là où une mesure a déjà
+été faite, elle est signalée comme telle.
 
 ---
 
-## 2. Architecture du banc
+## 1. Les six invariants imposés avant implémentation
 
-Quatre couches, et la séparation est ce qui rend les mesures crédibles.
+Ils encadrent tout le reste du document.
+
+| | Invariant |
+|---|---|
+| **F5-1** | Un bail n'est **jamais** une preuve de mort d'un processus. |
+| **F5-2** | Un bail n'est **jamais** une preuve d'absence d'effet externe. |
+| **F5-3** | Toute écriture interne postérieure à une reprise exige un **jeton de cloisonnement** (*fencing token*). |
+| **F5-4** | Le banc distingue **la réalité du fournisseur** de **ce que Jarvis peut observer**. Jarvis n'accède jamais à la première. |
+| **F5-5** | L'autonomie ne découle pas de la seule preuve : **Policy, risque et réversibilité restent souverains**. |
+| **F5-6** | Toutes les identités d'une opération restent traçables **de l'intention jusqu'à l'effet externe**. |
+
+> **Un bail est un mécanisme de COORDINATION.** Il répond à « qui a le droit de
+> travailler maintenant ? ». Il ne répond ni à « l'autre est-il mort ? », ni à
+> « le monde a-t-il changé ? ».
+
+---
+
+## 2. Six réalités qu'on avait fondues en une
+
+C'est la correction conceptuelle centrale du sprint. Chacune est mesurable
+séparément, et les confondre a déjà produit deux défauts.
 
 ```text
-┌──────────────────────────────────────────────────────────┐
-│  SCÉNARIO           déclaratif — temps × réseau × process │
-│                     × contrat × honnêteté                 │
-├──────────────────────────────────────────────────────────┤
-│  ORCHESTRATEUR      lance les processus, injecte les      │
-│                     pannes, ordonne les instants          │
-├──────────────────────────────────────────────────────────┤
-│  JARVIS             le noyau RÉEL — jamais simulé         │
-├──────────────────────────────────────────────────────────┤
-│  MONDE              table hors transaction + journal des  │
-│                     requêtes REÇUES par le fournisseur    │
-└──────────────────────────────────────────────────────────┘
+DATABASE TIME               quelle heure la base rend-elle, et laquelle ?
+PROCESS LIVENESS            le processus tourne-t-il encore ?
+LEASE OWNERSHIP             qui détient le droit d'agir ?
+FENCING                     quelle GÉNÉRATION de propriétaire est valide ?
+EXTERNAL REQUEST LIFECYCLE  la requête est-elle encore en vol ?
+EXTERNAL EFFECT             le monde a-t-il changé ?
 ```
+
+### 2.1 Le temps de la base — **déjà mesuré**
+
+| Hypothèse | `now()` reflète l'heure courante |
+|---|---|
+| **Contre-exemple cherché** | une transaction longue qui fige `now()` |
+| **Mesure** | ✅ effectuée — `now()` a rendu **0 s d'écart sur 2,5 s réelles** dans une transaction ouverte ; `clock_timestamp()` avance |
+| **Propriété** | `now()` = `transaction_timestamp()` = heure de DÉBUT de transaction |
+
+**Où en est le code aujourd'hui.** Le contrôle de bail utilise `now()` dans une
+requête isolée, donc dans sa propre transaction implicite : il est **correct
+aujourd'hui**.
+
+**La direction de l'erreur latente compte, et elle rassure.** Si le contrôle se
+retrouvait un jour dans une transaction longue, `now()` serait *antérieur* au
+temps réel. La condition `executing_at > now() − bail` deviendrait alors **plus
+souvent vraie** : le bail paraîtrait vivant plus longtemps.
+
+```text
+erreur possible  →  bail sur-estimé  →  reprise BLOQUÉE
+erreur exclue    →  bail sous-estimé →  reprise PRÉMATURÉE
+```
+
+C'est un risque de **disponibilité**, jamais de **sûreté**. Le distinguer est
+exactement ce que ce document doit faire — et ne pas le distinguer aurait
+produit soit une panique injustifiée, soit une fausse sérénité.
+
+**Test envisagé** : mesurer les trois horloges (`transaction_timestamp`,
+`statement_timestamp`, `clock_timestamp`) dans et hors transaction, et vérifier
+qu'un contrôle de bail exécuté dans une transaction longue **bloque** au lieu
+d'autoriser.
+
+**Limite non testable** : rien ici ne dit quoi que ce soit sur les requêtes en
+vol. Une horloge parfaite ne résout pas §2.2.
+
+### 2.2 Ce qu'aucune horloge ne résout
+
+```text
+« Quelle heure est-il ? »            → clock_timestamp() répond
+« L'ancienne requête est-elle
+   encore en vol chez Stripe ? »     → RIEN ne répond
+```
+
+C'est la limite dure du système, et elle est indépendante de la qualité du
+bail. Elle justifie F5-2 à elle seule.
+
+---
+
+## 3. Le jeton de cloisonnement — le mécanisme manquant
+
+### 3.1 Le problème
+
+```text
+A détient le bail #41
+A ──► fournisseur          (requête en vol)
+  ✗  A disparaît
+     le bail expire
+B acquiert le bail #42
+B ──► fournisseur
+     A revient et tente d'écrire son résultat
+```
+
+Sans cloisonnement, l'écriture tardive de A **écrase** l'état établi par B. Le
+système raconterait alors l'histoire de A à propos d'un monde façonné par B.
+
+### 3.2 Ce qu'il protège, et ce qu'il ne protège pas
+
+| Protégé par le fencing | **Non** protégé |
+|---|---|
+| l'état PostgreSQL | un SMTP |
+| les transitions d'état | une API distante |
+| les décisions de reprise | un virement |
+| les écritures tardives | une réservation externe |
+
+> **F5-3 — Le cloisonnement protège Jarvis contre ses anciens exécutants. Il ne
+> protège pas le monde extérieur contre une requête déjà partie.**
+
+### 3.3 Conception envisagée
+
+`tool_operations` gagne une **génération** monotone, incrémentée à chaque prise
+de bail. Toute écriture d'un exécutant porte la génération qu'il détenait, et
+la clause devient :
+
+```sql
+UPDATE tool_operations SET … WHERE operation_id = $1 AND lease_generation = $2
+```
+
+Un exécutant périmé obtient `rowCount = 0` et n'écrit rien.
+
+| Hypothèse | une génération monotone suffit à cloisonner |
+|---|---|
+| **Contre-exemple cherché** | deux exécutants obtenant la même génération |
+| **Propriété visée** | la génération s'incrémente dans le même compare-and-swap que la prise de bail — donc atomiquement |
+| **Test envisagé** | A#41 tente d'écrire après que B a pris #42 → écriture refusée, et Jarvis le journalise |
+| **Garantie obtenue** | cohérence de l'état interne face à un exécutant zombie |
+| **Limite non testable** | l'effet externe déjà produit par A reste hors d'atteinte |
+
+---
+
+## 4. Deux mondes, et Jarvis n'en voit qu'un
+
+C'est F5-4, et c'est ce qui rend le banc capable de juger l'honnêteté de Jarvis
+plutôt que sa conformité à un scénario.
+
+```text
+        JARVIS                          LE BANC
+   ─────────────────              ──────────────────────
+   request émise                  request_received
+   response │ timeout             effect_started
+   HTTP 500 │ 429                 effect_committed
+   connection reset               effect_id · effect_count · effect_time
+                                  response_sent · response_delay
+```
+
+**Jarvis n'a jamais accès à la colonne de droite.** Le banc, si.
+
+C'est ce qui permet d'énoncer la propriété la plus intéressante du sprint :
+
+> **Jarvis avait raison de dire `UNKNOWN` alors que l'effet avait réellement eu
+> lieu.**
+
+Un test unitaire ne peut pas exprimer cela. Deux mondes, oui.
 
 ### Ce que le monde doit enregistrer en plus d'aujourd'hui
 
-Le banc actuel compte les **effets**. Il ne voit pas les **requêtes**. Or la
-distinction est exactement celle que Foundation 4.1 a rendue centrale :
-
 | Table | Ce qu'elle établit |
 |---|---|
-| `lab_world_effects` | le monde a changé |
-| `lab_provider_requests` | le fournisseur a **reçu** une demande |
+| `lab_world_effects` | le monde a changé — *existe déjà* |
+| `lab_provider_requests` | le fournisseur a **reçu** une demande — *à créer* |
 
-Sans la seconde, on ne peut pas distinguer « requête jamais reçue » de
-« requête reçue, effet produit, réponse perdue » — deux situations que Jarvis
-voit à l'identique et qui n'ont pas la même vérité.
+Sans la seconde, « requête jamais reçue » et « effet produit, réponse perdue »
+sont indiscernables **y compris pour le banc** — qui perdrait alors toute
+capacité de juger.
+
+---
+
+## 5. Preuve et vérité ne sont pas la même chose
+
+```text
+RÉALITÉ  →  OBSERVATION  →  PREUVE  →  VÉRIFICATION  →  VERDICT
+```
+
+et surtout **pas** `RÉALITÉ = VERDICT`.
+
+Deux propositions peuvent être vraies en même temps :
+
+```text
+réalité :        EFFET = OUI
+ce que Jarvis sait : EFFET = UNKNOWN
+```
+
+> Ne jamais confondre « ce n'est pas observable » et « cela ne s'est pas
+> produit ».
+
+C'est la chaîne `SOURCE → EVIDENCE → INTERPRETATION → DECISION → ACTION →
+OBSERVATION` d'ADR-025, poussée jusqu'à sa conséquence : **le verdict décrit
+l'état de nos connaissances, pas l'état du monde.**
+
+### Corollaire opérationnel
+
+> **L'absence d'événement n'est jamais un événement.**
+
+```text
+REQUEST_SENT + aucune RESPONSE
+    ≠  REQUEST_FAILED
+    =  RESPONSE_UNKNOWN
+```
+
+---
+
+## 6. Les huit couches du banc
+
+| # | Couche | Ce qu'elle éprouve |
+|---|---|---|
+| **01** | Clock | temps de transaction, d'instruction, horloge murale, dérive, transactions longues |
+| **02** | Lease | acquisition, renouvellement, expiration, concurrence, crash, gel, partition |
+| **03** | Fencing | génération #41 vs #42, écriture périmée refusée |
+| **04** | Request lifecycle | créée, émise, reçue, perdue, dupliquée, retardée |
+| **05** | Provider reality | ce qui s'est **réellement** produit — invisible pour Jarvis |
+| **06** | Observation | la projection partielle dont Jarvis dispose |
+| **07** | Verdict | transitions autorisées, et uniquement sur preuve admissible |
+| **08** | Recovery | crash, timeout, effet tardif, doublon, concurrence, byzantin |
 
 ### Le harnais temporel
 
-Les scénarios manipulent des instants relatifs, jamais des `sleep` dispersés :
+Chaque famille de panne se définit comme une contrainte sur cinq instants, ce
+qui rend la matrice énumérable au lieu d'anecdotique :
 
 ```text
-t0   requête émise
-t1   requête reçue par le fournisseur
-t2   effet produit
-t3   réponse émise
-t4   réponse reçue par Jarvis   (ou jamais)
+t0  requête émise
+t1  requête reçue par le fournisseur
+t2  effet produit
+t3  réponse émise
+t4  réponse reçue par Jarvis   (ou jamais)
 ```
-
-Chaque famille de panne se définit alors comme une contrainte sur ces cinq
-instants — ce qui rend la matrice §5 énumérable au lieu d'anecdotique.
 
 ---
 
-## 3. Modèle de fournisseur
+## 7. La matrice de vérité — le contrat du laboratoire
 
-### 3.1 Les cinq contrats, et ce qu'ils autorisent après `UNKNOWN`
+Pour chaque ligne : ce qui s'est réellement passé, ce que Jarvis voit, ce qu'il
+a le droit de conclure, et s'il a le droit de rejouer.
 
-| Contrat | `FAILED` possible | Rejeu | Ce que le fournisseur doit garantir |
+| Réalité fournisseur | Ce que voit Jarvis | Verdict autorisé | Rejeu |
 |---|---|---|---|
-| `NO_EXTERNAL_EFFECT` | ✅ | ✅ | rien : il n'y a pas d'effet |
-| `LOCAL_TRANSACTIONAL` | ✅ | ✅ | rollback atomique avec le journal |
-| `PROVIDER_IDEMPOTENT` | ❌ | ✅ | même identité ⟹ au plus un effet |
-| `EXTERNALLY_VERIFIABLE` | ❌ | ❌ | interrogation autoritaire sur l'existence |
-| `UNVERIFIABLE` | ❌ | ❌ | rien |
+| aucune requête reçue | timeout | `UNKNOWN` | selon contrat |
+| requête reçue, pas exécutée | timeout | `UNKNOWN` | selon contrat |
+| **effet produit, réponse perdue** | timeout | `UNKNOWN` | **non**, sauf garantie |
+| effet produit, réponse reçue | succès | `CONFIRMED` | non |
+| effet impossible + preuve d'absence | réponse vérifiée | `FAILED` | oui |
+| **effet produit, réponse `500`** | `500` | `UNKNOWN` | **non** |
+| `429` avant traitement | `429` | `UNKNOWN` | selon contrat |
+| requête dupliquée, fournisseur idempotent | 2 requêtes / 1 effet | selon observation | oui, même identité |
+| **fournisseur prétend idempotent, produit 2 effets** | 2 effets | `PROVIDER_CONTRACT_VIOLATION` | **STOP** |
+| `200` sans effet métier | `200` | `PROBABLE` au mieux | non |
+| effet sur 3 cibles sur 5 | réponse partielle | `PARTIAL` | par cible |
 
-Chaque contrat exige **un fournisseur honnête de référence** : une
-implémentation qui respecte exactement ce qu'elle déclare. Sans elle, on ne
-saurait pas si un échec vient du noyau ou du simulateur.
-
-### 3.2 Honnête vs byzantin
-
-```text
-HONNÊTE     déclare C, respecte C
-BYZANTIN    déclare C, viole C
-```
-
-Le fournisseur byzantin n'est pas un cas exotique : c'est un service qui a un
-bogue, une version qui change sans préavis, une documentation optimiste. Quatre
-formes à simuler :
-
-- déclare `PROVIDER_IDEMPOTENT`, produit **deux** effets pour une identité ;
-- répond `200` sans effet ;
-- répond deux choses contradictoires à la même question ;
-- répond `500` puis produit l'effet.
-
-### 3.3 Ce que Jarvis doit faire face à une violation
-
-**Il ne peut pas l'empêcher.** Un fournisseur qui double un virement le double,
-et aucun code local n'y changera rien. La propriété visée est donc ailleurs :
-
-| Exigence | Vérifiable ? |
-|---|---|
-| ne jamais **masquer** la violation | ✅ |
-| ne jamais traiter une assertion fournisseur comme preuve absolue | ✅ |
-| **journaliser** la violation comme rupture de confiance | ✅ |
-| dégrader la confiance accordée à ce fournisseur | ✅ |
-| n'entreprendre aucune action nouvelle sur une information compromise | ✅ |
-| empêcher physiquement le second effet | ❌ **impossible** |
-
-Un état terminal nouveau est nécessaire :
-`PROVIDER_CONTRACT_VIOLATION`. Il ne décrit pas l'action mais **le
-fournisseur** — et il doit être plus fort qu'`UNKNOWN` : on ne sait pas ce qui
-s'est passé, *et* on sait que la source n'est plus fiable.
+Les trois lignes en gras sont celles où l'intuition se trompe. Elles sont
+toutes indiscernables, depuis Jarvis, d'une situation où rien ne s'est produit.
 
 ---
 
-## 4. Modèle de panne
+## 8. Les trois propriétés globales
 
-### 4.1 Temps
-
-`1 ms · 100 ms · 800 ms · 5 s · 30 s`, plus quatre positions relatives qui
-comptent davantage que les durées :
+Plus importantes que n'importe quel décompte de tests.
 
 ```text
-réponse après le timeout local
-réponse après l'expiration du bail
-réponse après un crash de Jarvis
-réponse après un redémarrage complet
+POUR TOUT scénario :
+
+  external_effect_count > 1
+      ⟹  Jarvis n'a JAMAIS produit un rejeu autonome
+          qu'il présentait comme sûr
+
+  external_effect_count = 1
+      ⟹  Jarvis n'affirme JAMAIS FAILED
+          sans preuve positive d'absence
+
+  external_effect_count inconnu
+      ⟹  Jarvis n'invente AUCUNE certitude
 ```
 
-### 4.2 Réseau
-
-```text
-requête jamais reçue              (t1 n'existe pas)
-requête reçue, réponse perdue     (t1, t2, pas de t4)
-effet produit, réponse perdue     (t1, t2, t3, pas de t4)
-partition pendant l'exécution
-rétablissement après reprise
-connexion interrompue
-```
-
-Les trois premières lignes sont **indiscernables depuis Jarvis**. C'est le cœur
-du sprint : le banc, lui, les distingue grâce à `lab_provider_requests`, et
-peut donc dire si le verdict de Jarvis était honnête.
-
-### 4.3 Processus
-
-```text
-crash avant l'appel · pendant · après
-SIGKILL · freeze > bail · redémarrage
-deux processus simultanés · deux machines
-```
-
-### 4.4 Multi-machine — ce qui est réellement mesurable ici
-
-`docs/20 §7` classait cette propriété « argumentée, pas mesurée ». Il faut être
-précis sur ce que ce sprint peut fermer, et sur ce qu'il ne peut pas.
-
-| Aspect | Mesurable dans cet environnement ? |
-|---|---|
-| Deux processus, pools distincts, même base | ✅ déjà fait (Foundation 3) |
-| **Dérive d'horloge** entre exécutants | ✅ en injectant un décalage sur `Date.now` |
-| Ordonnancement non déterministe entre exécutants | ✅ par jitter |
-| Partition réseau **entre Jarvis et PostgreSQL** | ✅ en coupant la base |
-| Deux hôtes physiques distincts | ❌ un seul conteneur |
-| Latence réseau réelle vers la base | ◐ simulable, non native |
-
-**Ce que je propose de mesurer, et qui ferme la vraie question :** le bail est
-évalué par la base. Sa correction ne doit donc rien devoir à l'horloge locale.
-Un test qui fait tourner un exécutant avec `Date.now` décalé de ±1 heure et
-vérifie que le comportement du bail est inchangé **prouve la propriété qui
-importe** — l'immunité à la dérive d'horloge — sans prétendre au multi-hôte.
-
-Je ne présenterai pas cela comme « multi-machine testé ». Ce sera :
-*« immunité à la dérive d'horloge : PROVEN. Deux hôtes physiques : NOT
-TESTABLE ici. »*
+La première mérite d'être lue deux fois : elle n'interdit pas le double effet —
+c'est impossible face à un fournisseur byzantin. Elle interdit que Jarvis en
+**soit la cause en se croyant sûr**.
 
 ---
 
-## 5. Matrice des scénarios
+## 9. Le fournisseur byzantin, et la classification obligatoire
 
-Le produit cartésien complet est inutilisable. La matrice se construit sur les
-axes qui **changent la vérité**, pas sur ceux qui changent les chiffres.
+Un fournisseur byzantin n'est pas exotique : c'est un service qui a un bogue,
+une version qui change sans préavis, ou une documentation optimiste.
 
-| Axe | Valeurs | Pourquoi il change la vérité |
-|---|---|---|
-| Contrat d'effet | 5 | décide du droit de rejouer |
-| Honnêteté | 2 | décide si la déclaration vaut |
-| Position de l'effet | 5 instants | décide si un rejeu double |
-| Panne | ~12 | décide de ce que Jarvis observe |
-| Concurrence | 1 · 2 · 10 · 50 | décide si l'exclusion tient |
-| Processus | 1 · 2 · crash · redémarrage | décide si l'état survit |
+Quatre formes à simuler : deux effets pour une identité ; `200` sans effet ;
+deux réponses contradictoires à la même question ; `500` puis effet.
 
-Deux régimes d'exécution :
-
-**Dirigé** — les combinaisons nommées dans le mandat, jouées à coup sûr. Une
-combinaison qu'on juge importante ne doit pas dépendre d'une graine.
-
-**Aléatoire** — le chaos existant (`docs/20 §4`), étendu aux nouveaux axes, avec
-graine déterministe et minimisation du contre-exemple.
-
----
-
-## 6. Invariants
-
-### L'invariant global
-
-```text
-Pour toute OperationIdentity :   external_effect_count(identité, cible) ≤ 1
-```
-
-Vérifié après **chaque** scénario, toutes familles confondues — jamais comme un
-test parmi d'autres.
-
-### La distinction que le fournisseur byzantin impose
-
-Quand la violation vient du fournisseur, il faut classer plutôt que promettre :
+### Classifier plutôt que promettre
 
 | Classe | Signification |
 |---|---|
@@ -243,152 +314,207 @@ Quand la violation vient du fournisseur, il faut classer plutôt que promettre :
 
 > **Ne jamais annoncer A quand seul C est possible.**
 
-Un fournisseur qui double un effet sur une identité unique relève de **B et C** :
-on ne l'empêche pas, on le voit. C'est une propriété honnête, et très
-différente d'une garantie.
+Un fournisseur qui double sur une identité unique relève de **B et C** : on ne
+l'empêche pas, on le voit.
 
-### Nouveaux invariants candidats
+### Ce que Jarvis doit alors faire
 
-| | Énoncé | Famille |
-|---|---|---|
-| **I11** | toute violation de contrat détectée est journalisée comme telle | byzantin |
-| **I12** | aucune action nouvelle n'est engagée après une violation détectée | byzantin |
-| **I13** | tout état terminal possède une chaîne de provenance complète | provenance |
-| **I14** | le comportement du bail est indépendant de l'horloge locale | temps |
+| Exigence | Vérifiable |
+|---|---|
+| ne jamais masquer la violation | ✅ |
+| ne jamais traiter une assertion fournisseur comme preuve absolue | ✅ |
+| journaliser la violation comme **rupture de confiance** | ✅ |
+| dégrader la confiance accordée à ce fournisseur | ✅ |
+| n'engager aucune action nouvelle sur une information compromise | ✅ |
+| empêcher physiquement le second effet | ❌ **impossible** |
 
-Chacun devra, comme I1–I10, disposer d'un **témoin négatif** : un test qui
-injecte la violation et vérifie qu'elle est vue.
+Un état terminal nouveau est nécessaire : `PROVIDER_CONTRACT_VIOLATION`. Il ne
+qualifie pas l'action mais **la source**, et il est plus fort qu'`UNKNOWN` : on
+ignore ce qui s'est passé, *et* on sait que la source n'est plus fiable.
+
+| Hypothèse | une violation byzantine est toujours détectable |
+|---|---|
+| **Contre-exemple cherché** | deux effets sur deux cibles **différentes** — indiscernables d'un succès partiel légitime |
+| **Propriété** | détectable **seulement si** les cibles attendues sont connues à l'avance |
+| **Garantie obtenue** | détection sur cible unique ou ensemble déclaré |
+| **Limite** | ensemble de cibles non déclaré → classe **D**, non détectable |
 
 ---
 
-## 7. Provenance de la vérité
+## 10. Conservation des identités
 
-Jarvis doit pouvoir répondre à deux questions, et la seconde est celle qu'on
-oublie toujours :
+F5-6. Le jour où la question sera « pourquoi cet email est-il parti ? », il
+faudra remonter **du monde extérieur jusqu'à la décision**.
+
+```text
+Intent I1
+  └── Operation O1                     (OperationIdentity — déjà typée)
+        ├── Attempt A1
+        │     └── Request R1
+        │           └── ProviderRequest P1
+        │                 └── Effect E1
+        └── leaseGeneration #41
+```
+
+**État actuel :** `OperationIdentity` existe et est marquée. `intentId`,
+`attemptId`, `requestId`, `providerRequestId`, `effectId` et
+`leaseGeneration` n'existent pas. Le Gateway ne journalise pas l'appel
+lui-même.
+
+**Test envisagé** : partir d'une ligne de `lab_world_effects` et reconstruire la
+chaîne complète jusqu'à l'intention — puis vérifier qu'aucun maillon ne peut
+être reconstruit par déduction plutôt que par lecture.
+
+### La chaîne de provenance à produire
+
+```text
+T0  INTENTION
+T1  OPERATION_PLANNED
+T2  REQUEST_CREATED
+T3  REQUEST_SENT
+T4  REQUEST_ACCEPTED     ?
+T5  RESPONSE_RECEIVED    ?
+T6  EFFECT_OBSERVED      ?
+T7  OUTCOME
+```
+
+Jarvis doit pouvoir répondre à deux questions — et la seconde est celle qu'on
+oublie :
 
 ```text
 « Pourquoi affirmes-tu que c'est fait ? »
 « Pourquoi refuses-tu de recommencer ? »
 ```
 
-La chaîne à reconstruire :
-
-```text
-INTENTION → OPERATION → REQUEST → RESPONSE → OBSERVATION → VERIFICATION → OUTCOME
-```
-
-Deux exemples de ce qui doit être produit :
-
-```text
-INTENTION → OPERATION → REQUEST → RESPONSE 200 → OBSERVATION(effet vu)
-          → VERIFICATION(POSITIVE_PRESENCE) → CONFIRMED
-
-INTENTION → OPERATION → REQUEST → TIMEOUT → OBSERVATION(néant)
-          → VERIFICATION(aucune preuve) → UNKNOWN → PAS DE REJEU
-                                          (contrat EXTERNALLY_VERIFIABLE)
-```
-
-Et ce qui doit être **impossible à produire** :
+Et ceci doit être **impossible à produire** :
 
 ```text
 REQUEST → TIMEOUT → « probablement fait » → CONFIRMED
 ```
 
-**État actuel :** l'Event Ledger porte déjà `INTENTION → OPERATION → OUTCOME`.
-Manquent `REQUEST` et `RESPONSE` — le Gateway ne journalise pas l'appel
-lui-même. C'est la principale addition de structure du sprint, et elle sert
-directement le fournisseur byzantin : sans trace de la requête, une violation
-n'est pas démontrable.
+| Hypothèse | la chaîne de provenance prouve pourquoi Jarvis affirme |
+|---|---|
+| **Contre-exemple cherché** | une chaîne complète et cohérente bâtie sur une observation elle-même erronée |
+| **Propriété** | la provenance prouve le **raisonnement**, jamais le monde |
+| **Limite** | une observation fausse produit une chaîne valide et un verdict faux |
 
 ---
 
-## 8. États terminaux — l'invariant verrouillé
+## 11. L'autonomie n'est pas une fonction de la preuve seule
+
+F5-5, et c'est une correction que je dois à la relecture : j'avais proposé
+« l'autonomie se calcule depuis la qualité de preuve ». Insuffisant.
 
 ```text
-CONFIRMED   preuve positive d'effet
-FAILED      preuve positive d'absence
-UNKNOWN     preuve insuffisante
+AUTONOMIE = f( preuve, contrat d'effet, réversibilité,
+               risque de l'action, policy, portée, règles utilisateur )
 ```
 
-et les cinq inégalités, chacune devant avoir son test :
+Le contre-exemple qui le montre :
 
 ```text
-timeout       ≠ FAILED        ✅ déjà tenu
-crash         ≠ FAILED        ✅ déjà tenu
-bail expiré   ≠ FAILED        ✅ déjà tenu
-HTTP 500      ≠ FAILED        ✅ déjà tenu
-HTTP 200      ≠ CONFIRMED     ◐ tenu pour les outils OBSERVABLE
+preuve          = excellente
+contrat d'effet = parfaitement idempotent
+action          = virement de 50 000 €
+                  ⟹ sûrement pas AUTO
 ```
 
-La dernière mérite attention. Un `200` n'est pas une preuve de l'**effet
-métier** : une API peut accuser réception d'une demande d'envoi sans que
-l'email parte jamais. Le Verification Engine plafonne déjà à `PROBABLE` en
-l'absence de relecture — ce qui est correct — mais aucun test ne met en scène un
-`200` **structurellement mensonger sur le plan métier**, par opposition à un
-`200` simplement non recoupé. À ajouter.
+> **La preuve détermine ce que Jarvis peut AFFIRMER et REPRENDRE.
+> La Policy détermine ce que Jarvis peut FAIRE.**
+
+Ces deux axes ne doivent jamais fusionner. La preuve peut seulement **abaisser**
+l'autonomie, jamais l'élever — même mécanique que `strictest()`.
 
 ---
 
-## 9. Classification des résultats
+## 12. Classification des résultats
 
-Aucun chiffre global ne sera présenté comme une preuve. Quatre catégories, et
-chaque ligne du rapport final en portera une :
+Aucun décompte global ne sera présenté comme une preuve. Chaque ligne du
+rapport final portera une catégorie :
 
 | Catégorie | Signification |
 |---|---|
-| **PROVEN** | un test nommé, reproductible, avec témoin négatif |
-| **PARTIALLY PROVEN** | tenu dans les conditions testées, avec la limite écrite |
+| **PROVEN** | test nommé, reproductible, avec témoin négatif |
+| **PARTIALLY PROVEN** | tenu dans les conditions testées, limite écrite |
 | **NOT TESTABLE** | l'environnement ne le permet pas — raison explicite |
-| **NOT GUARANTEED** | le système ne le garantit pas, et on le dit |
+| **NOT GUARANTEED** | le système ne le garantit pas, et le dit |
 
-`NOT GUARANTEED` n'est pas un aveu d'échec. C'est la seule façon de rendre
-utilisables les garanties qui, elles, tiennent.
+### Multi-machine : ce qui est réellement mesurable ici
+
+| Aspect | Verdict attendu |
+|---|---|
+| Deux processus, pools distincts, même base | **PROVEN** (Foundation 3) |
+| Immunité à la dérive d'horloge | **PROVEN** visé — bail évalué par la base, testé avec `Date.now` décalé |
+| Ordonnancement non déterministe | **PROVEN** visé |
+| Partition entre Jarvis et PostgreSQL | **PROVEN** visé |
+| Deux hôtes physiques distincts | **NOT TESTABLE** — un seul conteneur |
+| Latence réseau réelle vers la base | **PARTIALLY PROVEN** — simulable |
+
+Je ne présenterai pas la deuxième ligne sous le nom de l'avant-dernière.
 
 ---
 
-## 10. Ordre d'implémentation proposé
+## 13. Coût
 
-Chaque étape reste soumise à la discipline
+Le banc est **entièrement local** : PostgreSQL, simulateur de fournisseur,
+moteur de chaos, Verification Engine, Event Ledger, tests adversariaux. Aucun
+modèle cloud, aucune API distante, aucun service tiers.
+
+```text
+tout ce qui précède  →  0 € / mois
+```
+
+Un fournisseur réel ne devient nécessaire que pour une **campagne de validation
+contractuelle** ponctuelle — vérifier qu'un service tient ce qu'il déclare — et
+jamais pour le fonctionnement quotidien du système.
+
+---
+
+## 14. Ordre d'implémentation
+
+Chaque étape reste soumise à
 `DISCOVERY → CONTRE-EXEMPLE → MESURE → INVARIANT → ADR → CODE → TEST → RÉGRESSION`.
 
 | # | Étape | Pourquoi à ce rang |
 |---|---|---|
-| 1 | Journal des requêtes fournisseur | sans lui, rien d'autre n'est démontrable |
-| 2 | Chaîne de provenance `REQUEST`/`RESPONSE` | prérequis du fournisseur byzantin |
-| 3 | Fournisseurs honnêtes, un par contrat | référence avant déviation |
-| 4 | Harnais temporel (les cinq instants) | rend la matrice énumérable |
-| 5 | Fournisseur byzantin + `PROVIDER_CONTRACT_VIOLATION` | le cœur du sprint |
-| 6 | Injection de dérive d'horloge | ferme la dette du bail |
-| 7 | I11–I14 avec témoins négatifs | |
-| 8 | Extension du chaos aux nouveaux axes | |
-| 9 | Rapport classé PROVEN / PARTIAL / NOT TESTABLE / NOT GUARANTEED | |
+| 1 | Couche Clock : les trois horloges, transactions longues | invaliderait le bail une troisième fois |
+| 2 | `lab_provider_requests` — le second monde | sans lui, rien d'autre n'est démontrable |
+| 3 | Chaîne `REQUEST` / `RESPONSE` au journal | prérequis du byzantin et de la provenance |
+| 4 | Jeton de cloisonnement (génération de bail) | protège l'état interne avant tout le reste |
+| 5 | Fournisseurs **honnêtes**, un par contrat | référence avant déviation |
+| 6 | Harnais temporel (cinq instants) | rend la matrice énumérable |
+| 7 | Fournisseur byzantin + `PROVIDER_CONTRACT_VIOLATION` | le cœur du sprint |
+| 8 | Dérive d'horloge injectée | ferme la dette du bail |
+| 9 | Identités : `intentId` … `effectId` | provenance de bout en bout |
+| 10 | Invariants I11–I15 + témoins négatifs | |
+| 11 | Extension du chaos aux nouveaux axes | |
+| 12 | Rapport classé PROVEN / PARTIAL / NOT TESTABLE / NOT GUARANTEED | |
+
+### Invariants candidats
+
+| | Énoncé |
+|---|---|
+| **I11** | toute violation de contrat détectée est journalisée comme rupture de confiance |
+| **I12** | aucune action nouvelle après une violation détectée |
+| **I13** | tout état terminal possède une chaîne de provenance complète |
+| **I14** | le comportement du bail est indépendant de l'horloge locale |
+| **I15** | aucune écriture d'un exécutant dont la génération de bail est périmée |
 
 ---
 
-## 11. Ce que je crois déjà, et que je vais donc essayer de casser
+## 15. Ce que je crois, et que le banc devra attaquer
 
-Méthode retenue des deux sprints précédents : **une phrase d'architecture qui
-semble raisonnable doit d'abord recevoir son contre-exemple.** Quatre phrases
-que je tiens actuellement pour vraies, et que le banc devra attaquer :
+Quatre affirmations que je tiens pour vraies aujourd'hui. Les écrire ici, c'est
+s'engager à chercher leur contre-exemple **avant** de construire dessus.
 
-1. *« Le bail évalué par la base est immunisé à la dérive d'horloge. »*
-   → contre-exemple à chercher : une transaction longue qui fige `now()`.
-   PostgreSQL rend l'heure de **début de transaction** — si la vérification du
-   bail se produit dans une transaction ouverte de longue date, `now()` ment.
+| # | Affirmation | Contre-exemple à chercher | État |
+|---|---|---|---|
+| 1 | Le bail évalué par la base est immunisé à la dérive d'horloge | transaction longue figeant `now()` | ✅ **mesuré** — le défaut existe, mais penche vers le blocage, jamais vers le double effet |
+| 2 | `lab_provider_requests` établit qu'une requête a été reçue | l'enregistrement lui-même échoue | ⏳ à éprouver |
+| 3 | Un fournisseur byzantin est toujours détectable | deux effets sur deux cibles distinctes, indiscernables d'un partiel légitime | ⏳ à éprouver — probablement **faux** |
+| 4 | La chaîne de provenance prouve pourquoi Jarvis affirme | chaîne cohérente bâtie sur une observation erronée | ⏳ à éprouver — probablement **faux** |
 
-2. *« `lab_provider_requests` établit qu'une requête a été reçue. »*
-   → contre-exemple : une requête reçue mais dont l'enregistrement échoue.
-   Le journal du monde a lui aussi ses pannes.
-
-3. *« Un fournisseur byzantin est toujours détectable après coup. »*
-   → contre-exemple : deux effets sur deux cibles différentes, indiscernables
-   d'un succès partiel légitime. Détectable seulement si les cibles sont
-   connues à l'avance.
-
-4. *« La chaîne de provenance prouve pourquoi Jarvis affirme. »*
-   → contre-exemple : une chaîne complète et cohérente construite sur une
-   observation elle-même erronée. La provenance prouve le **raisonnement**,
-   jamais le monde.
-
-Le point 1 est le plus inquiétant, et je le traiterai en premier : il
-invaliderait ADR-032 une troisième fois.
+Les points 3 et 4 sont vraisemblablement faux, et je préfère l'écrire avant de
+les tester. La méthode des trois derniers sprints est constante : **ce ne sont
+pas les tests qui ont trouvé les défauts, ce sont les phrases qu'on a osé
+écrire puis attaquer.**
