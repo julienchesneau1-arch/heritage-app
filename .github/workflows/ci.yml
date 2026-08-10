@@ -79,35 +79,17 @@ jobs:
           pnpm db:rollback
           pnpm db:migrate
 
-      - name: Tests de contrat (isolation des fournisseurs)
-        run: pnpm test:contracts
-
-      - name: Tests de politique
-        run: pnpm test:policy
-
-      - name: Tests de sécurité
-        run: pnpm test:security
-
-      - name: Tests mémoire
-        run: pnpm test:memory
-
-      - name: Tests contexte
-        run: pnpm test:context
-
-      - name: Tests undo
-        run: pnpm test:undo
-
-      - name: Tests outils
-        run: pnpm test:tools
-
-      - name: Tests quarantaine
-        run: pnpm test:quarantine
-
-      - name: Tests intention
-        run: pnpm test:intent
-
-      - name: Tests unitaires
-        run: pnpm test:unit
+      # Toute la suite, en un seul appel.
+      #
+      # Cette étape énumérait auparavant les répertoires un par un. Deux
+      # d'entre eux — `tests/server/` et `tests/redteam/` — ont été ajoutés
+      # sans que personne ne pense à les inscrire ici : la CI restait verte en
+      # ignorant 111 tests (audit `docs/11`, MED-1).
+      #
+      # Un mode d'échec silencieux est pire qu'un échec bruyant. `pnpm test`
+      # découvre les fichiers ; il ne peut pas en oublier.
+      - name: Suite complète
+        run: pnpm test
 
       - name: Porte de sortie Phase 0
         run: pnpm gate:phase0

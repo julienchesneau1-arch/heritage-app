@@ -23,6 +23,7 @@ import { isUntrusted, provenanceOf } from '../../src/core/types/domain.js';
 import { createMemoryGuard } from '../../src/core/memory/guard.js';
 import { createMemoryInbox } from '../../src/core/memory/inbox.js';
 import { createMemoryStore } from '../../src/core/memory/store.js';
+import { SOURCE_CEILING } from '../../src/core/memory/types.js';
 
 const skip = !databaseAvailable();
 const TAG = `rt-mem-${String(Date.now())}`;
@@ -44,80 +45,66 @@ describe.skipIf(skip)('RED TEAM — statut épistémique de la mémoire', () => 
   /* A. Une déduction de modèle n'est pas une déclaration de l'utilisateur */
   /* ------------------------------------------------------------------ */
 
-  it('constate la cartographie actuelle des origines vers les provenances', () => {
-    // Photographie de l'état, sans jugement — le jugement est en dessous.
+  it('une déduction de modèle ne peut PAS hériter d\'une provenance fiable', () => {
+    // Corrigé (CRIT-2, ADR-024). `MODEL_INFERRED` rendait `'SYSTEM'` —
+    // c'est-à-dire la même provenance que ce que le NOYAU produit lui-même.
+    // Une IA pouvait ainsi s'auto-élever au rang d'autorité.
+    expect(provenanceOf('MODEL_INFERRED')).toBe('MODEL_OUTPUT');
+    expect(isUntrusted(provenanceOf('MODEL_INFERRED'))).toBe(true);
+  });
+
+  it('la cartographie complète des origines vers les provenances', () => {
     expect(provenanceOf('USER_EXPLICIT')).toBe('USER');
     expect(provenanceOf('USER_INFERRED')).toBe('USER');
     expect(provenanceOf('EXTERNAL_SOURCE')).toBe('EXTERNAL_UNTRUSTED');
     expect(provenanceOf('TOOL_VERIFIED')).toBe('TOOL_OUTPUT');
     expect(provenanceOf('SYSTEM')).toBe('SYSTEM');
-    expect(provenanceOf('MODEL_INFERRED')).toBe('SYSTEM');
+    expect(provenanceOf('MODEL_INFERRED')).toBe('MODEL_OUTPUT');
   });
 
-  it.fails(
-    'DÉFAUT — une déduction de modèle ne devrait pas hériter d\'une provenance fiable',
-    () => {
-      // S1 : « la sortie d'un modèle est une entrée non fiable ».
-      // `MODEL_INFERRED → SYSTEM` fait exactement l'inverse : elle range la
-      // sortie du modèle avec ce que le NOYAU a produit lui-même.
-      //
-      // Conséquence, le jour où un modèle existe : une valeur déduite par lui
-      // peut alimenter un paramètre sensible SANS confirmation, parce que
-      // `isUntrusted('SYSTEM')` est faux.
-      expect(isUntrusted(provenanceOf('MODEL_INFERRED'))).toBe(true);
-    },
-  );
+  it('`SYSTEM` reste réservé au noyau, et reste donc fiable', () => {
+    // La correction ne consiste pas à tout rendre suspect : ce que le noyau
+    // produit lui-même n'a pas de raison de l'être. Elle consiste à ne plus
+    // confondre « produit par le noyau » et « déduit par un modèle ».
+    expect(isUntrusted('SYSTEM')).toBe(false);
+    expect(isUntrusted('USER')).toBe(false);
+    expect(isUntrusted('MODEL_OUTPUT')).toBe(true);
+    expect(isUntrusted('EXTERNAL_UNTRUSTED')).toBe(true);
+  });
 
-  it('DÉMONSTRATION — une provenance SYSTEM passe le Gate sans confirmation', async () => {
-    // Le même chemin qu'emprunterait une valeur déduite par un modèle.
-    // Comparaison avec EXTERNAL_UNTRUSTED, qui lui est bien arrêté.
-    const base = {
+  it('une valeur d\'origine MODEL_OUTPUT est arrêtée par le Gate', async () => {
+    // Le chemin qu'emprunterait demain une valeur déduite par un modèle. Il
+    // est aujourd'hui traité exactement comme une valeur lue dans un email :
+    // confirmation exigée sur la VALEUR concrète.
+    const result = await stack.gateway.invoke({
       toolId: 'memory_add',
       input: {
-        content: `${TAG} valeur sensible`,
+        content: `${TAG} déduction de modèle`,
         memoryType: 'SEMANTIC' as const,
-        sourceType: 'USER_EXPLICIT' as const,
-        source: 'red-team',
+        sourceType: 'MODEL_INFERRED' as const,
+        source: 'modèle local',
       },
-      actor: 'USER' as const,
+      operationId: operationId('rt-model'),
+      actor: 'JARVIS' as const,
       context: callContext(),
-    };
-
-    stack.setUserConfirmed(true);
-    const viaSystem = await stack.gateway.invoke({
-      ...base,
-      operationId: operationId('rt-system'),
       parameterProvenance: {
-        content: 'SYSTEM',
-        memoryType: 'SYSTEM',
-        sourceType: 'SYSTEM',
-        dataCategory: 'SYSTEM',
-        subjectEntityId: 'SYSTEM',
+        content: 'MODEL_OUTPUT',
+        memoryType: 'MODEL_OUTPUT',
+        sourceType: 'MODEL_OUTPUT',
+        dataCategory: 'MODEL_OUTPUT',
+        subjectEntityId: 'MODEL_OUTPUT',
       },
     });
-
-    const viaExternal = await stack.gateway.invoke({
-      ...base,
-      input: { ...base.input, content: `${TAG} valeur externe` },
-      operationId: operationId('rt-external'),
-      parameterProvenance: {
-        content: 'EXTERNAL_UNTRUSTED',
-        memoryType: 'EXTERNAL_UNTRUSTED',
-        sourceType: 'EXTERNAL_UNTRUSTED',
-        dataCategory: 'EXTERNAL_UNTRUSTED',
-        subjectEntityId: 'EXTERNAL_UNTRUSTED',
-      },
-    });
-
-    expect(viaSystem.ok).toBe(true); // passe sans confirmation
-    expect(viaExternal.ok).toBe(false); // arrêté
-    if (!viaExternal.ok) expect(viaExternal.error.kind).toBe('CONFIRMATION_REQUIRED');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('CONFIRMATION_REQUIRED');
   });
 
-  it('en revanche, le plafond de confiance distingue bien les origines', () => {
-    // Le second axe, lui, fait son travail : une déduction de modèle plafonne
-    // plus bas qu'une déclaration. Le défaut est sur l'axe SÉCURITÉ seulement.
-    expect(provenanceOf('MODEL_INFERRED')).toBe('SYSTEM');
+  it('et le plafond de confiance continue de distinguer les origines', () => {
+    // Le second axe faisait déjà son travail : `SOURCE_CEILING` plafonnait
+    // MODEL_INFERRED à 0,7. C'était l'axe SÉCURITÉ qui était faux — d'où la
+    // difficulté à voir le défaut en relisant.
+    expect(SOURCE_CEILING.MODEL_INFERRED).toBeLessThan(SOURCE_CEILING.USER_EXPLICIT);
+    expect(SOURCE_CEILING.MODEL_INFERRED).toBeGreaterThan(SOURCE_CEILING.EXTERNAL_SOURCE);
   });
 
   /* ------------------------------------------------------------------ */

@@ -102,39 +102,31 @@ describe.skipIf(skip)('RED TEAM — modes de défaillance', () => {
     };
   }
 
-  it('DÉMONSTRATION — un outil qui lève fait remonter une exception hors du Gateway', async () => {
-    // Constat brut. `invoke()` promet un `Result` ; sur ce chemin il rejette.
-    await expect(stack.gateway.invoke(call('fault_throw'))).rejects.toThrow(
-      'panne brutale',
-    );
+  it('un outil qui lève produit un Result typé, pas une exception', async () => {
+    // Corrigé (HIGH-2). `06` pose que « les erreurs sont des valeurs typées,
+    // pas des exceptions génériques ». Le Gateway violait sa propre règle.
+    const result = await stack.gateway.invoke(call('fault_throw'));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe('INTERNAL');
+    // Le message ne promet rien : l'outil a pu avoir un effet avant de lever.
+    expect(result.error.message).toContain('peut-être');
   });
 
-  it('DÉMONSTRATION — et l\'exception échappe AVANT toute écriture au journal', async () => {
-    // C'est le vrai problème : pas le plantage, l'absence de trace. Un outil
-    // qui casse ne laisse rien derrière lui, donc `/audit` ne peut pas en
-    // parler. L'invariant « toute action est journalisée » tombe en silence.
+  it('et l\'incident laisse une trace au journal', async () => {
+    // C'était le vrai problème : pas le plantage, l'absence de trace. Un outil
+    // qui cassait ne laissait rien derrière lui, donc `/audit` ne pouvait pas
+    // en parler. L'invariant « toute action est journalisée » tombait en
+    // silence.
     const opId = operationId('fault-throw-audit');
-    await stack.gateway
-      .invoke({ ...call('fault_throw'), operationId: opId })
-      .catch(() => undefined);
+    await stack.gateway.invoke({ ...call('fault_throw'), operationId: opId });
     const logged = await stack.ledger.findByOperationId(opId);
     expect(logged.ok).toBe(true);
-    if (!logged.ok) return;
-    expect(logged.value).toBeNull(); // rien. Comme si l'appel n'avait pas eu lieu.
+    if (!logged.ok || logged.value === null) throw new Error('incident non journalisé');
+    expect(logged.value.eventType).toContain('CRASHED');
+    // UNKNOWN, pas FAILED : on ignore si l'outil a eu un effet avant de lever.
+    expect(logged.value.status).toBe('UNKNOWN');
   });
-
-  it.fails(
-    'DÉFAUT — un outil qui lève doit produire un Result typé, pas une exception',
-    async () => {
-      // `06` : « les erreurs sont des valeurs typées, pas des exceptions
-      // génériques. Un chemin d'échec qui remonte par `throw` finit tôt ou
-      // tard attrapé par un `catch` trop large, et une décision de sécurité
-      // s'y perd. » Le Gateway viole sa propre règle.
-      const result = await stack.gateway.invoke(call('fault_throw'));
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.kind).toBe('INTERNAL');
-    },
-  );
 
   it('fournisseur indisponible : l\'échec est dit, pas absorbé', async () => {
     const result = await stack.gateway.invoke(call('fault_error'));
@@ -189,32 +181,92 @@ describe.skipIf(skip)('RED TEAM — modes de défaillance', () => {
     await brokenDb.close();
   });
 
-  it.fails(
-    'DÉFAUT — base injoignable en ÉCRITURE : `transaction()` lève au lieu de rendre une erreur',
-    async () => {
-      // `pool.connect()` est HORS du `try` dans `db/client.ts`. Toute mutation
-      // passe par là. Résultat : la promesse du Gateway rejette, l'appelant
-      // reçoit une exception, et le CLI se termine sur un message brut.
-      const brokenDb = createDb({
-        host: '127.0.0.1',
-        port: 1,
-        database: 'jarvis_test',
-        user: 'jarvis_app',
-        password: 'peu-importe',
-      });
-      const broken = buildStack(brokenDb);
-      const result = await broken.gateway.invoke({
-        toolId: 'task_create',
-        input: { title: 'tâche pendant la panne' },
-        parameterProvenance: { title: 'USER' },
-        operationId: operationId('db-down'),
-        actor: 'USER',
-        context: callContext(),
-      });
-      expect(result.ok).toBe(false);
-      await brokenDb.close();
-    },
-  );
+  it('base injoignable en ÉCRITURE : erreur typée, aucune exception', async () => {
+    // Corrigé (HIGH-3). `pool.connect()` était HORS du `try` : toute mutation
+    // passait par là, donc toute mutation rejetait au lieu de rendre une
+    // valeur. Le CLI se terminait sur un message brut.
+    const brokenDb = createDb({
+      host: '127.0.0.1',
+      port: 1,
+      database: 'jarvis_test',
+      user: 'jarvis_app',
+      password: 'peu-importe',
+    });
+    const broken = buildStack(brokenDb);
+    const result = await broken.gateway.invoke({
+      toolId: 'task_create',
+      input: { title: 'tâche pendant la panne' },
+      // `dueAt` doit être renseigné : un paramètre sensible absent de la carte
+      // vaut EXTERNAL_UNTRUSTED, et déclencherait une confirmation avant même
+      // que la panne de base ne soit constatée.
+      parameterProvenance: { title: 'USER', dueAt: 'USER' },
+      operationId: operationId('db-down'),
+      actor: 'USER',
+      context: callContext(),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // La panne de connexion est distinguée d'un défaut interne : deux
+      // conduites différentes, deux messages différents.
+      expect(result.error.kind).toBe('PROVIDER_UNAVAILABLE');
+    }
+    await brokenDb.close();
+  });
+
+  it('base tombée : Jarvis REFUSE d\'agir plutôt que de tenter à l\'aveugle', async () => {
+    // CRIT-1, second volet. Tout passe par PostgreSQL : la politique lit, le
+    // journal écrit, la vérification relit. Tenter une action base coupée
+    // laisserait un état indéterminé — et c'est exactement ce qu'on ne veut
+    // jamais annoncer comme fait.
+    const brokenDb = createDb({
+      host: '127.0.0.1',
+      port: 1,
+      database: 'jarvis_test',
+      user: 'jarvis_app',
+      password: 'peu-importe',
+    });
+    const broken = buildStack(brokenDb);
+    const first = await broken.gateway.invoke({
+      toolId: 'task_create',
+      input: { title: 'première tentative' },
+      // `dueAt` doit être renseigné : un paramètre sensible absent de la carte
+      // vaut EXTERNAL_UNTRUSTED, et déclencherait une confirmation avant même
+      // que la panne de base ne soit constatée.
+      parameterProvenance: { title: 'USER', dueAt: 'USER' },
+      operationId: operationId('db-down-1'),
+      actor: 'USER',
+      context: callContext(),
+    });
+    expect(first.ok).toBe(false);
+    expect(brokenDb.health().state).toBe('DOWN');
+
+    // La seconde tentative ne réessaie même pas l'outil : elle sonde, échoue,
+    // et le dit sans ambiguïté.
+    const second = await broken.gateway.invoke({
+      toolId: 'task_create',
+      input: { title: 'seconde tentative' },
+      // `dueAt` doit être renseigné : un paramètre sensible absent de la carte
+      // vaut EXTERNAL_UNTRUSTED, et déclencherait une confirmation avant même
+      // que la panne de base ne soit constatée.
+      parameterProvenance: { title: 'USER', dueAt: 'USER' },
+      operationId: operationId('db-down-2'),
+      actor: 'USER',
+      context: callContext(),
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.error.kind).toBe('PROVIDER_UNAVAILABLE');
+      expect(second.error.message).toContain('Rien n\'a été tenté');
+    }
+    await brokenDb.close();
+  });
+
+  it('base saine : l\'état de santé est UP et le reste', async () => {
+    expect(db.health().state).toBe('UP');
+    const result = await stack.gateway.invoke(call('fault_lies'));
+    expect(result.ok).toBe(true);
+    expect(db.health().state).toBe('UP');
+  });
 
   it('le noyau refuse de démarrer sur une base injoignable, avec la raison', async () => {
     const brokenDb = createDb({

@@ -78,6 +78,14 @@ const PATTERN_EXCEPTIONS: readonly PatternException[] = [
       'Valeur factice « canary_pw », utilisée précisément pour vérifier ' +
       "qu'aucun secret ne fuit dans la configuration publique.",
   },
+  {
+    file: /^tests\/redteam\/failure-modes\.test\.ts$/,
+    pattern: 'Mot de passe en dur',
+    why:
+      'Valeur littérale « peu-importe », passée à une base volontairement ' +
+      'injoignable (port 1) pour éprouver la résilience. Aucune connexion ' +
+      "n'aboutit avec ce mot de passe : c'est précisément le sujet du test.",
+  },
 ];
 
 function isExcepted(file: string, pattern: string): boolean {

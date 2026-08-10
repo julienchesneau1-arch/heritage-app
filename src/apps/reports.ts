@@ -90,6 +90,7 @@ export async function inboxReport(runtime: Runtime): Promise<Result<InboxReport>
 }
 
 export interface DiagnosticReport {
+  readonly database: 'UP' | 'DOWN';
   readonly tools: number;
   readonly chainValid: boolean;
   readonly chainLength: number;
@@ -107,6 +108,7 @@ export async function diagnosticReport(
   if (!pending.ok) return pending;
 
   return ok({
+    database: runtime.health().state,
     tools: runtime.gateway.list().length,
     chainValid: chain.value.valid,
     chainLength: chain.value.checked,

@@ -84,12 +84,16 @@ function renderOutput(toolId: string, output: unknown): string {
   if (toolId === 'memory_search' && Array.isArray(record['results'])) {
     const results: unknown[] = record['results'];
     const lines: string[] = [];
+    // La PORTÉE est dite à chaque fois, pas seulement quand rien n'est trouvé :
+    // l'utilisateur doit savoir ce qui n'a pas été consulté (HIGH-4).
+    const scope = text(record['scopeLabel']);
+    if (scope.length > 0) lines.push(`  (${scope})`);
     if (record['degraded'] === true) {
       // La dégradation est dite, pas masquée par un résultat plus court.
       lines.push('  (recherche sans la voie sémantique — aucun modèle d\'embeddings)');
     }
     if (results.length === 0) {
-      lines.push('  Rien trouvé.');
+      lines.push('  Rien trouvé dans ta mémoire personnelle.');
       return lines.join('\n');
     }
     for (const r of results) {
@@ -170,6 +174,9 @@ async function showDiagnostic(runtime: Runtime): Promise<void> {
     return;
   }
   const d = report.value;
+  stdout.write(
+    `  Base           ${d.database === 'UP' ? 'joignable' : 'INJOIGNABLE'}\n`,
+  );
   stdout.write(`  Outils         ${String(d.tools)} enregistrés\n`);
   stdout.write(
     `  Journal        ${
@@ -211,8 +218,15 @@ function show(reply: AssistantReply): void {
       return;
 
     case 'DONE': {
+      // Une LECTURE ne s'annonce pas « C'est fait » : il n'y a rien eu à
+      // faire. Dire « c'est fait » sur une recherche vide était une petite
+      // malhonnêteté, mais une malhonnêteté quand même (audit `docs/11`,
+      // LOW-3).
+      const readOnly = reply.toolId === 'memory_search' || reply.toolId === 'task_list';
       stdout.write(
-        `  ${mark(reply.status)} ${announce({ status: reply.status, detail: reply.detail })}\n`,
+        readOnly && reply.status === 'CONFIRMED'
+          ? '  ✓ Voici ce que j\'ai trouvé.\n'
+          : `  ${mark(reply.status)} ${announce({ status: reply.status, detail: reply.detail })}\n`,
       );
       const rendered = renderOutput(reply.toolId, reply.output);
       if (rendered.length > 0) stdout.write(`${rendered}\n`);

@@ -159,7 +159,7 @@ describe('RED TEAM — code mort en production', () => {
     await Promise.resolve();
   });
 
-  it('DÉMONSTRATION — 11 clés de configuration sur 16 n\'ont aucun effet', () => {
+  it('DÉMONSTRATION — 9 clés de configuration sur 16 n\'ont aucun effet', () => {
     // `06` impose « aucune configuration critique cachée dans le code ». Le
     // dépôt fait l'inverse du reproche attendu : la configuration existe, est
     // validée par Zod… et n'est lue par personne. Une clé décorative est pire
@@ -189,25 +189,23 @@ describe('RED TEAM — code mort en production', () => {
     expect(runtime).toContain('cloudEnabled: false');
   });
 
-  it('DÉMONSTRATION — `poolMax` et `statementTimeoutMs` sont configurés mais non transmis', () => {
-    // `createDb` sait les recevoir. `runtime.ts` ne les passe pas : les valeurs
-    // de `config/default.json` sont remplacées par les défauts du code.
+  it('`poolMax` et `statementTimeoutMs` sont désormais transmis à la base', () => {
+    // Corrigé au passage de CRIT-1 : `createDb` savait les recevoir, mais
+    // `runtime.ts` ne les passait pas. Les valeurs de `config/default.json`
+    // étaient remplacées en silence par les défauts du code.
     const runtime = readFileSync(join(ROOT, 'src', 'apps', 'runtime.ts'), 'utf8');
-    expect(runtime).toContain('database.host');
-    expect(runtime).not.toContain('poolMax');
-    expect(runtime).not.toContain('statementTimeoutMs');
+    expect(runtime).toContain('poolMax');
+    expect(runtime).toContain('statementTimeoutMs');
   });
 
-  it('DÉMONSTRATION — la CI énumère les suites, donc en oublie', () => {
-    // `.github/workflows/ci.yml` lance `test:contracts`, `test:policy`… un par
-    // un. `tests/server/` et `tests/redteam/` n'y figurent pas : ils ne sont
-    // PAS exécutés en intégration continue. Le mode d'échec est silencieux —
-    // la CI reste verte en ignorant des tests.
+  it('la CI exécute la suite ENTIÈRE, sans énumérer les répertoires', () => {
+    // Corrigé (MED-1). L'énumération avait déjà laissé passer deux répertoires
+    // entiers ; ce test empêche d'y revenir. Si quelqu'un remplace `pnpm test`
+    // par une liste, il échoue.
     const ci = readFileSync(join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
-    expect(ci).toContain('pnpm test:contracts');
-    expect(ci).not.toContain('pnpm test:server');
-    expect(ci).not.toContain('pnpm test:redteam');
-    expect(ci).not.toMatch(/run:\s*pnpm test\s*$/m);
+    expect(ci).toMatch(/run:\s*pnpm test\s*$/m);
+    expect(ci).not.toContain('pnpm test:contracts');
+    expect(ci).not.toContain('pnpm test:policy');
   });
 
   it('DÉMONSTRATION — `cloudEnabled` est codé en dur, la configuration ne le pilote pas', () => {

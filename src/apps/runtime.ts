@@ -14,8 +14,9 @@
  */
 import { join } from 'node:path';
 import { loadConfig } from '../core/config/load.js';
-import { createDb, type Db } from '../core/db/client.js';
+import { createDb, type Db, type DbHealth } from '../core/db/client.js';
 import { createLedger, type Ledger } from '../core/ledger/ledger.js';
+import { digestPayload } from '../core/ledger/event.js';
 import { createPolicyGate } from '../core/policy/gate.js';
 import { createMemoryGuard } from '../core/memory/guard.js';
 import { createMemoryInbox, type MemoryInbox } from '../core/memory/inbox.js';
@@ -33,6 +34,8 @@ import { err, ok, jarvisError, type Result } from '../core/types/result.js';
 
 export interface Runtime {
   readonly db: Db;
+  /** État courant de la base. Affiché par `/diagnostic` (CRIT-1). */
+  health(): DbHealth;
   readonly gateway: ToolGateway;
   readonly ledger: Ledger;
   readonly inbox: MemoryInbox;
@@ -81,6 +84,7 @@ export function buildRuntime(db: Db, options: { policyDir?: string } = {}): Resu
 
   return ok({
     db,
+    health: () => db.health(),
     gateway,
     ledger,
     inbox,
@@ -99,9 +103,16 @@ export function buildRuntime(db: Db, options: { policyDir?: string } = {}): Resu
 }
 
 /** Charge la configuration, ouvre la base, assemble le noyau. */
-export function openRuntime(): Result<Runtime> {
+export function openRuntime(
+  options: { onHealthChange?: (health: DbHealth) => void } = {},
+): Result<Runtime> {
   const config = loadConfig();
   if (!config.ok) return config;
+
+  // Le journal n'existe pas encore quand la base est ouverte : on retient donc
+  // l'écouteur dans un porteur mutable, et on le branche une fois le noyau
+  // assemblé.
+  const sink: { notify?: (health: DbHealth) => void } = {};
 
   const db = createDb({
     host: config.value.public.database.host,
@@ -109,6 +120,12 @@ export function openRuntime(): Result<Runtime> {
     database: config.value.public.database.name,
     user: config.value.public.database.user,
     password: config.value.secret.databasePassword,
+    poolMax: config.value.public.database.poolMax,
+    statementTimeoutMs: config.value.public.database.statementTimeoutMs,
+    onHealthChange: (health: DbHealth) => {
+      options.onHealthChange?.(health);
+      sink.notify?.(health);
+    },
   });
 
   const runtime = buildRuntime(db);
@@ -118,5 +135,23 @@ export function openRuntime(): Result<Runtime> {
       jarvisError('CONFIGURATION', runtime.error.message, undefined, runtime.error),
     );
   }
+
+  /* Le retour à la normale est un ÉVÉNEMENT, pas un silence.
+     On ne peut évidemment rien écrire pendant la panne — la base est
+     injoignable. Mais dès qu'elle revient, l'incident doit laisser une trace :
+     sans elle, `/audit` présenterait un trou inexplicable dans la journée. */
+  const ledger = runtime.value.ledger;
+  sink.notify = (health: DbHealth) => {
+    if (health.state !== 'UP') return;
+    void ledger
+      .append({
+        actor: 'SYSTEM',
+        eventType: 'DATABASE_RECOVERED',
+        status: 'CONFIRMED',
+        payloadDigest: digestPayload({ recoveredAt: health.since }),
+      })
+      .catch(() => undefined);
+  };
+
   return runtime;
 }

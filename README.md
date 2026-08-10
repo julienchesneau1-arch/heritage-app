@@ -57,8 +57,8 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 341 tests
-pnpm test:redteam           # les 66 tests d'audit (docs/11)
+pnpm test                   # 345 tests
+pnpm test:redteam           # les 70 tests d'audit (docs/11)
 pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
@@ -126,12 +126,16 @@ Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**341 tests passent**, dont 66 écrits pour l'audit de `docs/11`.
+**345 tests passent**, dont 70 écrits pour l'audit de `docs/11`.
 
-Cet audit a trouvé **deux défauts critiques et sept majeurs**, reproduits et
-outillés. Le premier — le processus meurt à la première coupure de PostgreSQL —
-se corrige en cinq lignes et doit l'être avant tout usage réel. Lire `docs/11`
-avant de se fier à ce dépôt.
+Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
+Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit
+désormais à une coupure de PostgreSQL et reprend seul, et une déduction de
+modèle ne peut plus hériter d'une provenance fiable (ADR-024). Aucune
+fonctionnalité n'a été ajoutée pendant ce sprint : c'était un gel.
+
+Restent ouverts et documentés : la mémoire de travail, la contradiction, et les
+outils d'oubli et de correction. Lire `docs/11` avant de se fier à ce dépôt.
 
 Ce qui n'existe pas encore : Undo Engine (la capture existe, pas l'exécution),
 Data Firewall complet, Model Router, Cost Engine, modes cognitifs, voix,

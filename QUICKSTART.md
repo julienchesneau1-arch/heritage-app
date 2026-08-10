@@ -162,16 +162,38 @@ Ce ne sont pas des fonctionnalités — ce sont les propriétés que le système
 prétend garantir. Essayez de les prendre en défaut.
 
 **Il ne prétend jamais avoir fait ce qu'il n'a pas fait.**
-`✓ C'est fait` n'apparaît qu'après relecture de l'état réel. Coupez PostgreSQL
-en cours de route : vous obtiendrez `?` ou `✗`, jamais un faux succès.
+`✓ C'est fait` n'apparaît qu'après relecture de l'état réel.
+
+Coupez PostgreSQL en cours de session (`brew services stop postgresql`), puis
+demandez-lui d'ajouter une tâche. Trois choses doivent se produire, et elles ont
+été vérifiées en exécution :
+
+1. **Jarvis ne meurt pas.** Le processus encaisse la coupure ;
+2. il **refuse d'agir** au lieu de tenter à l'aveugle : *« La base de données
+   est injoignable. Rien n'a été tenté. »* ;
+3. ce qui ne demande pas la base — comprendre la phrase, dire ce qu'il ne sait
+   pas faire — continue de fonctionner.
+
+Redémarrez PostgreSQL : Jarvis repart **sans qu'il faille le relancer**, et
+écrit un événement `DATABASE_RECOVERED` au journal. Un incident ne laisse pas
+de trou inexpliqué dans `/audit`.
 
 **Il dit ce qu'il ne sait pas faire, et distingue deux cas.**
 « Envoie un mail à Paul » → il a compris, la capacité n'existe pas.
 « zzz flurb » → il n'a pas compris la formulation. Deux réponses différentes.
 
-**Il ne devine pas.**
-Créez deux contacts homonymes, puis parlez de l'un d'eux : il demande lequel,
-au lieu de choisir.
+**Il ne devine pas — et il ne substitue rien.**
+Demandez « Retrouve le devis du carreleur » : il répond qu'il ne sait pas
+chercher dans vos documents. Il ne fait **pas** une recherche dans votre mémoire
+personnelle en répondant « c'est fait ». De même, « Rappelle-moi jeudi
+d'appeler le médecin » est refusé plutôt que transformé en tâche sans date.
+
+Une recherche mémoire annonce toujours **où** elle a cherché — donc aussi ce
+qu'elle n'a pas consulté.
+
+> ⚠ La désambiguïsation entre deux homonymes (« quel Jean ? ») n'existe **pas
+> encore** : le Context Engine est écrit et testé, mais pas branché. C'est le
+> chantier de la prochaine étape. Voir `docs/11`.
 
 **Le journal fait foi.**
 `/audit` répond depuis la chaîne d'événements, pas depuis une reconstruction.
@@ -190,7 +212,7 @@ démarrer, avec la marche à suivre. Essayez `JARVIS_WEB_HOST=0.0.0.0` : refus
 ## Vérifier soi-même
 
 ```bash
-pnpm test            # 275 tests
+pnpm test            # 345 tests
 pnpm gate:phase0     # journal inaltérable, isolation fournisseurs, secrets
 pnpm gate:phase1     # mémoire, contexte, ambiguïté, hors ligne
 pnpm gate:phase2     # outils, idempotence, vérification, injection

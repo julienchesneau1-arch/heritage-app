@@ -194,6 +194,19 @@ export function memorySearchTool(search: HybridSearch): RegisteredTool {
           // La dégradation est remontée à l'appelant : Jarvis doit pouvoir
           // dire « j'ai cherché sans la voie sémantique ».
           degraded: found.value.degraded,
+          /**
+           * OÙ la recherche a réellement eu lieu (HIGH-4).
+           *
+           * Sans ce champ, une réponse vide était indiscernable d'une
+           * recherche web infructueuse. La portée n'est pas une décoration
+           * d'interface : c'est une partie du résultat, et toute interface
+           * doit l'afficher — y compris quand la recherche a trouvé quelque
+           * chose, sinon l'utilisateur ne saura jamais ce qui n'a PAS été
+           * consulté.
+           */
+          scope: 'MEMOIRE_PERSONNELLE',
+          scopeLabel:
+            'recherche limitée à ta mémoire personnelle — ni web, ni documents',
         },
       });
     },

@@ -122,7 +122,7 @@ export function createToolGateway(deps: {
   const tools = new Map<string, RegisteredTool>();
   const snapshots = createSnapshotStore(deps.db);
 
-  return {
+  const gateway: ToolGateway = {
     register(tool: RegisteredTool): Result<void> {
       const problems = validateDefinition(tool.definition);
       if (problems.length > 0) {
@@ -143,284 +143,254 @@ export function createToolGateway(deps: {
       return [...tools.values()];
     },
 
-    async invoke(call: ToolCall): Promise<Result<GatewayResult>> {
+    /**
+     * Point d'entrée unique. Enveloppé par `guarded()` ci-dessous : quoi qu'il
+     * arrive à l'intérieur, l'appelant reçoit une VALEUR, jamais une exception.
+     */
+    invoke(call: ToolCall): Promise<Result<GatewayResult>> {
+      return guarded(call, () => execute(call));
+    },
+  };
+
+  /**
+   * Filet de sécurité du Gateway (HIGH-2).
+   *
+   * `06` pose que « les erreurs sont des valeurs typées, pas des exceptions
+   * génériques ». Le Gateway violait sa propre règle : un outil qui levait
+   * faisait rejeter `invoke()`, et — plus grave — l'exception échappait AVANT
+   * toute écriture au journal. Une action qui casse ne laissait aucune trace,
+   * donc `/audit` ne pouvait pas en parler.
+   *
+   * On ferme les deux trous d'un coup : l'exception devient un `Result`, et
+   * l'incident est journalisé avant d'être rendu.
+   */
+  async function guarded(
+    call: ToolCall,
+    run: () => Promise<Result<GatewayResult>>,
+  ): Promise<Result<GatewayResult>> {
+    try {
+      return await run();
+    } catch (cause: unknown) {
+      const message = cause instanceof Error ? cause.message : 'défaut interne';
       const tool = tools.get(call.toolId);
-      if (tool === undefined) {
-        return err(
-          jarvisError('NOT_FOUND', `Outil inconnu : ${call.toolId}`, {
-            // On ne liste pas les outils disponibles dans l'erreur : ce serait
-            // renseigner un appelant hostile sur la surface d'attaque.
-            requested: call.toolId,
-          }),
-        );
-      }
-      const def = tool.definition;
 
-      /* --- 1. Validation de l'entrée ------------------------------------ */
-      const parsed = tool.parseInput(call.input);
-      if (!parsed.ok) return parsed;
-
-      /* --- 2. Politique --------------------------------------------------
-         `egress` est DÉRIVÉ du contrat, jamais fourni par l'appelant : sinon
-         il suffirait de mentir sur ce champ pour contourner le Data Firewall
-         et le mode privé. */
-      const parameters = def.parameters.map((spec) => ({
-        name: spec.name,
-        provenance: call.parameterProvenance[spec.name] ?? 'EXTERNAL_UNTRUSTED',
-        sensitive: spec.sensitive,
-      }));
-
-      const decision = deps.gate.decide({
-        actor: call.actor,
-        action: { tool: def.id, operation: 'invoke' },
-        declaredAutonomy: def.autonomy,
-        resource: {
-          type: def.id,
-          id: call.operationId,
-          privacyClass: def.privacyClass,
-        },
-        context: {
-          mode: call.context.mode,
-          egress: def.networkRequired,
-          cloudEnabled: call.context.cloudEnabled,
-          proactive: call.context.proactive,
-          userConfirmed: call.context.userConfirmed,
-        },
-        parameters,
-      });
-      if (!decision.ok) return decision;
-      const policy = decision.value;
-
-      if (policy.decision === 'DENY') {
-        await deps.ledger.append({
+      // Best-effort : si c'est la base qui est tombée, ce journal échouera
+      // aussi. On ne masque pas l'erreur d'origine pour autant.
+      await deps.ledger
+        .append({
           actor: call.actor,
-          eventType: `${def.auditEvent}_DENIED`,
-          tool: def.id,
-          policyDecision: 'DENY',
-          autonomyLevel: policy.effectiveAutonomy,
-          status: 'FAILED',
-          operationId: call.operationId,
-          payloadDigest: digestPayload(parsed.value),
-        });
-        return err(
-          jarvisError('POLICY_DENIED', policy.reasons.join(' '), {
-            tool: def.id,
-            autonomy: policy.effectiveAutonomy,
-          }),
-        );
-      }
-
-      if (policy.decision === 'CONFIRM') {
-        // On expose les VALEURS concrètes des paramètres sensibles : la
-        // confirmation doit porter sur ce qui va réellement se produire, pas
-        // sur une intention résumée (03 §3).
-        const sensitiveValues: Record<string, string> = {};
-        const input = parsed.value;
-        if (typeof input === 'object' && input !== null) {
-          for (const spec of def.parameters) {
-            if (!spec.sensitive) continue;
-            const value = (input as Record<string, unknown>)[spec.name];
-            if (value !== undefined) {
-              // La confirmation doit porter sur la valeur CONCRÈTE. On la
-              // sérialise sans supposer qu'elle est une chaîne : un objet
-              // rendu « [object Object] » ne permettrait de confirmer rien.
-              const rendered =
-                typeof value === 'string' ? value : JSON.stringify(value);
-              sensitiveValues[spec.name] = (rendered ?? '').slice(0, 200);
-            }
-          }
-        }
-
-        await deps.ledger.append({
-          actor: call.actor,
-          eventType: `${def.auditEvent}_PREPARED`,
-          tool: def.id,
-          policyDecision: 'CONFIRM',
-          autonomyLevel: policy.effectiveAutonomy,
+          eventType: `${tool?.definition.auditEvent ?? 'TOOL'}_CRASHED`,
+          tool: call.toolId,
+          policyDecision: null,
+          autonomyLevel: null,
+          // L'outil a peut-être eu un effet avant de lever : on ne sait pas.
           status: 'UNKNOWN',
           operationId: call.operationId,
-          payloadDigest: digestPayload(parsed.value),
-        });
+          payloadDigest: digestPayload(call.input),
+        })
+        .catch(() => undefined);
 
+      return err(
+        jarvisError(
+          'INTERNAL',
+          `${call.toolId} a échoué de façon imprévue : ${message}. ` +
+            'L\'action a peut-être eu un effet partiel ; le système ne l\'affirme pas.',
+          { tool: call.toolId },
+          cause,
+        ),
+      );
+    }
+  }
+
+  return gateway;
+
+  async function execute(call: ToolCall): Promise<Result<GatewayResult>> {
+    const tool = tools.get(call.toolId);
+    if (tool === undefined) {
+      return err(
+        jarvisError('NOT_FOUND', `Outil inconnu : ${call.toolId}`, {
+          // On ne liste pas les outils disponibles dans l'erreur : ce serait
+          // renseigner un appelant hostile sur la surface d'attaque.
+          requested: call.toolId,
+        }),
+      );
+    }
+    const def = tool.definition;
+
+    /* --- 0. Santé de la base (CRIT-1) -----------------------------------
+       Tout passe par PostgreSQL : la politique lit, le journal écrit, la
+       vérification relit. Tenter une action alors que la base est tombée
+       produirait une erreur à mi-parcours, dans un état indéterminé.
+
+       On sonde d'abord : une base revenue doit être détectée sans redémarrer
+       Jarvis. C'est la reconnexion automatique — `pg.Pool` crée un nouveau
+       client, et une requête réussie remet l'état à UP. */
+    if (deps.db.health().state === 'DOWN') {
+      const probe = await deps.db.query('SELECT 1');
+      if (!probe.ok) {
+        const health = deps.db.health();
         return err(
-          jarvisError('CONFIRMATION_REQUIRED', policy.reasons.join(' '), {
-            tool: def.id,
-            autonomy: policy.effectiveAutonomy,
-            ...sensitiveValues,
-          }),
+          jarvisError(
+            'PROVIDER_UNAVAILABLE',
+            'La base de données est injoignable. Rien n\'a été tenté : ' +
+              'aucune action ne sera annoncée comme faite tant qu\'elle ne ' +
+              'peut pas être vérifiée.',
+            {
+              tool: def.id,
+              depuis: health.state === 'DOWN' ? health.since : 'inconnu',
+            },
+          ),
+        );
+      }
+    }
+
+    /* --- 1. Validation de l'entrée ------------------------------------ */
+    const parsed = tool.parseInput(call.input);
+    if (!parsed.ok) return parsed;
+
+    /* --- 2. Politique --------------------------------------------------
+       `egress` est DÉRIVÉ du contrat, jamais fourni par l'appelant : sinon
+       il suffirait de mentir sur ce champ pour contourner le Data Firewall
+       et le mode privé. */
+    const parameters = def.parameters.map((spec) => ({
+      name: spec.name,
+      provenance: call.parameterProvenance[spec.name] ?? 'EXTERNAL_UNTRUSTED',
+      sensitive: spec.sensitive,
+    }));
+
+    const decision = deps.gate.decide({
+      actor: call.actor,
+      action: { tool: def.id, operation: 'invoke' },
+      declaredAutonomy: def.autonomy,
+      resource: {
+        type: def.id,
+        id: call.operationId,
+        privacyClass: def.privacyClass,
+      },
+      context: {
+        mode: call.context.mode,
+        egress: def.networkRequired,
+        cloudEnabled: call.context.cloudEnabled,
+        proactive: call.context.proactive,
+        userConfirmed: call.context.userConfirmed,
+      },
+      parameters,
+    });
+    if (!decision.ok) return decision;
+    const policy = decision.value;
+
+    if (policy.decision === 'DENY') {
+      await deps.ledger.append({
+        actor: call.actor,
+        eventType: `${def.auditEvent}_DENIED`,
+        tool: def.id,
+        policyDecision: 'DENY',
+        autonomyLevel: policy.effectiveAutonomy,
+        status: 'FAILED',
+        operationId: call.operationId,
+        payloadDigest: digestPayload(parsed.value),
+      });
+      return err(
+        jarvisError('POLICY_DENIED', policy.reasons.join(' '), {
+          tool: def.id,
+          autonomy: policy.effectiveAutonomy,
+        }),
+      );
+    }
+
+    if (policy.decision === 'CONFIRM') {
+      // On expose les VALEURS concrètes des paramètres sensibles : la
+      // confirmation doit porter sur ce qui va réellement se produire, pas
+      // sur une intention résumée (03 §3).
+      const sensitiveValues: Record<string, string> = {};
+      const input = parsed.value;
+      if (typeof input === 'object' && input !== null) {
+        for (const spec of def.parameters) {
+          if (!spec.sensitive) continue;
+          const value = (input as Record<string, unknown>)[spec.name];
+          if (value !== undefined) {
+            // La confirmation doit porter sur la valeur CONCRÈTE. On la
+            // sérialise sans supposer qu'elle est une chaîne : un objet
+            // rendu « [object Object] » ne permettrait de confirmer rien.
+            const rendered =
+              typeof value === 'string' ? value : JSON.stringify(value);
+            sensitiveValues[spec.name] = (rendered ?? '').slice(0, 200);
+          }
+        }
+      }
+
+      await deps.ledger.append({
+        actor: call.actor,
+        eventType: `${def.auditEvent}_PREPARED`,
+        tool: def.id,
+        policyDecision: 'CONFIRM',
+        autonomyLevel: policy.effectiveAutonomy,
+        status: 'UNKNOWN',
+        operationId: call.operationId,
+        payloadDigest: digestPayload(parsed.value),
+      });
+
+      return err(
+        jarvisError('CONFIRMATION_REQUIRED', policy.reasons.join(' '), {
+          tool: def.id,
+          autonomy: policy.effectiveAutonomy,
+          ...sensitiveValues,
+        }),
+      );
+    }
+
+    /* --- 3. Idempotence ------------------------------------------------ */
+    const digest = inputDigest(parsed.value);
+    const existing = await deps.db.query<OperationRow>(
+      'SELECT * FROM tool_operations WHERE operation_id = $1',
+      [call.operationId],
+    );
+    if (!existing.ok) return existing;
+
+    const prior = existing.value.rows[0];
+    if (prior !== undefined) {
+      if (prior.input_digest !== digest) {
+        // Même clé, arguments différents : ce n'est pas un rejeu, c'est un
+        // défaut d'appelant. Exécuter serait pire que refuser.
+        return err(
+          jarvisError(
+            'CONFLICT',
+            `La clé d'opération ${call.operationId} a déjà servi avec des ` +
+              'arguments différents.',
+            { tool: def.id },
+          ),
         );
       }
 
-      /* --- 3. Idempotence ------------------------------------------------ */
-      const digest = inputDigest(parsed.value);
-      const existing = await deps.db.query<OperationRow>(
-        'SELECT * FROM tool_operations WHERE operation_id = $1',
-        [call.operationId],
-      );
-      if (!existing.ok) return existing;
-
-      const prior = existing.value.rows[0];
-      if (prior !== undefined) {
-        if (prior.input_digest !== digest) {
-          // Même clé, arguments différents : ce n'est pas un rejeu, c'est un
-          // défaut d'appelant. Exécuter serait pire que refuser.
-          return err(
-            jarvisError(
-              'CONFLICT',
-              `La clé d'opération ${call.operationId} a déjà servi avec des ` +
-                'arguments différents.',
-              { tool: def.id },
-            ),
-          );
-        }
-
-        // Rejeu authentique : on ne réexécute pas, on relit l'état réel.
-        const replayContext: ToolContext = {
-          db: deps.db,
-          secrets: new Map(),
-          operationId: call.operationId,
-          actor: call.actor,
-        };
-        const replayExecution: ToolExecution = {
-          output: null,
-          ...(prior.resource_id !== null && prior.resource_kind !== null
-            ? { resource: { kind: prior.resource_kind, id: prior.resource_id } }
-            : {}),
-        };
-        const reVerified = await tool.readBack(replayExecution, replayContext);
-
-        const verification: VerificationOutcome = reVerified.ok
-          ? reVerified.value
-          : {
-              status: 'UNKNOWN',
-              detail: `Rejeu : relecture impossible (${reVerified.error.message}).`,
-            };
-
-        const event = await deps.ledger.append({
-          actor: call.actor,
-          eventType: `${def.auditEvent}_REPLAYED`,
-          tool: def.id,
-          policyDecision: 'ALLOW',
-          autonomyLevel: policy.effectiveAutonomy,
-          status: verification.status,
-          operationId: call.operationId,
-          payloadDigest: digest,
-        });
-        if (!event.ok) return event;
-
-        return ok({
-          status: verification.status,
-          output: null,
-          verification,
-          policy,
-          eventId: event.value.eventId,
-          replayed: true,
-        });
-      }
-
-      /* --- 4. Secrets ----------------------------------------------------
-         Résolus ici, après la politique, et remis à l'outil seul. Le modèle
-         n'a jamais vu ni le nom résolu ni la valeur (invariant S3). */
-      const secrets = new Map<string, string>();
-      for (const name of def.requiredSecrets) {
-        const secret = deps.vault.get(name);
-        if (!secret.ok) return secret;
-        secrets.set(name, secret.value.expose());
-      }
-
-      const ctx: ToolContext = {
+      // Rejeu authentique : on ne réexécute pas, on relit l'état réel.
+      const replayContext: ToolContext = {
         db: deps.db,
-        secrets,
+        secrets: new Map(),
         operationId: call.operationId,
         actor: call.actor,
       };
+      const replayExecution: ToolExecution = {
+        output: null,
+        ...(prior.resource_id !== null && prior.resource_kind !== null
+          ? { resource: { kind: prior.resource_kind, id: prior.resource_id } }
+          : {}),
+      };
+      const reVerified = await tool.readBack(replayExecution, replayContext);
 
-      /* --- 5. Exécution --------------------------------------------------- */
-      const executed = await withTimeout(
-        tool.execute(parsed.value, ctx),
-        def.timeoutMs,
-        def.id,
-      );
+      const verification: VerificationOutcome = reVerified.ok
+        ? reVerified.value
+        : {
+            status: 'UNKNOWN',
+            detail: `Rejeu : relecture impossible (${reVerified.error.message}).`,
+          };
 
-      if (!executed.ok) {
-        await deps.ledger.append({
-          actor: call.actor,
-          eventType: `${def.auditEvent}_FAILED`,
-          tool: def.id,
-          policyDecision: 'ALLOW',
-          autonomyLevel: policy.effectiveAutonomy,
-          // Un timeout n'est pas un échec constaté : on ne sait pas.
-          status: executed.error.kind === 'TIMEOUT' ? 'UNKNOWN' : 'FAILED',
-          operationId: call.operationId,
-          payloadDigest: digest,
-        });
-        return executed;
-      }
-
-      /* --- 6. Vérification ------------------------------------------------ */
-      const verified = await deps.verifier.verify(tool, executed.value, ctx);
-      if (!verified.ok) return verified;
-      const verification = verified.value;
-
-      /* --- 7. Capture d'état antérieur (ADR-019) --------------------------
-         Avant le journal, et seulement si l'exécution a produit une ressource.
-         Une capture qui échoue ne fait PAS échouer l'action — l'action a déjà
-         eu lieu. Elle rend simplement l'annulation impossible, ce que le
-         journal doit refléter. */
-      const resource = executed.value.resource;
-      let undoCaptured = false;
-
-      if (executed.value.undo !== undefined && resource !== undefined) {
-        const undo = executed.value.undo;
-        const captured = await snapshots.capture({
-          operationId: call.operationId,
-          resourceKind: resource.kind,
-          resourceId: resource.id,
-          undoKind: undo.kind,
-          ...(undo.kind === 'INVERSE_OPERATION'
-            ? { inverseToolId: undo.inverseToolId, inverseInput: undo.inverseInput }
-            : {}),
-          ...(undo.kind === 'STATE_RESTORE' ? { priorState: undo.priorState } : {}),
-          privacyClass: def.privacyClass,
-        });
-        undoCaptured = captured.ok;
-      }
-
-      /* --- 8. Registre d'opérations + journal ----------------------------- */
-      const recorded = await deps.db.query(
-        `INSERT INTO tool_operations
-           (operation_id, tool_id, tool_version, status, resource_kind,
-            resource_id, input_digest, actor)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         ON CONFLICT (operation_id) DO NOTHING`,
-        [
-          call.operationId,
-          def.id,
-          def.version,
-          verification.status,
-          resource?.kind ?? null,
-          resource?.id ?? null,
-          digest,
-          call.actor,
-        ],
-      );
-      if (!recorded.ok) return recorded;
-
-      // Le suffixe ne s'applique qu'à une MUTATION restée sans capture. Une
-      // lecture n'a rien à annuler : la suffixer polluerait le journal d'audit
-      // d'un signal d'alerte permanent et sans objet.
-      const undoExpected = resource !== undefined;
       const event = await deps.ledger.append({
         actor: call.actor,
-        eventType:
-          !undoExpected || undoCaptured
-            ? def.auditEvent
-            : `${def.auditEvent}_NO_UNDO`,
+        eventType: `${def.auditEvent}_REPLAYED`,
         tool: def.id,
         policyDecision: 'ALLOW',
         autonomyLevel: policy.effectiveAutonomy,
         status: verification.status,
-        proof: verification.proof ?? null,
         operationId: call.operationId,
         payloadDigest: digest,
       });
@@ -428,12 +398,129 @@ export function createToolGateway(deps: {
 
       return ok({
         status: verification.status,
-        output: executed.value.output,
+        output: null,
         verification,
         policy,
         eventId: event.value.eventId,
-        replayed: false,
+        replayed: true,
       });
-    },
-  };
+    }
+
+    /* --- 4. Secrets ----------------------------------------------------
+       Résolus ici, après la politique, et remis à l'outil seul. Le modèle
+       n'a jamais vu ni le nom résolu ni la valeur (invariant S3). */
+    const secrets = new Map<string, string>();
+    for (const name of def.requiredSecrets) {
+      const secret = deps.vault.get(name);
+      if (!secret.ok) return secret;
+      secrets.set(name, secret.value.expose());
+    }
+
+    const ctx: ToolContext = {
+      db: deps.db,
+      secrets,
+      operationId: call.operationId,
+      actor: call.actor,
+    };
+
+    /* --- 5. Exécution --------------------------------------------------- */
+    const executed = await withTimeout(
+      tool.execute(parsed.value, ctx),
+      def.timeoutMs,
+      def.id,
+    );
+
+    if (!executed.ok) {
+      await deps.ledger.append({
+        actor: call.actor,
+        eventType: `${def.auditEvent}_FAILED`,
+        tool: def.id,
+        policyDecision: 'ALLOW',
+        autonomyLevel: policy.effectiveAutonomy,
+        // Un timeout n'est pas un échec constaté : on ne sait pas.
+        status: executed.error.kind === 'TIMEOUT' ? 'UNKNOWN' : 'FAILED',
+        operationId: call.operationId,
+        payloadDigest: digest,
+      });
+      return executed;
+    }
+
+    /* --- 6. Vérification ------------------------------------------------ */
+    const verified = await deps.verifier.verify(tool, executed.value, ctx);
+    if (!verified.ok) return verified;
+    const verification = verified.value;
+
+    /* --- 7. Capture d'état antérieur (ADR-019) --------------------------
+       Avant le journal, et seulement si l'exécution a produit une ressource.
+       Une capture qui échoue ne fait PAS échouer l'action — l'action a déjà
+       eu lieu. Elle rend simplement l'annulation impossible, ce que le
+       journal doit refléter. */
+    const resource = executed.value.resource;
+    let undoCaptured = false;
+
+    if (executed.value.undo !== undefined && resource !== undefined) {
+      const undo = executed.value.undo;
+      const captured = await snapshots.capture({
+        operationId: call.operationId,
+        resourceKind: resource.kind,
+        resourceId: resource.id,
+        undoKind: undo.kind,
+        ...(undo.kind === 'INVERSE_OPERATION'
+          ? { inverseToolId: undo.inverseToolId, inverseInput: undo.inverseInput }
+          : {}),
+        ...(undo.kind === 'STATE_RESTORE' ? { priorState: undo.priorState } : {}),
+        privacyClass: def.privacyClass,
+      });
+      undoCaptured = captured.ok;
+    }
+
+    /* --- 8. Registre d'opérations + journal ----------------------------- */
+    const recorded = await deps.db.query(
+      `INSERT INTO tool_operations
+         (operation_id, tool_id, tool_version, status, resource_kind,
+          resource_id, input_digest, actor)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (operation_id) DO NOTHING`,
+      [
+        call.operationId,
+        def.id,
+        def.version,
+        verification.status,
+        resource?.kind ?? null,
+        resource?.id ?? null,
+        digest,
+        call.actor,
+      ],
+    );
+    if (!recorded.ok) return recorded;
+
+    // Le suffixe ne s'applique qu'à une MUTATION restée sans capture. Une
+    // lecture n'a rien à annuler : la suffixer polluerait le journal d'audit
+    // d'un signal d'alerte permanent et sans objet.
+    const undoExpected = resource !== undefined;
+    const event = await deps.ledger.append({
+      actor: call.actor,
+      eventType:
+        !undoExpected || undoCaptured
+          ? def.auditEvent
+          : `${def.auditEvent}_NO_UNDO`,
+      tool: def.id,
+      policyDecision: 'ALLOW',
+      autonomyLevel: policy.effectiveAutonomy,
+      status: verification.status,
+      proof: verification.proof ?? null,
+      operationId: call.operationId,
+      payloadDigest: digest,
+    });
+    if (!event.ok) return event;
+
+    return ok({
+      status: verification.status,
+      output: executed.value.output,
+      verification,
+      policy,
+      eventId: event.value.eventId,
+      replayed: false,
+    });
+  }
 }

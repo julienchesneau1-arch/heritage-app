@@ -124,50 +124,63 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
     }
   });
 
-  it('DÉMONSTRATION — deux demandes sont SILENCIEUSEMENT substituées', () => {
-    // Le défaut le plus grave de cette matrice, et il n'était pas visible sans
-    // l'exécuter : « Retrouve le devis du carreleur » et « Cherche le prix
-    // moyen d'un carrelage » déclenchent une recherche dans la MÉMOIRE
-    // PERSONNELLE, qui ne trouve rien, et Jarvis répond « ✓ C'est fait ».
+  it('PROPRIÉTÉ CENTRALE — aucune demande hors capacité ne déclenche un autre outil', () => {
+    // Corrigé (HIGH-4). « Retrouve le devis du carreleur » et « Cherche le prix
+    // moyen d'un carrelage » déclenchaient une recherche dans la mémoire
+    // PERSONNELLE, ne trouvaient rien, et Jarvis répondait « ✓ C'est fait ».
     //
-    // L'utilisateur ne peut pas distinguer « j'ai cherché sur le web, rien
+    // L'utilisateur ne pouvait pas distinguer « j'ai cherché sur le web, rien
     // trouvé » de « j'ai cherché ailleurs que là où tu croyais ». C'est une
     // action DIFFÉRENTE de celle demandée, annoncée comme un succès.
+    //
+    // La règle est désormais absolue : un outil n'a jamais le droit de
+    // prétendre avoir effectué une action différente de celle demandée.
     const unsupported = ACTIONS.filter((a) => a.expects === null);
     expect(unsupported).toHaveLength(24);
 
-    const substituted: string[] = [];
-    for (const action of unsupported) {
-      const seen = observed.get(action.label);
-      if (seen?.reply.kind === 'DONE') substituted.push(`${action.label} → ${seen.rendered}`);
-    }
-    expect(substituted.sort()).toEqual([
-      'chercher un document → memory_search / CONFIRMED',
-      'recherche web → memory_search / CONFIRMED',
-    ]);
+    const substituted = unsupported.filter(
+      (a) => observed.get(a.label)?.reply.kind === 'DONE',
+    );
+    expect(substituted.map((a) => a.label)).toEqual([]);
   });
 
-  it.fails(
-    'DÉFAUT — une demande hors capacité ne doit JAMAIS déclencher un autre outil',
-    () => {
-      // Cause : dans `src/core/intent/engine.ts`, la règle `memory_search`
-      // capture `cherche|recherche|retrouve` suivi de n'importe quoi, et elle
-      // est évaluée AVANT la liste des capacités connues-mais-absentes.
-      const substituted = ACTIONS.filter(
-        (a) => a.expects === null && observed.get(a.label)?.reply.kind === 'DONE',
-      );
-      expect(substituted).toEqual([]);
-    },
-  );
+  it('une recherche de document est refusée, pas détournée', () => {
+    const seen = observed.get('chercher un document');
+    expect(seen?.reply.kind).toBe('UNSUPPORTED');
+    if (seen?.reply.kind !== 'UNSUPPORTED') return;
+    expect(seen.reply.understood).toContain('documents');
+  });
 
-  it('les 22 autres capacités absentes sont bien annoncées comme telles', () => {
-    const silentlyWrong = ACTIONS.filter(
-      (a) =>
-        a.expects === null &&
-        observed.get(a.label)?.reply.kind !== 'DONE' &&
-        observed.get(a.label)?.reply.kind === 'ERROR',
-    );
-    expect(silentlyWrong).toEqual([]);
+  it('une recherche web n\'est jamais détournée, et la limite est dite', () => {
+    // « Cherche le prix moyen d'un carrelage » ne nomme pas explicitement le
+    // web : Jarvis ne devine donc pas, il demande — en disant d'abord ce qu'il
+    // ne sait PAS faire. Refuser ou demander sont deux réponses honnêtes ;
+    // substituer n'en est pas une.
+    const seen = observed.get('recherche web');
+    expect(['UNSUPPORTED', 'CLARIFY']).toContain(seen?.reply.kind);
+    const dit =
+      seen?.reply.kind === 'CLARIFY'
+        ? seen.reply.question
+        : seen?.reply.kind === 'UNSUPPORTED'
+          ? `${seen.reply.understood} ${seen.reply.missing}`
+          : '';
+    expect(dit).toContain('web');
+    expect(dit).toContain('mémoire personnelle');
+  });
+
+  it('la recherche mémoire ANNONCE sa portée, même quand elle trouve', () => {
+    // Second volet de HIGH-4 : savoir où Jarvis a cherché fait partie du
+    // résultat. Sans cela, une réponse vide reste indiscernable d'une
+    // recherche web infructueuse.
+    const seen = observed.get('retrouver une information');
+    expect(seen?.reply.kind).toBe('DONE');
+    if (seen?.reply.kind !== 'DONE') return;
+    const output: Record<string, unknown> =
+      typeof seen.reply.output === 'object' && seen.reply.output !== null
+        ? { ...seen.reply.output }
+        : {};
+    expect(output['scope']).toBe('MEMOIRE_PERSONNELLE');
+    expect(String(output['scopeLabel'])).toContain('ni web');
   });
 
   it('aucune phrase ne produit d\'erreur technique brute', () => {
@@ -177,12 +190,12 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
     expect(errors).toEqual([]);
   });
 
-  it('DÉMONSTRATION — 6 actions sur 30 sont réellement couvertes', () => {
+  it('couverture réelle du quotidien : 6 actions sur 30', () => {
     const done = ACTIONS.filter((a) => observed.get(a.label)?.reply.kind === 'DONE');
-    // 8 phrases produisent une action, mais deux sont des substitutions : la
-    // couverture RÉELLE du quotidien est de 6 sur 30, soit 20 %.
-    expect(done).toHaveLength(8);
-    const legitimate = done.filter((a) => a.expects !== null);
-    expect(legitimate).toHaveLength(6);
+    expect(done).toHaveLength(6);
+    // 20 %. Ce chiffre n'est pas un échec du code : c'est l'état d'avancement
+    // du produit, mesuré au lieu d'être estimé. Il n'y a plus de substitution
+    // pour le gonfler artificiellement.
+    expect(done.every((a) => a.expects !== null)).toBe(true);
   });
 });

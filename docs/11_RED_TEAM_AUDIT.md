@@ -1,6 +1,8 @@
 # 11 — AUDIT ET RED TEAM
 
 **Date : 10 août 2026 — commit audité : `08b52b2`**
+**Mis à jour après le Sprint Foundation 1 (gel architectural) : 6 défauts sur 18
+corrigés, dont les deux critiques. Voir §16.**
 Méthode : inspection du code, exécution réelle, et **66 tests écrits pour cet audit**
 (`tests/redteam/`). Rien n'est affirmé ici sans avoir été exécuté ou lu.
 
@@ -8,6 +10,10 @@ Ce qui n'a pas pu être vérifié porte la mention **`UNVERIFIED`**, avec la rai
 Une hypothèse n'est jamais présentée comme un fait.
 
 ---
+
+> **⚠ Ce rapport décrit l'état AUDITÉ (`08b52b2`).** Il n'est pas réécrit après
+> coup : un audit qu'on récrit pour qu'il ait l'air bon ne sert à rien. Les
+> corrections sont consignées en §16, avec la preuve qui les valide.
 
 ## Verdict, avant les détails
 
@@ -697,3 +703,75 @@ Ce que cet audit ne dit pas, et qu'il faut entendre quand même : la partie
 généralement bâclée — l'honnêteté, la politique, l'audit, l'absence d'exfiltration —
 est ici faite, et faite correctement. Ce qui manque est du travail de
 construction ordinaire. C'est le bon sens de la difficulté.
+
+
+---
+
+## 16. Sprint Foundation 1 — état des corrections
+
+*10 août 2026, après l'audit. Gel architectural : **aucune fonctionnalité
+ajoutée**, uniquement les corrections P0 et la fermeture des chemins malhonnêtes.*
+
+| # | État | Preuve exécutable |
+|---|---|---|
+| `CRIT-1` | ✅ **corrigé** | `tests/redteam/db-resilience.test.ts` — la sonde imprime `SURVECU`, sortie 0 |
+| `CRIT-2` | ✅ **corrigé** | `tests/redteam/memory.test.ts` + migration 0006 + ADR-024 |
+| `HIGH-2` | ✅ **corrigé** | `tests/redteam/failure-modes.test.ts` — `Result` typé **et** événement `_CRASHED` au journal |
+| `HIGH-3` | ✅ **corrigé** | idem — `PROVIDER_UNAVAILABLE`, plus aucune exception |
+| `HIGH-4` | ✅ **corrigé** | `tests/redteam/daily-actions.test.ts` — 0 substitution, portée annoncée |
+| `HIGH-5` | ✅ **corrigé** | `tests/redteam/context-scenarios.test.ts` — rappel daté refusé, rappel simple conservé |
+| `MED-1` | ✅ **corrigé** | la CI lance `pnpm test` ; un test interdit de revenir à l'énumération |
+| `LOW-3` | ✅ **corrigé** | une lecture ne s'annonce plus « C'est fait » |
+| `MED-2` | ◐ **partiel** | `poolMax` et `statementTimeoutMs` transmis ; 9 clés restent inertes |
+| `HIGH-6` `HIGH-7` `HIGH-8` `MED-3` `MED-4` `MED-5` `MED-6` `LOW-1` `LOW-2` | ⏳ **ouverts** | relèvent des Sprints 2 et 3 — mémoire de travail, contradiction, câblage |
+
+### Ce que CRIT-1 est devenu, exactement
+
+Le correctif ne se limite pas à l'écouteur `pool.on('error')`. La panne est
+devenue un **état observable**, avec une conduite définie :
+
+```text
+PostgreSQL tombe
+      ↓
+pool émet 'error'  →  état DOWN  (le processus SURVIT)
+      ↓
+toute action passant par la base est REFUSÉE :
+  « La base de données est injoignable. Rien n'a été tenté. »
+      ↓
+ce qui ne demande pas la base continue de répondre
+(comprendre la phrase, dire ce qu'on ne sait pas faire)
+      ↓
+PostgreSQL revient  →  sonde  →  état UP  →  DATABASE_RECOVERED au journal
+```
+
+Vérifié en exécution réelle, passerelle web exposée : `service postgresql stop`
+puis trois requêtes, puis `start`. Le serveur a répondu à chaque étape, a refusé
+d'agir pendant la panne, et a repris **sans redémarrage**. L'événement
+`DATABASE_RECOVERED` figure dans `event_ledger`, acteur `SYSTEM`.
+
+### Ce que HIGH-4 est devenu
+
+La règle est désormais absolue et testée :
+
+> **Un outil n'a jamais le droit de prétendre avoir effectué une action
+> différente de celle demandée.**
+
+Trois conduites, selon ce que Jarvis sait :
+
+| Demande | Avant | Maintenant |
+|---|---|---|
+| « Retrouve le devis du carreleur » | `memory_search` → « ✓ C'est fait » | « je ne sais pas chercher dans tes documents » |
+| « Cherche le prix moyen d'un carrelage » | `memory_search` → « ✓ C'est fait » | « je ne sais chercher que dans ta mémoire personnelle — dois-je y chercher … ? » |
+| « Que sais-tu sur X » (0 résultat) | « ✓ C'est fait » | « Rien trouvé **dans ta mémoire personnelle** » + portée annoncée |
+
+La **portée** fait maintenant partie du résultat de l'outil (`scope`,
+`scopeLabel`), pas de la décoration d'interface : toute interface, présente ou
+future, doit l'afficher.
+
+### Ce qui reste vrai du verdict
+
+**PAS ENCORE**, mais pour une raison de moins. Jarvis ne meurt plus, ne substitue
+plus, ne perd plus une date en silence. Il reste **6 actions sur 30** et
+**aucune mémoire de travail** — c'est le Sprint 2.
+
+`345 tests`, trois portes de sortie vertes, scan de secrets propre.

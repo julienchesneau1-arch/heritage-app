@@ -670,3 +670,66 @@ partagent la boucle plutôt que de la dupliquer.
 utile (Android, ordinateur d'appoint) mais cesse d'être le chemin principal. Si
 l'accès hors domicile devient nécessaire, ce ne sera ni un tunnel tiers ni une
 ouverture de port : ce sera un ADR distinct, avec son propre modèle de menace.
+
+---
+
+## ADR-024 — Une IA propose, elle ne s'élève jamais au rang d'autorité
+
+**Statut : RATIFIÉ** *(10 août 2026)*
+
+**Contexte.** L'audit `docs/11` a trouvé un défaut que la relecture ne montrait
+pas : `provenanceOf('MODEL_INFERRED')` rendait `'SYSTEM'`, c'est-à-dire la même
+provenance que ce que le **noyau** produit lui-même. `isUntrusted('SYSTEM')`
+étant faux, une valeur déduite par un modèle pouvait alimenter un paramètre
+sensible **sans confirmation**.
+
+Le défaut était invisible pour deux raisons, et les deux méritent d'être notées :
+
+- l'axe épistémique, lui, fonctionnait (`SOURCE_CEILING.MODEL_INFERRED = 0.7`).
+  Un lecteur pressé voyait la déduction correctement dégradée et concluait que
+  tout allait bien — sur le mauvais axe ;
+- aucun modèle ne tourne encore. Le défaut n'avait donc **aucune conséquence
+  observable**, et aucun test ne pouvait le révéler par l'usage.
+
+**Décision.** Le principe est verrouillé, au-delà du seul correctif :
+
+> **Une IA peut proposer. Elle ne peut jamais s'auto-élever au rang
+> d'autorité, ni augmenter elle-même son niveau de confiance ou ses
+> permissions.**
+
+Conséquences immédiates, toutes appliquées :
+
+1. Nouvelle provenance `MODEL_OUTPUT`, membre de `UNTRUSTED_PROVENANCES` ;
+2. `MODEL_INFERRED → MODEL_OUTPUT`, jamais `SYSTEM` ;
+3. `SYSTEM` redevient ce qu'il n'aurait jamais dû cesser d'être : **ce que le
+   noyau a produit lui-même**, et rien d'autre ;
+4. la base impose la correspondance
+   (`(source_type = 'MODEL_INFERRED') = (provenance = 'MODEL_OUTPUT')`), de
+   sorte qu'aucun chemin applicatif ne puisse blanchir une déduction.
+
+**Pourquoi une provenance distincte plutôt que ranger dans
+`EXTERNAL_UNTRUSTED`.** Les deux sont non fiables, mais pas pour la même
+raison, et confondre les deux serait irréversible :
+
+| Provenance | Pourquoi elle n'est pas fiable |
+|---|---|
+| `EXTERNAL_UNTRUSTED` | un tiers a écrit ce texte — **il peut être hostile** |
+| `MODEL_OUTPUT` | personne n'est hostile — **rien ne garantit l'exactitude** |
+
+On ne peut pas reconstruire après coup une distinction qu'on n'a pas écrite.
+
+**Portée : tous les modèles, présents et futurs.** GPT, Claude, Gemini, Llama,
+Qwen, Mistral ou un modèle local produisent tous la même chose : une
+`Intent`, un `Plan`, un `ToolCall`. C'est le noyau qui décide si la proposition
+est acceptable. Le modèle est donc remplaçable — et c'est aussi la meilleure
+protection contre l'enfermement fournisseur.
+
+**Ce que cette décision n'autorise pas.** Aucun réglage, aucune configuration,
+aucune règle apprise ne peut faire passer `MODEL_OUTPUT` du côté fiable. La
+hiérarchie de `03 §5` s'applique intégralement : une préférence n'assouplit
+jamais une règle de sécurité.
+
+**Condition de révision.** Aucune. Si un jour un modèle doit voir sa sortie
+traitée différemment, ce sera par une **vérification indépendante** de cette
+sortie — un outil qui relit l'état réel, comme le fait déjà le Verification
+Engine — jamais par une élévation de sa provenance.

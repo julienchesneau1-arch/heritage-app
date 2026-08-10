@@ -193,10 +193,16 @@ export const JS = `(() => {
       node.appendChild(ul);
     }
     if (Array.isArray(output.results)) {
+      /* La PORTÉE est affichée à chaque recherche : l'utilisateur doit savoir
+         ce qui n'a PAS été consulté, pas seulement ce qui l'a été. */
+      if (output.scopeLabel) node.appendChild(el('div', 'note', output.scopeLabel));
       if (output.degraded) {
         node.appendChild(el('div', 'note', "recherche sans la voie sémantique — aucun modèle d'embeddings"));
       }
-      if (!output.results.length) { node.appendChild(el('div', 'note', 'Rien trouvé.')); return; }
+      if (!output.results.length) {
+        node.appendChild(el('div', 'note', 'Rien trouvé dans ta mémoire personnelle.'));
+        return;
+      }
       const ul = el('ul');
       output.results.forEach(r => {
         const li = el('li', null, r.content + ' ');
@@ -220,9 +226,14 @@ export const JS = `(() => {
     const node = jarvis();
 
     if (reply.kind === 'DONE') {
+      /* Une lecture ne s'annonce pas « C'est fait » : rien n'a été fait. */
+      const readOnly = reply.toolId === 'memory_search' || reply.toolId === 'task_list';
       const head = el('div');
       head.appendChild(el('span', 'mark', MARK[reply.status] || '·'));
-      head.appendChild(document.createTextNode(SAY[reply.status] || reply.status));
+      head.appendChild(document.createTextNode(
+        readOnly && reply.status === 'CONFIRMED'
+          ? "Voici ce que j'ai trouvé."
+          : (SAY[reply.status] || reply.status)));
       node.appendChild(head);
       if (reply.status !== 'CONFIRMED') node.appendChild(el('div', 'detail', reply.detail));
       renderOutput(node, reply.toolId, reply.output);
@@ -292,6 +303,7 @@ export const JS = `(() => {
       } else if (cmd === '/diagnostic') {
         const r = await api('/api/diagnostic');
         renderReport('Diagnostic :', [
+          'Base ' + (r.database === 'UP' ? 'joignable' : 'INJOIGNABLE'),
           r.tools + ' outils enregistrés',
           'Journal ' + (r.chainValid ? 'intact (' + r.chainLength + ' événements)' : 'ROMPU'),
           r.pending + ' mémoire(s) en attente',

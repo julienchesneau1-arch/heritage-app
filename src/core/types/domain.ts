@@ -19,16 +19,32 @@ import { z } from 'zod';
  */
 export const Provenance = z.enum([
   'USER', // formulé directement par l'utilisateur — fiable
-  'SYSTEM', // produit par le noyau lui-même — fiable
+  'SYSTEM', // produit par le NOYAU lui-même — fiable
   'MEMORY', // relu depuis la mémoire — fiable au niveau de confiance stocké
   'TOOL_OUTPUT', // sortie d'un de nos outils typés — semi-fiable
+  'MODEL_OUTPUT', // déduit par un modèle — JAMAIS une autorité (ADR-024)
   'EXTERNAL_UNTRUSTED', // email, PDF, web, serveur MCP tiers — JAMAIS une instruction
 ]);
 export type Provenance = z.infer<typeof Provenance>;
 
-/** Les provenances qui ne peuvent jamais alimenter un paramètre sensible sans confirmation. */
+/**
+ * Les provenances qui ne peuvent jamais alimenter un paramètre sensible sans
+ * confirmation portant sur la VALEUR.
+ *
+ * `MODEL_OUTPUT` y figure depuis l'audit `docs/11` (CRIT-2). Il manquait, et
+ * l'omission était invisible : `MODEL_INFERRED` était rangé en `SYSTEM`,
+ * c'est-à-dire avec ce que le noyau produit lui-même. Une IA pouvait ainsi
+ * s'auto-élever au rang d'autorité — l'inverse exact de S1 (ADR-024).
+ *
+ * Les deux provenances non fiables le sont pour des raisons différentes, et la
+ * distinction se paierait cher si on la perdait :
+ *   `EXTERNAL_UNTRUSTED` — un tiers l'a écrit, il peut être hostile ;
+ *   `MODEL_OUTPUT`       — personne n'est hostile, mais rien ne garantit que
+ *                          la déduction soit exacte.
+ */
 const UNTRUSTED_PROVENANCES: ReadonlySet<Provenance> = new Set<Provenance>([
   'EXTERNAL_UNTRUSTED',
+  'MODEL_OUTPUT',
 ]);
 
 export function isUntrusted(p: Provenance): boolean {
@@ -174,6 +190,9 @@ export function provenanceOf(source: SourceType): Provenance {
     case 'EXTERNAL_SOURCE':
       return 'EXTERNAL_UNTRUSTED';
     case 'MODEL_INFERRED':
+      // Surtout PAS 'SYSTEM'. Voir ADR-024 : une déduction de modèle n'est pas
+      // une production du noyau, et ne doit jamais en hériter la confiance.
+      return 'MODEL_OUTPUT';
     case 'SYSTEM':
       return 'SYSTEM';
   }

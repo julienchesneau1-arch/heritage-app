@@ -165,21 +165,25 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     await db.close();
   });
 
-  it('DÉMONSTRATION — un rappel daté perd sa date en silence', () => {
-    // « Rappelle-moi JEUDI d'appeler le médecin » crée une tâche intitulée
-    // « jeudi d'appeler le médecin », sans échéance, et répond « ✓ C'est fait ».
-    // L'utilisateur repart en croyant qu'un rappel existe pour jeudi.
-    // C'est la même famille de défaut que la substitution de recherche :
-    // l'action exécutée n'est pas l'action demandée.
+  it('un rappel daté est REFUSÉ, jamais amputé de sa date', () => {
+    // Corrigé (HIGH-5). « Rappelle-moi JEUDI d'appeler le médecin » créait une
+    // tâche intitulée « jeudi d'appeler le médecin », sans échéance, et
+    // répondait « ✓ C'est fait ». L'utilisateur repartait en croyant qu'un
+    // rappel existait pour jeudi.
+    //
+    // Jarvis ne sait pas encore résoudre une date. La seule conduite honnête
+    // est de le dire — pas d'avaler le qualificatif temporel en silence.
     const date = results.find((r) => r.turn.phrase.startsWith('Rappelle-moi jeudi'));
-    expect(date?.reply.kind).toBe('DONE');
-    if (date?.reply.kind !== 'DONE') return;
-    expect(date.reply.toolId).toBe('task_create');
-    const output: Record<string, unknown> =
-      typeof date.reply.output === 'object' && date.reply.output !== null
-        ? { ...date.reply.output }
-        : {};
-    expect(String(output['title'])).toContain('jeudi');
+    expect(date?.reply.kind).toBe('UNSUPPORTED');
+    if (date?.reply.kind !== 'UNSUPPORTED') return;
+    expect(date.reply.understood).toContain('jeudi');
+    expect(date.reply.missing).toContain('échéance');
+  });
+
+  it('mais un rappel SANS date passe toujours', () => {
+    // La correction ne doit pas emporter le cas nominal avec elle.
+    const sansDate = results.find((r) => r.turn.phrase.startsWith('Rappelle-moi de relancer'));
+    expect(sansDate?.reply.kind).toBe('DONE');
   });
 
   it('PROPRIÉTÉ CONSERVÉE — aucun tour contextuel n\'invente une action inattendue', () => {
@@ -191,7 +195,7 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
         r.turn.aptitude !== 'ACTION' &&
         r.reply.kind === 'DONE' &&
         r.reply.toolId !== 'memory_search' &&
-        !r.turn.phrase.startsWith('Rappelle-moi jeudi'),
+        true,
     );
     expect(inventions.map((r) => r.turn.phrase)).toEqual([]);
   });

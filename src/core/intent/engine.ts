@@ -115,11 +115,25 @@ const RULES: readonly Rule[] = [
     },
   },
 
-  /* --- Mémoire : chercher ------------------------------------------------ */
+  /* --- Mémoire : chercher ------------------------------------------------
+     PORTÉE EXPLICITE, ET C'EST LE POINT (HIGH-4).
+
+     Cette règle capturait auparavant `retrouve|recherche|cherche` suivi de
+     n'importe quoi. « Retrouve le devis du carreleur » et « Cherche le prix
+     moyen d'un carrelage » devenaient donc des recherches dans la mémoire
+     PERSONNELLE, ne trouvaient rien, et Jarvis répondait « ✓ C'est fait ».
+
+     L'utilisateur ne pouvait pas distinguer « j'ai cherché sur le web, rien
+     trouvé » de « j'ai cherché ailleurs que là où tu croyais ». C'est une
+     action DIFFÉRENTE de celle demandée, annoncée comme un succès.
+
+     Ne sont donc admises ici que les formulations qui désignent la mémoire
+     sans ambiguïté. Un verbe de recherche nu est traité plus bas, comme
+     l'ambiguïté qu'il est. */
   {
     id: 'memory_search',
     pattern:
-      /^(?:qu(?:'|’)est-ce que (?:je sais|tu sais)(?: sur)?|que sais-tu(?: sur)?|retrouve|recherche|cherche)\s+(.+)$/iu,
+      /^(?:qu(?:'|’)est-ce que (?:je sais|tu sais)(?: sur)?|que sais-tu(?: sur)?|qu(?:'|’)as-tu retenu(?: sur)?|(?:cherche|recherche|retrouve)\s+dans\s+(?:ma|ta)\s+m[ée]moire(?:\s+sur)?)\s+(.+)$/iu,
     build(match) {
       return {
         kind: 'TOOL_CALL',
@@ -246,6 +260,38 @@ const RULES: readonly Rule[] = [
 ];
 
 /**
+ * Expressions qui posent une ÉCHÉANCE.
+ *
+ * Référence : audit `docs/11` — défaut HIGH-5.
+ *
+ * « Rappelle-moi jeudi d'appeler le médecin » créait une tâche intitulée
+ * « jeudi d'appeler le médecin », sans échéance, et répondait « ✓ C'est fait ».
+ * L'utilisateur repartait en croyant qu'un rappel existait pour jeudi.
+ *
+ * Jarvis ne sait pas encore résoudre une date — c'est un travail de la Phase
+ * suivante. En attendant, la seule conduite honnête est de le DIRE. Avaler
+ * silencieusement le qualificatif temporel serait exécuter une action
+ * différente de celle demandée.
+ */
+const TEMPORAL_QUALIFIER =
+  /\b(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|apr[èe]s-demain|ce soir|ce matin|cet apr[èe]s-midi|la semaine prochaine|le mois prochain|dans\s+\d+\s*(?:minutes?|heures?|jours?|semaines?|mois)|[àa]\s*\d{1,2}\s*h|avant\s+(?:le|la|demain)|le\s+\d{1,2}\s*\/\s*\d{1,2})/iu;
+
+/** Renvoie l'expression temporelle trouvée, ou `null`. */
+function temporalQualifier(text: string): string | null {
+  const match = TEMPORAL_QUALIFIER.exec(text);
+  return match === null ? null : match[0];
+}
+
+/**
+ * Verbes de recherche sans portée précisée.
+ *
+ * « Cherche X » ne dit pas OÙ. Jarvis ne sait chercher que dans la mémoire
+ * personnelle ; deviner que c'est bien ce qui était demandé serait exactement
+ * la substitution silencieuse qu'on vient de retirer.
+ */
+const BARE_SEARCH = /^(?:cherche|recherche|retrouve|trouve)\s+(.+)$/iu;
+
+/**
  * Demandes reconnues mais non réalisables aujourd'hui.
  *
  * Les nommer explicitement vaut mieux que de les laisser tomber dans
@@ -259,8 +305,25 @@ const KNOWN_BUT_UNAVAILABLE: readonly { pattern: RegExp; capability: string }[] 
   { pattern: /\b(supprime|efface|oublie)\b/iu, capability: 'supprimer une donnée' },
   { pattern: /\b(allume|[ée]teins|chauffage|lumi[èe]re)\b/iu, capability: 'contrôler la maison' },
   { pattern: /\bm[ée]t[ée]o\b/iu, capability: 'consulter la météo' },
-  { pattern: /\b(cherche sur le web|recherche web|sur internet)\b/iu, capability: 'chercher sur le web' },
+  { pattern: /\b(cherche sur le web|recherche web|sur internet|sur google|en ligne)\b/iu, capability: 'chercher sur le web' },
+  {
+    pattern:
+      /\b(?:cherche|recherche|retrouve|trouve)\b[^]*\b(?:devis|documents?|pdf|fichiers?|factures?|contrats?|pi[èe]ce jointe)\b/iu,
+    capability: 'chercher dans tes documents',
+  },
 ];
+
+/** Réponse unique aux capacités reconnues mais absentes (PRD §23). */
+function unavailable(capability: string): IntentProposal {
+  return {
+    kind: 'UNSUPPORTED',
+    understood: `que tu veux ${capability}`,
+    missing:
+      'cette capacité — elle n\'est pas encore construite. ' +
+      'Je sais aujourd\'hui : noter, créer et lister des tâches, ' +
+      'mémoriser et rechercher en mémoire.',
+  };
+}
 
 export interface IntentEngine {
   /** `text` est la saisie brute de l'utilisateur — fiable, mais pas structurée. */
@@ -280,10 +343,35 @@ export function createIntentEngine(): IntentEngine {
         };
       }
 
+      /* --- Frontière de capacité, AVANT les règles (HIGH-4) --------------
+         Une demande qui nomme une capacité absente ne doit jamais atteindre
+         une règle qui, elle, correspondrait à une autre capacité. L'ordre
+         inverse est précisément ce qui produisait les substitutions
+         silencieuses. */
+      for (const { pattern, capability } of KNOWN_BUT_UNAVAILABLE) {
+        if (pattern.test(raw)) return unavailable(capability);
+      }
+
       for (const rule of RULES) {
         const match = raw.match(rule.pattern);
         if (match !== null) {
           const proposal = rule.build(match, raw);
+
+          /* --- Aucune échéance ne disparaît en silence (HIGH-5) --------- */
+          if (proposal.kind === 'TOOL_CALL' && proposal.toolId === 'task_create') {
+            const when = temporalQualifier(raw);
+            if (when !== null) {
+              return {
+                kind: 'UNSUPPORTED',
+                understood: `que tu veux un rappel daté (« ${when} »)`,
+                missing:
+                  'la capacité de poser une échéance — je ne sais pas encore ' +
+                  'résoudre les dates. Je préfère te le dire plutôt que de ' +
+                  'créer une tâche sans date en te laissant croire que le ' +
+                  'rappel existe. Sans la date, la demande passe.',
+              };
+            }
+          }
           // Une règle qui capture une chaîne vide n'a rien compris : mieux
           // vaut demander que proposer un outil avec un paramètre vide.
           if (
@@ -302,17 +390,18 @@ export function createIntentEngine(): IntentEngine {
         }
       }
 
-      for (const { pattern, capability } of KNOWN_BUT_UNAVAILABLE) {
-        if (pattern.test(raw)) {
-          return {
-            kind: 'UNSUPPORTED',
-            understood: `que tu veux ${capability}`,
-            missing:
-              'cette capacité — elle n\'est pas encore construite. ' +
-              'Je sais aujourd\'hui : noter, créer et lister des tâches, ' +
-              'mémoriser et rechercher en mémoire.',
-          };
-        }
+      /* --- Un verbe de recherche nu est une AMBIGUÏTÉ (HIGH-4) ----------
+         On ne devine pas la portée. On dit ce qu'on sait faire, et on demande. */
+      const bare = BARE_SEARCH.exec(raw);
+      if (bare !== null) {
+        return {
+          kind: 'CLARIFY',
+          understood: 'une demande de recherche',
+          question:
+            `Je ne sais chercher que dans ta mémoire personnelle — ni sur le ` +
+            `web, ni dans tes documents. Dois-je y chercher « ${clean(bare[1] ?? '')} » ? ` +
+            `(sinon, reformule avec « que sais-tu sur … »)`,
+        };
       }
 
       return {
