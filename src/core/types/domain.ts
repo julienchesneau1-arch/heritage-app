@@ -195,6 +195,92 @@ export const Verifiability = z.enum(['VERIFIABLE', 'OBSERVABLE', 'UNVERIFIABLE']
 export type Verifiability = z.infer<typeof Verifiability>;
 
 /**
+ * CONTRAT D'EFFET — Foundation 4.1, ADR-033.
+ *
+ * Ce champ décide d'UNE seule chose, et c'est la plus importante du système :
+ *
+ *     qu'a-t-on le droit de faire après un `UNKNOWN` ?
+ *
+ * POURQUOI IL REMPLACE `effect`
+ * -----------------------------
+ * `effect: LOCAL_TRANSACTIONAL | EXTERNAL` répondait à « une erreur prouve-t-elle
+ * l'absence ? ». Utile, mais insuffisant : parmi les effets externes, certains
+ * peuvent être rejoués sans danger et d'autres jamais. Confondre les deux a
+ * produit le double effet mesuré en `docs/21 §2`.
+ *
+ * LA QUESTION QUE LE MOTEUR NE DOIT PLUS POSER
+ * --------------------------------------------
+ * Pas « puis-je réessayer ? » — question à laquelle on répond par optimisme.
+ * Mais « quel contrat d'effet possède cet outil ? » — question à laquelle on
+ * répond par lecture.
+ */
+export const EffectContract = z.enum([
+  /** Lecture pure. Rejouer est sans conséquence. */
+  'NO_EXTERNAL_EFFECT',
+  /**
+   * Effet écrit dans la MÊME base que le journal d'intention.
+   *
+   * Une erreur entraîne un `ROLLBACK` : l'absence est garantie par PostgreSQL,
+   * et aucune requête ne peut « rester en vol ».
+   */
+  'LOCAL_TRANSACTIONAL',
+  /**
+   * Le FOURNISSEUR garantit qu'une même identité d'opération ne produit jamais
+   * deux effets.
+   *
+   * C'est le SEUL contrat externe qui autorise un rejeu — et il l'autorise
+   * pour une raison qui ne dépend pas de notre observation : même si une
+   * requête antérieure aboutit plus tard, le fournisseur la dédoublonne.
+   */
+  'PROVIDER_IDEMPOTENT',
+  /**
+   * Le fournisseur est interrogeable, mais NON idempotent.
+   *
+   * On peut donc faire passer un `UNKNOWN` à `CONFIRMED`. On ne peut JAMAIS
+   * rejouer : « je n'ai rien vu à l'instant t » ne prouve pas qu'une requête
+   * ne soit pas encore en vol.
+   */
+  'EXTERNALLY_VERIFIABLE',
+  /** Ni idempotent, ni interrogeable. `UNKNOWN` est définitif. */
+  'UNVERIFIABLE',
+]);
+export type EffectContract = z.infer<typeof EffectContract>;
+
+/**
+ * Un rejeu est-il autorisé après un `UNKNOWN` ?
+ *
+ * Fonction TOTALE sur l'énumération : ajouter un contrat sans décider de sa
+ * politique de rejeu ne compilera pas.
+ *
+ * Les deux `false` sont le cœur d'ADR-033. Ils disent qu'aucune durée écoulée,
+ * aucun bail expiré, aucun redémarrage, aucune observation ponctuelle ne
+ * transforme une ignorance en permission.
+ */
+export function mayReplayAfterUnknown(contract: EffectContract): boolean {
+  switch (contract) {
+    case 'NO_EXTERNAL_EFFECT':
+      return true;
+    case 'LOCAL_TRANSACTIONAL':
+      // PostgreSQL a fait le rollback. Rien ne peut arriver après coup.
+      return true;
+    case 'PROVIDER_IDEMPOTENT':
+      // Sûr même si une requête antérieure aboutit plus tard : c'est le
+      // fournisseur qui dédoublonne, pas nous qui observons.
+      return true;
+    case 'EXTERNALLY_VERIFIABLE':
+      // On peut CONFIRMER, jamais rejouer.
+      return false;
+    case 'UNVERIFIABLE':
+      return false;
+  }
+}
+
+/** Cet effet échappe-t-il à nos transactions ? */
+export function isExternalEffect(contract: EffectContract): boolean {
+  return contract !== 'NO_EXTERNAL_EFFECT' && contract !== 'LOCAL_TRANSACTIONAL';
+}
+
+/**
  * Un statut autorise-t-il à parler d'un effet accompli ?
  *
  * Volontairement séparé de `mayClaimSuccess` : `PARTIAL` décrit bien un effet

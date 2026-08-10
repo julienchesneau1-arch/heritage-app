@@ -103,6 +103,15 @@ export interface HostileConfig {
   readonly latencyMs?: number;
   /** Destinataires, pour les scénarios de succès partiel. */
   readonly targets?: readonly string[];
+  /**
+   * Le fournisseur DÉDOUBLONNE-T-IL réellement sur la clé d'opération ?
+   *
+   * Distinct du contrat DÉCLARÉ par l'outil, et c'est tout l'intérêt : le banc
+   * peut mettre en scène un fournisseur qui PRÉTEND être idempotent sans
+   * l'être. C'est le risque résiduel d'ADR-033 — la garantie vient d'un tiers,
+   * et nous ne pouvons que le croire.
+   */
+  readonly reallyIdempotent?: boolean;
 }
 
 /** Ce qu'un fournisseur rend quand il répond. Jamais une preuve, une OBSERVATION. */
@@ -169,6 +178,17 @@ export function createHostileProvider(
 
   /** Écrit dans le monde. Irréversible, par construction. */
   async function effect(operationKey: string, payload: string, target = '-'): Promise<void> {
+    if (current.reallyIdempotent === true) {
+      // Un vrai fournisseur idempotent refuse le doublon LUI-MÊME, sans rien
+      // demander à son client. C'est ce qui rend le rejeu sûr même quand une
+      // requête antérieure aboutit plus tard.
+      const existing = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM lab_world_effects
+          WHERE operation_key = $1 AND target = $2`,
+        [operationKey, target],
+      );
+      if (existing.ok && Number(existing.value.rows[0]?.n ?? '0') > 0) return;
+    }
     await commitEffect(db, {
       operationKey,
       providerId: current.id,

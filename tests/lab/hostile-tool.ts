@@ -24,7 +24,7 @@ import {
 } from '../../src/core/tools/contract.js';
 import { ok, err, jarvisError, type Result } from '../../src/core/types/result.js';
 import { verificationOutcome } from '../../src/core/verification/engine.js';
-import type { AutonomyLevel, PrivacyClass } from '../../src/core/types/domain.js';
+import type { AutonomyLevel, EffectContract, PrivacyClass } from '../../src/core/types/domain.js';
 import type { HostileProvider } from './hostile-provider.js';
 import { externalEffectCount } from './world.js';
 
@@ -60,6 +60,13 @@ export interface HostileToolOptions {
    * rien » n'y prouve jamais « il n'y a rien ».
    */
   readonly verifiability?: 'VERIFIABLE' | 'OBSERVABLE' | 'UNVERIFIABLE';
+  /**
+   * Contrat d'effet de l'outil simulé.
+   *
+   * `PROVIDER_IDEMPOTENT` sert à éprouver le SEUL chemin de rejeu externe
+   * autorisé ; tout le reste doit rester bloqué en `UNKNOWN`.
+   */
+  readonly effectContract?: EffectContract;
 }
 
 /**
@@ -95,7 +102,11 @@ export function createHostileTool(options: HostileToolOptions): RegisteredTool {
       attemptVerification:
         options.canVerifyAttempt === true ? 'BY_OPERATION_KEY' : 'NONE',
       // Le point du banc : un effet qu'aucun ROLLBACK ne défait.
-      effect: 'EXTERNAL',
+      //
+      // Par défaut `EXTERNALLY_VERIFIABLE` : le monde est interrogeable, mais
+      // le fournisseur ne dédoublonne PAS. C'est le cas le plus fréquent, et
+      // celui qui interdit le rejeu (ADR-033).
+      effect: options.effectContract ?? 'EXTERNALLY_VERIFIABLE',
       verifiability: options.verifiability ?? 'OBSERVABLE',
     },
 
@@ -249,7 +260,7 @@ export function createBlindHostileTool(options: HostileToolOptions): RegisteredT
       requiredSecrets: [],
       rollback: null,
       attemptVerification: 'NONE',
-      effect: 'EXTERNAL',
+      effect: 'UNVERIFIABLE',
       // Aucune relecture : cet outil ne peut rien établir du tout.
       verifiability: 'UNVERIFIABLE',
     },

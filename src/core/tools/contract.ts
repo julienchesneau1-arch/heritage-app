@@ -14,11 +14,13 @@ import type { Db } from '../db/client.js';
 import type {
   Actor,
   AutonomyLevel,
+  EffectContract,
   EvidenceKind,
   PrivacyClass,
   Verifiability,
   VerificationStatus,
 } from '../types/domain.js';
+import { isExternalEffect } from '../types/domain.js';
 import type { Result } from '../types/result.js';
 import type { OperationIdentity } from './identity.js';
 
@@ -114,28 +116,23 @@ export interface ToolDefinition {
   readonly attemptVerification: 'NONE' | 'BY_OPERATION_KEY';
 
   /**
-   * L'effet de cet outil est-il annulable par un `ROLLBACK` PostgreSQL ?
+   * CONTRAT D'EFFET — ADR-033. Le champ le plus lourd de conséquences.
    *
-   * Référence : `docs/16 §1` (où ce champ était spécifié), ADR-029.
+   * Il décide de deux choses, et la seconde est celle qui coûte cher :
    *
-   *   `LOCAL_TRANSACTIONAL`  l'effet est écrit dans la MÊME base que le journal
-   *                          d'intention. Une erreur signifie un rollback, donc
-   *                          l'absence d'effet. `FAILED` est alors une
-   *                          affirmation légitime.
+   *   1. une erreur d'exécution prouve-t-elle l'absence d'effet ?
+   *      → seuls `NO_EXTERNAL_EFFECT` et `LOCAL_TRANSACTIONAL` autorisent
+   *        `FAILED` ; tous les autres donnent `UNKNOWN`.
    *
-   *   `EXTERNAL`             l'effet échappe à nos transactions : un email
-   *                          parti, un virement passé, un fichier écrit. Une
-   *                          erreur du fournisseur ne prouve RIEN sur l'effet.
+   *   2. un rejeu est-il autorisé après un `UNKNOWN` ?
+   *      → seul `PROVIDER_IDEMPOTENT` l'autorise parmi les effets externes.
    *
-   * CE QUE CE CHAMP DÉCIDE, CONCRÈTEMENT
-   * ------------------------------------
-   * Le sort d'une exécution qui a rendu une erreur. Le banc de Foundation 3 a
-   * montré qu'un fournisseur peut produire l'effet PUIS répondre `500`. Sans ce
-   * champ, le Gateway concluait `FAILED` — c'est-à-dire qu'il affirmait
-   * l'absence d'effet sur la seule parole du fournisseur, exactement la faute
-   * symétrique de croire un `200`.
+   * Le point 2 vient d'un contre-exemple mesuré (`docs/21 §2`) : une requête
+   * peut être encore EN VOL chez le fournisseur pendant qu'on observe un monde
+   * vide. Aucune observation ne le détecte — seule une garantie du fournisseur
+   * ferme le trou.
    */
-  readonly effect: 'LOCAL_TRANSACTIONAL' | 'EXTERNAL';
+  readonly effect: EffectContract;
 
   /**
    * Ce que cet outil est CAPABLE de prouver — ADR-030.
@@ -412,7 +409,7 @@ export function validateDefinition(
      Un effet externe que le système ne sait pas observer ne peut pas se
      produire sans qu'un humain l'ait voulu explicitement. */
   if (
-    definition.effect === 'EXTERNAL' &&
+    isExternalEffect(definition.effect) &&
     definition.verifiability === 'UNVERIFIABLE' &&
     (definition.autonomy === 'L1' || definition.autonomy === 'L2')
   ) {

@@ -1399,3 +1399,126 @@ qu'aucune mesure ne montre que la latence de reprise gêne.
 — un traitement de plusieurs minutes — le bail devient trop long pour être
 praticable. Il faudra alors un battement de cœur, et cet ADR doit être rouvert
 avant, pas après.
+
+---
+
+## ADR-033 — Un bail expiré ne prouve rien sur le monde extérieur
+
+**Statut :** accepté (Foundation 4.1). **Corrige ADR-032.**
+
+### La phrase à retirer de l'architecture
+
+ADR-032 affirmait : *« ce qui distingue un exécutant mort d'un vivant est le
+temps »*. C'est faux, et deux fois plutôt qu'une.
+
+Un bail ne mesure pas la vie d'un processus. Il mesure :
+
+> depuis combien de temps personne n'a renouvelé le bail.
+
+Ce n'est pas la même chose. Et même en supposant le processus réellement mort,
+**sa requête, elle, peut encore vivre chez le fournisseur.**
+
+### Cinq notions qu'on avait confondues
+
+```text
+PROCESS LIVENESS               le processus tourne-t-il encore ?
+LEASE EXPIRATION               le bail a-t-il été renouvelé ?
+REQUEST CANCELLATION           le fournisseur a-t-il cessé de traiter ?
+EXTERNAL EFFECT                le monde a-t-il changé ?
+EXTERNAL EFFECT VERIFICATION   peut-on le CONSTATER, maintenant ?
+```
+
+`withTimeout()` côté Jarvis n'établit **aucune** des quatre dernières. Il rend
+la main, c'est tout. Un développeur qui lit `timeout → UNKNOWN` pourrait en
+conclure « l'appel est terminé » : il aurait tort, et c'est la raison d'être de
+ce paragraphe.
+
+### Le contre-exemple, mesuré
+
+```text
+A envoie sa requête, puis gèle ou meurt
+le bail expire — mais la requête vit toujours
+B vérifie : le monde est encore VIDE  →  NO_EFFECT
+B exécute                             →  EFFET B
+la requête de A aboutit enfin         →  EFFET A
+                                         ══════════
+                                          2 EFFETS
+```
+
+Aucune observation ne pouvait sauver B : **au moment où il regarde, il n'y a
+rien à voir.** Ce n'est pas un défaut de vérification, c'est une limite de
+l'observation elle-même.
+
+### L'invariant définitif
+
+> **L'expiration d'un bail ne constitue jamais une preuve d'absence d'effet
+> externe.**
+>
+> `UNKNOWN` + bail expiré ≠ autorisation de rejeu.
+
+Le bail garde une utilité — libérer une coordination interne, autoriser à
+*interroger* — mais il n'autorise plus, à lui seul, une nouvelle exécution
+externe.
+
+### La décision : `EffectContract`
+
+Le moteur ne demande plus « puis-je réessayer ? », question à laquelle on
+répond par optimisme. Il demande « quel contrat d'effet possède cet outil ? ».
+
+| Contrat | `FAILED` possible ? | Rejeu après `UNKNOWN` |
+|---|---|---|
+| `NO_EXTERNAL_EFFECT` | ✅ | ✅ libre |
+| `LOCAL_TRANSACTIONAL` | ✅ le rollback prouve l'absence | ✅ |
+| `PROVIDER_IDEMPOTENT` | ❌ | ✅ **avec la même identité** |
+| `EXTERNALLY_VERIFIABLE` | ❌ | ❌ peut confirmer, jamais rejouer |
+| `UNVERIFIABLE` | ❌ | ❌ `UNKNOWN` définitif |
+
+`mayReplayAfterUnknown()` est une fonction **totale** sur l'énumération :
+ajouter un contrat sans décider de sa politique de rejeu ne compile pas.
+
+**Pourquoi `PROVIDER_IDEMPOTENT` est le seul contrat externe rejouable.** Sa
+garantie ne dépend pas de notre observation. Même si la requête de A aboutit
+dix minutes plus tard, le fournisseur la dédoublonne. C'est la seule
+construction qui survit à une requête en vol — parce qu'elle n'essaie pas de la
+détecter.
+
+**Pourquoi `EXTERNALLY_VERIFIABLE` ne suffit pas.** Interroger le fournisseur
+répond à « existe-t-il un effet **maintenant** ? ». Cela permet de passer de
+`UNKNOWN` à `CONFIRMED`. Cela ne dit rien de ce qui est en vol.
+
+### Le défaut que cette épreuve a révélé au passage
+
+Le rembobinage `UNKNOWN → PLANNED` laissait `observed_at` renseigné et violait
+la contrainte `terminal_states_are_observed`. Le chemin de reprise depuis
+`UNKNOWN` **n'a donc jamais fonctionné depuis Foundation 3** : il levait une
+exception, que `guarded()` transformait en `INTERNAL`.
+
+Conséquence directe : la première version de cette épreuve adversariale était
+**verte pour la pire des raisons** — non pas parce qu'une garantie tenait, mais
+parce que le code plantait avant de pouvoir nuire. Corrigé, et c'est
+précisément pourquoi un test vert doit être expliqué avant d'être cru.
+
+### Risque résiduel, assumé et nommé
+
+La garantie de `PROVIDER_IDEMPOTENT` vient d'un **tiers**. Nous ne pouvons que
+le croire. Un fournisseur qui déclare dédoublonner sans le faire produit un
+double effet, et rien dans Jarvis ne peut l'empêcher.
+
+`tests/lab/lease-adversarial.test.ts` met ce cas en scène et **mesure les deux
+effets** plutôt que de faire semblant. C'est la frontière du système :
+
+```text
+┌── JARVIS ──────────────┐
+│ politique · mémoire    │
+│ vérification · audit   │   ← nos invariants s'appliquent
+│ identité d'opération   │
+└───────────┬────────────┘
+            │  frontière
+┌───────────▼────────────┐
+│  MONDE EXTÉRIEUR       │   ← nos invariants ne s'appliquent PAS
+└────────────────────────┘
+```
+
+**Condition de révision.** Si un fournisseur permet de sceller une requête —
+un jeton à usage unique consommé côté serveur — la frontière recule d'un cran
+et ce contrat mérite une sixième valeur. Pas avant.

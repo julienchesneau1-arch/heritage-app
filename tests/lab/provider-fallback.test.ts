@@ -36,6 +36,10 @@ import {
 } from './world.js';
 import type { Db } from '../../src/core/db/client.js';
 import type { LabStack } from './harness.js';
+import {
+  isExternalEffect,
+  mayReplayAfterUnknown,
+} from '../../src/core/types/domain.js';
 
 const enabled = databaseAvailable();
 
@@ -213,7 +217,13 @@ describe.runIf(enabled)('banc — repli entre fournisseurs', () => {
         }),
         world,
       });
-      expect(externalTool.definition.effect).toBe('EXTERNAL');
+      /* Le champ a gagné en précision avec ADR-033 : il ne dit plus seulement
+         « externe », il dit CE QU'ON A LE DROIT DE FAIRE après un UNKNOWN.
+         `EXTERNALLY_VERIFIABLE` = interrogeable, mais NON idempotent, donc
+         jamais rejouable. */
+      expect(externalTool.definition.effect).toBe('EXTERNALLY_VERIFIABLE');
+      expect(mayReplayAfterUnknown(externalTool.definition.effect)).toBe(false);
+      expect(isExternalEffect(externalTool.definition.effect)).toBe(true);
 
       // Les cinq outils du noyau, eux, sont transactionnels : une erreur y
       // signifie bien un rollback, donc l'absence d'effet.

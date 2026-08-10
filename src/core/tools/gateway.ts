@@ -22,6 +22,7 @@ import type { PolicyGate } from '../policy/gate.js';
 import type { PolicyOutcome } from '../policy/types.js';
 import type { SecretVault } from '../secrets/vault.js';
 import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domain.js';
+import { isExternalEffect, mayReplayAfterUnknown } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
 import type { OperationIdentity } from './identity.js';
@@ -393,6 +394,40 @@ export function createToolGateway(deps: {
         );
 
       case 'NO_EFFECT': {
+        /* ══ LA GARDE QU'IL MANQUAIT — ADR-033 ══════════════════════════════
+           `NO_EFFECT` est une observation à un INSTANT. Elle ne dit rien d'une
+           requête encore en vol chez le fournisseur.
+
+           Le contre-exemple mesuré (`docs/21 §2`) :
+
+             A envoie sa requête, puis gèle ou meurt
+             le bail expire — mais la requête, elle, vit toujours
+             B vérifie : le monde est encore vide → NO_EFFECT
+             B exécute                            → EFFET B
+             la requête de A aboutit enfin        → EFFET A
+
+           Aucune observation ne pouvait sauver B : au moment où il regarde,
+           il n'y a rien À VOIR. Ce n'est donc pas un défaut de vérification,
+           c'est une limite de l'observation elle-même.
+
+           Seule une garantie du FOURNISSEUR ferme le trou : s'il dédoublonne
+           sur notre identité d'opération, rejouer est sûr même si la requête
+           de A aboutit ensuite. */
+        if (!mayReplayAfterUnknown(def.effect)) {
+          return settle(
+            'UNKNOWN',
+            verificationOutcome.unknown(
+              `${def.id} n'a constaté aucun effet, mais son contrat (${def.effect}) ` +
+                "ne garantit pas qu'une requête antérieure ne soit pas encore en " +
+                'vol. Je ne rejoue pas : une absence observée n\'est pas une ' +
+                'absence garantie.',
+              // Le fournisseur a répondu, son état ne tranche pas sur l'avenir.
+              'EXTERNAL_STATE',
+            ),
+            `Reprise refusée : contrat ${def.effect} — aucune garantie d'idempotence.`,
+          );
+        }
+
         /* Le seul chemin qui autorise une nouvelle exécution — et il exige une
            affirmation POSITIVE du fournisseur, jamais une absence de preuve.
 
@@ -413,8 +448,18 @@ export function createToolGateway(deps: {
            processus mort ou celui d'un appelant bien vivant. Le compteur, lui,
            les distingue. */
         const rewound = await deps.db.query(
+          /* `observed_at` et `status` doivent être effacés en même temps :
+             la contrainte `terminal_states_are_observed` interdit un état non
+             terminal qui porterait encore une observation.
+
+             Sans cela, le rembobinage depuis `UNKNOWN` levait une exception —
+             et le chemin de reprise n'a JAMAIS fonctionné depuis Foundation 3.
+             Le défaut était masqué par `guarded()`, qui transformait le
+             plantage en `INTERNAL` : les tests passaient, pour la pire des
+             raisons (`docs/21 §3`). */
           `UPDATE tool_operations
-              SET state = 'PLANNED', recovery_detail = $3
+              SET state = 'PLANNED', recovery_detail = $3,
+                  observed_at = NULL, status = NULL
             WHERE operation_id = $1
               AND state IN ('EXECUTING', 'UNKNOWN')
               AND attempts = $2`,
@@ -859,7 +904,7 @@ export function createToolGateway(deps: {
          a fait un rollback, et l'absence d'effet est garantie par PostgreSQL —
          pas par la parole de qui que ce soit. */
       const terminal: OperationState =
-        executed.error.kind === 'TIMEOUT' || def.effect === 'EXTERNAL'
+        executed.error.kind === 'TIMEOUT' || isExternalEffect(def.effect)
           ? 'UNKNOWN'
           : 'FAILED';
       // La CAUSE de l'ignorance est écrite au registre : la reprise en aura
