@@ -37,6 +37,7 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 08 | [`docs/08_LANDSCAPE_AUDIT.md`](docs/08_LANDSCAPE_AUDIT.md) | **Audit du terrain** : ce qu'on assemble vs ce qu'on développe, brique par brique | avant de décider de coder quoi que ce soit |
 | 09 | [`docs/09_ARCHITECTURE_AUDIT_AND_GAPS.md`](docs/09_ARCHITECTURE_AUDIT_AND_GAPS.md) | **Audit d'architecture et analyse d'écarts** : ce qui doit être décidé maintenant vs plus tard | avant de reprendre le développement |
 | 10 | [`docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md`](docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md) | **Build vs Buy** sur les systèmes personnels complets (OpenClaw, OpenJarvis, SemaClaw…) | avant d'adopter une orchestration existante |
+| 11 | [`docs/11_RED_TEAM_AUDIT.md`](docs/11_RED_TEAM_AUDIT.md) | **Audit et red team** : ce qui est vrai, ce qui est faux, ce qui est dangereux — avec preuves exécutables | avant de faire confiance à ce dépôt |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.
@@ -56,7 +57,9 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 275 tests
+pnpm test                   # 341 tests
+pnpm test:redteam           # les 66 tests d'audit (docs/11)
+pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
 pnpm gate:phase2            # vérifie la porte de sortie Phase 2
@@ -123,7 +126,12 @@ Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**275 tests passent.**
+**341 tests passent**, dont 66 écrits pour l'audit de `docs/11`.
+
+Cet audit a trouvé **deux défauts critiques et sept majeurs**, reproduits et
+outillés. Le premier — le processus meurt à la première coupure de PostgreSQL —
+se corrige en cinq lignes et doit l'être avant tout usage réel. Lire `docs/11`
+avant de se fier à ce dépôt.
 
 Ce qui n'existe pas encore : Undo Engine (la capture existe, pas l'exécution),
 Data Firewall complet, Model Router, Cost Engine, modes cognitifs, voix,

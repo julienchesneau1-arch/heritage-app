@@ -103,6 +103,12 @@ personnelle. Leur fiche est donc allégée, mais leur licence est vérifiée.
 | `tsx` | 4.20.5 | MIT | Exécution TypeScript pour l'outillage | `node --experimental-strip-types` (Node 22+) |
 | `@types/node`, `@types/pg` | — | MIT | Définitions de types | — |
 | `@eslint/js` | 9.36 | MIT | Configuration ESLint de base | — |
+| `@vitest/coverage-v8` | 3.2.4 | MIT | Mesure de couverture (`pnpm test:coverage`) | `c8`, ou `node --experimental-test-coverage` |
+
+> `@vitest/coverage-v8` a été ajouté pendant la phase d'audit : la question
+> « quelle est la couverture ? » ne pouvait pas recevoir de réponse
+> reproductible sans lui. Même mainteneur que `vitest`, déjà présent ; aucune
+> exécution en production, aucune donnée vue, aucun accès réseau.
 
 ---
 
