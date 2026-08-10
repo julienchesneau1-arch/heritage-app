@@ -9,6 +9,7 @@
   },
   "scripts": {
     "jarvis": "tsx --env-file-if-exists=.env src/apps/cli/main.ts",
+    "jarvis:web": "tsx --env-file-if-exists=.env src/apps/server/main.ts",
     "jarvis:setup": "tsx --env-file-if-exists=.env ops/setup.ts",
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
@@ -24,6 +25,7 @@
     "test:tools": "vitest run tests/tools",
     "test:quarantine": "vitest run tests/quarantine",
     "test:intent": "vitest run tests/intent",
+    "test:server": "vitest run tests/server",
     "db:bootstrap": "tsx --env-file-if-exists=.env ops/db/bootstrap.ts",
     "db:migrate": "tsx --env-file-if-exists=.env ops/db/migrate.ts up",
     "db:rollback": "tsx --env-file-if-exists=.env ops/db/migrate.ts down",

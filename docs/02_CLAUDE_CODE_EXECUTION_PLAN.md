@@ -209,10 +209,18 @@ Audio Gateway abstrait.
 **Livrables.** Application iOS (4 écrans : principal, mémoire, contrôle, audit),
 App Intents (ADR-013).
 
+**Avance prise hors phase — passerelle web locale (ADR-023).** `pnpm jarvis:web`
+sert l'interface sur le réseau domestique derrière un jeton obligatoire. Ce
+n'est pas la Phase 6 anticipée : c'est le chemin le plus court vers un usage
+réel depuis un téléphone, sans écrire une seconde fois la boucle. L'application
+native reste le livrable de cette phase, et parlera à la même API.
+
 **Porte de sortie.**
 - [ ] Les contraintes d'App Intents sont respectées, pas contournées.
 - [ ] Le tableau de bord confidentialité et le journal d'audit sont lisibles par un
       humain.
+- [ ] L'application native n'introduit **aucun** chemin d'exécution qui ne passe
+      pas par l'`Assistant` partagé.
 
 ---
 

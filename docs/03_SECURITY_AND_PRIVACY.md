@@ -27,6 +27,7 @@ quelque chose, ce n'est pas une protection.
 | T8 | **Chaîne d'approvisionnement** | Mise à jour malveillante d'une dépendance ou d'un modèle | TUF (M-parmi-N) + Sigstore + LAB avant production (`07`) |
 | T9 | **Fuite de secrets** | Clé d'API dans un prompt, un log ou un message d'erreur | Secrets injectés au niveau du Tool Gateway ; jamais dans le contexte modèle |
 | T10 | **Captation invisible** | Enregistrement audio/vidéo non signalé | Indicateur système obligatoire ; aucune surveillance permanente |
+| T11 | **Appareil hostile sur le réseau local** | Objet connecté compromis, invité, ordinateur infecté sur le même Wi-Fi que la passerelle web | Jeton obligatoire en temps constant, verrouillage par adresse, écoute sur une adresse privée nommée, refus de démarrer sur chaîne d'audit rompue (§14, ADR-023) |
 
 ---
 
@@ -295,3 +296,69 @@ Une information contradictoire déclenche une réévaluation, pas un écrasement
 
 L'auto-maintenance a le droit de : redémarrer un service, reconstruire un index,
 retenter une opération, changer de modèle, effectuer un rollback. **Rien d'autre.**
+
+---
+
+## 14. Passerelle web locale
+
+Référence : PRD §30, ADR-023. Menace couverte : **T11**.
+
+Le PRD est explicite : *aucune exposition publique des bases, serveurs de
+modèles, interfaces d'administration, Home Assistant, vector store ; une seule
+passerelle authentifiée.* `pnpm jarvis:web` est cette passerelle — et rien
+d'autre n'est servi sur le réseau.
+
+### Ce qui est joignable, et par qui
+
+| Chemin | Jeton exigé | Contenu |
+|---|---|---|
+| `/`, `/app.css`, `/app.js` | non | l'interface elle-même — aucune donnée personnelle |
+| `/api/say` | **oui** | la boucle complète : intention → Policy Gate → outil → vérification → journal |
+| `/api/audit`, `/api/inbox`, `/api/diagnostic` | **oui** | lecture du journal, de l'inbox, de l'état |
+
+Les trois ressources statiques ne sont pas authentifiées, et c'est délibéré : le
+jeton arrive par le **fragment** d'URL, qui n'est jamais transmis au serveur.
+Exiger le jeton pour servir la page rendrait l'amorçage impossible sans le
+placer dans la requête — donc dans les journaux d'accès. Ces trois fichiers ne
+contiennent aucune donnée personnelle ; les révéler ne révèle rien.
+
+L'authentification est vérifiée **avant** le routage : un chemin `/api/`
+inexistant répond `401`, pas `404`. Sinon la différence entre les deux codes
+dessinerait la surface exacte de l'API pour quelqu'un qui n'a pas le jeton.
+
+### Quatre refus de démarrage
+
+Aucun n'est contournable par configuration, sauf le second — explicitement, et
+avec un avertissement à chaque démarrage.
+
+1. **Jeton absent ou faible** (< 32 caractères).
+2. **Adresse d'écoute hors réseau privé**, y compris `0.0.0.0` — le joker
+   servirait toute interface apparaissant plus tard, sans nouvelle décision.
+   Levée par `JARVIS_WEB_ALLOW_PUBLIC=yes`.
+3. **Chaîne d'audit rompue.** On n'ouvre pas au réseau une mémoire dont on ne
+   peut plus dire ce qui lui est arrivé.
+4. **Base injoignable**, avec la raison.
+
+### Ce que la passerelle ne fait pas
+
+Elle n'exécute rien elle-même : elle appelle le même `Assistant` que le CLI. Un
+chemin d'exécution propre au web serait un chemin où une barrière peut manquer.
+Le seul endroit où le serveur accepte des octets d'un inconnu est la lecture du
+corps de requête, bornée **pendant** la lecture (16 Kio) et non après.
+
+### Ce que cette passerelle ne prétend pas résoudre
+
+Le jeton est une barrière, pas un périmètre. Un appareil qui l'obtient — parce
+qu'il a été partagé, photographié, ou lu dans le `localStorage` d'un téléphone
+déverrouillé — obtient l'accès complet. Il n'y a aujourd'hui **ni révocation
+individuelle, ni distinction entre appareils, ni durée de validité** : changer
+`JARVIS_WEB_TOKEN` et redémarrer déconnecte tout le monde d'un coup. C'est
+acceptable pour un usage à un seul utilisateur sur son propre Wi-Fi. Ce ne le
+sera plus dès qu'un second appareil durable ou une seconde personne entrent dans
+le tableau — auquel cas : jetons par appareil, révocation, expiration.
+
+Le trafic est en **HTTP**, non chiffré. Sur un réseau local commuté, un tiers ne
+le voit pas passer ; sur un Wi-Fi ouvert ou partagé, il le voit — jeton compris.
+TLS local supposerait une autorité de certification à installer sur chaque
+appareil, ce qui déplace le problème sans le résoudre à cette échelle. À
+rouvrir si la passerelle sort du domicile — mais ce sera un ADR distinct.

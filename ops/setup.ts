@@ -43,6 +43,15 @@ function secret(): string {
   return randomBytes(24).toString('base64url');
 }
 
+/**
+ * Jeton de la passerelle web. Plus long que les mots de passe de base : c'est
+ * la SEULE barrière entre le réseau local et la mémoire personnelle (ADR-023).
+ * 32 octets → 43 caractères base64url, ~256 bits.
+ */
+function webToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
 /* -------------------------------------------------------------------------- */
 
 function checkNode(): void {
@@ -66,11 +75,28 @@ function ensureEnv(): EnvFile {
   step('Fichier .env');
 
   if (existsSync(ENV_PATH)) {
+    const existing = readFileSync(ENV_PATH, 'utf8');
     const values: Record<string, string> = {};
-    for (const line of readFileSync(ENV_PATH, 'utf8').split('\n')) {
+    for (const line of existing.split('\n')) {
       const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
       if (match?.[1] !== undefined) values[match[1]] = match[2] ?? '';
     }
+
+    // Une installation antérieure n'a pas de jeton web. On le COMPLÈTE sans
+    // toucher au reste : réécrire un .env existant, c'est risquer d'effacer un
+    // mot de passe qu'aucune sauvegarde ne connaît.
+    const missing = (values['JARVIS_WEB_TOKEN'] ?? '').length === 0;
+    if (missing) {
+      values['JARVIS_WEB_TOKEN'] = webToken();
+      const suffix =
+        (existing.endsWith('\n') ? '' : '\n') +
+        '\n# Passerelle web locale (`pnpm jarvis:web`). Ajouté par jarvis:setup.\n' +
+        `JARVIS_WEB_TOKEN=${values['JARVIS_WEB_TOKEN']}\n`;
+      writeFileSync(ENV_PATH, existing + suffix, { mode: 0o600 });
+      done('complété — jeton de passerelle web généré');
+      return { created: false, values };
+    }
+
     done('déjà présent, conservé');
     return { created: false, values };
   }
@@ -89,6 +115,7 @@ function ensureEnv(): EnvFile {
     JARVIS_DB_SUPERUSER: process.env['JARVIS_DB_SUPERUSER'] ?? 'postgres',
     JARVIS_DB_SUPERUSER_PASSWORD: process.env['JARVIS_DB_SUPERUSER_PASSWORD'] ?? '',
     JARVIS_CLOUD_BUDGET_MONTHLY_EUR: '0',
+    JARVIS_WEB_TOKEN: webToken(),
   };
 
   const content = [
@@ -209,6 +236,7 @@ async function main(): Promise<void> {
 
   console.log('\n  ✓ Prêt.\n');
   console.log('    pnpm jarvis        lancer l\'interface texte');
+  console.log('    pnpm jarvis:web    ouvrir la passerelle web (téléphone)');
   console.log('    pnpm test          la suite complète');
   console.log('    pnpm gate:phase2   vérifier les portes de sortie');
   if (env.created) {

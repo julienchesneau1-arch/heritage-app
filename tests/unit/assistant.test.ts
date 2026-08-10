@@ -1,0 +1,221 @@
+/**
+ * Assistant — la boucle partagée par le CLI et la passerelle web.
+ *
+ * Référence : 02 Étape C, 03 §3, ADR-023.
+ *
+ * Ces tests utilisent des doubles pour l'Intent Engine et le Tool Gateway :
+ * l'objet sous test est la BOUCLE, pas le noyau. Les cinq outils réels ne
+ * produisent aucune demande de confirmation en usage normal — impossible donc
+ * d'éprouver ce chemin de bout en bout aujourd'hui, alors que c'est exactement
+ * celui qui protège des actions irréversibles de demain.
+ */
+import { describe, expect, it } from 'vitest';
+import { createAssistant } from '../../src/core/assistant.js';
+import { err, ok, jarvisError, type Result } from '../../src/core/types/result.js';
+import type { IntentEngine, IntentProposal } from '../../src/core/intent/engine.js';
+import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/gateway.js';
+
+function intentOf(proposal: IntentProposal): IntentEngine {
+  return { propose: () => proposal };
+}
+
+const TOOL_CALL: IntentProposal = {
+  kind: 'TOOL_CALL',
+  toolId: 'payment_send',
+  input: { amount: 50, to: 'Paul' },
+  parameterProvenance: { amount: 'USER', to: 'USER' },
+  confidence: 1,
+  tier: 0,
+  userConfirms: false,
+};
+
+function success(): GatewayResult {
+  return {
+    status: 'CONFIRMED',
+    output: { id: 'x' },
+    verification: { status: 'CONFIRMED', detail: 'Relu.' },
+    policy: { decision: 'ALLOW', effectiveAutonomy: 'L2', reasons: [] },
+    eventId: 'evt-1',
+    replayed: false,
+  };
+}
+
+/** Gateway qui exige une confirmation tant que `context.userConfirmed` est faux. */
+function gatewayRequiringConfirmation(calls: ToolCall[]): ToolGateway {
+  return {
+    register: () => ok(undefined),
+    list: () => [],
+    invoke: (call: ToolCall): Promise<Result<GatewayResult>> => {
+      calls.push(call);
+      if (!call.context.userConfirmed) {
+        return Promise.resolve(
+          err(
+            jarvisError('CONFIRMATION_REQUIRED', 'Confirmer ce virement ?', {
+              tool: 'payment_send',
+              autonomy: 'L3',
+              montant: 50,
+              destinataire: 'Paul',
+            }),
+          ),
+        );
+      }
+      return Promise.resolve(ok(success()));
+    },
+  };
+}
+
+describe('Assistant', () => {
+  it('relaie une demande de précision sans rien exécuter', async () => {
+    const calls: ToolCall[] = [];
+    const assistant = createAssistant({
+      intent: intentOf({ kind: 'CLARIFY', question: 'Quoi retenir ?', understood: '' }),
+      gateway: gatewayRequiringConfirmation(calls),
+      setGuardConfirmed: () => undefined,
+    });
+
+    const reply = await assistant.say('Note que');
+    expect(reply.kind).toBe('CLARIFY');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('dit ce qui manque plutôt que « je n\'ai pas compris »', async () => {
+    const assistant = createAssistant({
+      intent: intentOf({
+        kind: 'UNSUPPORTED',
+        understood: 'un envoi de message',
+        missing: 'la capacité d\'envoyer des emails',
+      }),
+      gateway: gatewayRequiringConfirmation([]),
+      setGuardConfirmed: () => undefined,
+    });
+
+    const reply = await assistant.say('Envoie un mail à Paul');
+    expect(reply.kind).toBe('UNSUPPORTED');
+    if (reply.kind !== 'UNSUPPORTED') return;
+    expect(reply.missing).toContain('emails');
+  });
+
+  it('porte la confirmation sur les VALEURS, pas sur l\'intention résumée', async () => {
+    // 03 §3 : une confirmation qui ne montre pas le destinataire et le montant
+    // ne protège de rien face à une injection qui a modifié ces valeurs.
+    const assistant = createAssistant({
+      intent: intentOf(TOOL_CALL),
+      gateway: gatewayRequiringConfirmation([]),
+      setGuardConfirmed: () => undefined,
+    });
+
+    const reply = await assistant.say('Vire 50 € à Paul');
+    expect(reply.kind).toBe('CONFIRM');
+    if (reply.kind !== 'CONFIRM') return;
+    expect(reply.values).toEqual({ montant: '50', destinataire: 'Paul' });
+    // Ni le nom de l'outil ni le niveau d'autonomie : ce ne sont pas des
+    // valeurs sur lesquelles un humain peut se prononcer.
+    expect(Object.keys(reply.values)).not.toContain('tool');
+    expect(Object.keys(reply.values)).not.toContain('autonomy');
+  });
+
+  it('confirme la MÊME opération, sans état serveur', async () => {
+    // C'est la propriété qui rend le flux web sûr : l'Intent Engine étant
+    // déterministe, il n'y a aucune session de confirmation à détourner.
+    const calls: ToolCall[] = [];
+    const assistant = createAssistant({
+      intent: intentOf(TOOL_CALL),
+      gateway: gatewayRequiringConfirmation(calls),
+      setGuardConfirmed: () => undefined,
+    });
+
+    const asked = await assistant.say('Vire 50 € à Paul');
+    if (asked.kind !== 'CONFIRM') throw new Error('confirmation attendue');
+
+    const done = await assistant.say('Vire 50 € à Paul', {
+      operationId: asked.operationId,
+      confirm: true,
+    });
+
+    expect(done.kind).toBe('DONE');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.operationId).toBe(calls[0]?.operationId);
+    expect(calls[0]?.context.userConfirmed).toBe(false);
+    expect(calls[1]?.context.userConfirmed).toBe(true);
+  });
+
+  it('n\'exécute rien de plus que ce qui a été confirmé', async () => {
+    const calls: ToolCall[] = [];
+    const assistant = createAssistant({
+      intent: intentOf(TOOL_CALL),
+      gateway: gatewayRequiringConfirmation(calls),
+      setGuardConfirmed: () => undefined,
+    });
+
+    await assistant.say('Vire 50 € à Paul');
+    expect(calls).toHaveLength(1); // aucune exécution avant l'accord
+  });
+
+  it('remet la confirmation du Memory Guard à zéro après chaque tour', async () => {
+    // Une confirmation qui fuirait vers l'appel suivant transformerait un « oui »
+    // ponctuel en autorisation permanente.
+    const states: boolean[] = [];
+    const assistant = createAssistant({
+      intent: intentOf(TOOL_CALL),
+      gateway: {
+        register: () => ok(undefined),
+        list: () => [],
+        invoke: () => Promise.resolve(ok(success())),
+      },
+      setGuardConfirmed: (value: boolean) => states.push(value),
+    });
+
+    await assistant.say('Vire 50 € à Paul', { confirm: true });
+    expect(states).toEqual([true, false]);
+  });
+
+  it('remet la confirmation à zéro même si l\'outil lève', async () => {
+    const states: boolean[] = [];
+    const assistant = createAssistant({
+      intent: intentOf(TOOL_CALL),
+      gateway: {
+        register: () => ok(undefined),
+        list: () => [],
+        invoke: () => Promise.reject(new Error('base injoignable')),
+      },
+      setGuardConfirmed: (value: boolean) => states.push(value),
+    });
+
+    await expect(assistant.say('Vire 50 € à Paul', { confirm: true })).rejects.toThrow();
+    expect(states).toEqual([true, false]);
+  });
+
+  it('rapporte un refus de politique comme un refus, pas comme une erreur', async () => {
+    const assistant = createAssistant({
+      intent: intentOf(TOOL_CALL),
+      gateway: {
+        register: () => ok(undefined),
+        list: () => [],
+        invoke: () =>
+          Promise.resolve(err(jarvisError('POLICY_DENIED', 'Interdit par politique dure.'))),
+      },
+      setGuardConfirmed: () => undefined,
+    });
+
+    const reply = await assistant.say('Vire 50 € à Paul');
+    expect(reply.kind).toBe('DENIED');
+  });
+
+  it('transmet « retiens que » comme une confirmation, sans en redemander une', async () => {
+    // PRD §137 : exiger un second accord sur un ordre explicite de mémorisation
+    // ajouterait de la friction sans rien protéger.
+    const states: boolean[] = [];
+    const assistant = createAssistant({
+      intent: intentOf({ ...TOOL_CALL, toolId: 'memory_add', userConfirms: true }),
+      gateway: {
+        register: () => ok(undefined),
+        list: () => [],
+        invoke: () => Promise.resolve(ok(success())),
+      },
+      setGuardConfirmed: (value: boolean) => states.push(value),
+    });
+
+    await assistant.say('Retiens que Jean travaille chez Orano');
+    expect(states[0]).toBe(true);
+  });
+});

@@ -78,6 +78,54 @@ Commandes : `/audit` · `/inbox` · `/diagnostic` · `/aide` · `/quitter`
 
 ---
 
+## Sur le téléphone
+
+```bash
+pnpm jarvis:web
+```
+
+Le terminal affiche un lien à ouvrir sur le téléphone, connecté au **même
+Wi-Fi** :
+
+```text
+  Ouvre ce lien sur le téléphone, connecté au même Wi-Fi :
+
+    http://192.168.1.20:7375/#t=vraML156SBucThpMD2u_TIISg4DrP878MB6HZbcjPrI
+```
+
+Sur iPhone : **Partager → Sur l'écran d'accueil** en fait une icône qui s'ouvre
+en plein écran, sans barre d'adresse. Ce n'est pas l'application native — celle-ci
+viendra en Swift (ADR-016) et parlera à cette même API.
+
+### Ce qui encadre cette ouverture
+
+Rendre Jarvis joignable depuis le Wi-Fi, c'est le rendre joignable par **tout**
+appareil du Wi-Fi. Le lien porte donc un jeton de 256 bits, exigé sur chaque
+appel de données. Le serveur **refuse de démarrer** si le jeton manque, si
+l'adresse d'écoute sort du réseau privé, ou si la chaîne d'audit est rompue.
+Cinq échecs d'authentification verrouillent l'adresse pendant une minute — même
+avec le bon jeton ensuite.
+
+Le jeton est dans le **fragment** (`#`) du lien : un fragment n'est jamais
+transmis au serveur, donc jamais écrit dans un journal d'accès. Le navigateur le
+range une fois, retire le `#` de la barre d'adresse, puis l'envoie en en-tête.
+
+Détails et limites assumées : [`docs/03 §14`](docs/03_SECURITY_AND_PRIVACY.md) et
+ADR-023. Deux à connaître avant de s'en servir :
+
+- **le trafic est en HTTP, non chiffré.** Sur un Wi-Fi partagé ou ouvert, un
+  tiers peut lire le jeton. Réservez-le à votre réseau domestique ;
+- **il n'y a pas de révocation par appareil.** Pour couper l'accès à un
+  téléphone perdu : changer `JARVIS_WEB_TOKEN` dans `.env` et relancer — ce qui
+  déconnecte tous les appareils.
+
+```bash
+JARVIS_WEB_PORT=7376 pnpm jarvis:web    # si le port est pris
+JARVIS_WEB_HOST=192.168.1.30 pnpm jarvis:web    # choisir l'interface
+```
+
+---
+
 ## Une session réelle
 
 ```text
@@ -132,12 +180,17 @@ La chaîne est vérifiée par hash à chaque consultation.
 **Rien ne sort de la machine.**
 Aucun appel réseau. `/diagnostic` le confirme.
 
+**La passerelle web refuse de s'ouvrir sans garde-fou.**
+Videz `JARVIS_WEB_TOKEN` dans `.env`, lancez `pnpm jarvis:web` : refus de
+démarrer, avec la marche à suivre. Essayez `JARVIS_WEB_HOST=0.0.0.0` : refus
+également — le joker servirait toute interface apparaissant plus tard.
+
 ---
 
 ## Vérifier soi-même
 
 ```bash
-pnpm test            # 221 tests
+pnpm test            # 275 tests
 pnpm gate:phase0     # journal inaltérable, isolation fournisseurs, secrets
 pnpm gate:phase1     # mémoire, contexte, ambiguïté, hors ligne
 pnpm gate:phase2     # outils, idempotence, vérification, injection

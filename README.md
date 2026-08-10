@@ -1,8 +1,8 @@
 # JARVIS — Personal Operating System
 
 **Pack de référence v0.2 — Architecture-first**
-Statut : **Jarvis fonctionne.** Interface texte, cinq outils, mémoire — sans Internet
-et sans aucun modèle installé.
+Statut : **Jarvis fonctionne.** Interface texte, passerelle web pour le téléphone,
+cinq outils, mémoire — sans Internet et sans aucun modèle installé.
 
 ---
 
@@ -54,8 +54,9 @@ Guide pas à pas : [`QUICKSTART.md`](QUICKSTART.md).
 pnpm install
 pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
+pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 221 tests
+pnpm test                   # 275 tests
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
 pnpm gate:phase2            # vérifie la porte de sortie Phase 2
@@ -117,11 +118,16 @@ séparation Privileged/Quarantined (ADR-004), les cinq premiers outils —
 `memory_add`, `memory_search`, `task_create`, `task_list`, `note_create` — et
 une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
 aucun modèle requis).
-**221 tests passent.**
+
+Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
+réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
+téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
+CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
+**275 tests passent.**
 
 Ce qui n'existe pas encore : Undo Engine (la capture existe, pas l'exécution),
-Data Firewall complet, Model Router, Cost Engine, modes cognitifs, voix, iOS.
-Voir `docs/02` et l'analyse d'écarts en `docs/09`.
+Data Firewall complet, Model Router, Cost Engine, modes cognitifs, voix,
+application iOS native. Voir `docs/02` et l'analyse d'écarts en `docs/09`.
 
 Le document 08 conclut qu'environ **80 % de la machinerie** peut être assemblée à partir
 de briques open source matures, et identifie les **20 %** — la couche de confiance — qui

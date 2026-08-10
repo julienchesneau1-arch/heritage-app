@@ -163,6 +163,21 @@ d'exécution.
 **Attendu :** la vérification échoue → `FAILED`, rapporté honnêtement.
 **Interdit :** faire confiance au code de retour.
 
+### B13 — Appareil hostile sur le réseau local `CRITIQUE`
+**État :** la passerelle web tourne ; un appareil du même Wi-Fi n'a pas le jeton.
+**Attendu :** `401` sur toute route de données, y compris sur un chemin `/api/`
+inexistant ; verrouillage de l'adresse après 5 échecs, effectif même si le bon
+jeton est présenté ensuite.
+**Interdit :** qu'un message d'erreur distingue « jeton absent » de « jeton faux »,
+ou révèle la longueur attendue ; qu'un `404` dessine la surface de l'API.
+**Vérifie :** `tests/server/gateway.test.ts`.
+
+### B14 — Ouverture réseau non décidée `CRITIQUE`
+**État :** `JARVIS_WEB_HOST=0.0.0.0`, ou jeton absent, ou chaîne d'audit rompue.
+**Attendu :** refus de démarrer, avec la marche à suivre.
+**Interdit :** démarrer en signalant simplement un avertissement — un serveur qui
+démarre malgré tout est un serveur qui tournera ainsi pendant des mois.
+
 ---
 
 # C. Confidentialité et indépendance

@@ -593,3 +593,80 @@ notre Tool Gateway. À rouvrir en Phase 3+, pas avant.
 
 **Condition de révision.** Si OpenClaw introduit un mode sans exécution shell et
 sans routage cloud par défaut, réévaluer le connecteur — jamais le bus.
+
+---
+
+## ADR-023 — Passerelle web locale authentifiée, plutôt qu'une application native
+
+**Statut : RATIFIÉ** *(10 août 2026)*
+
+**Contexte.** Jarvis n'était joignable que depuis le clavier de la machine qui
+l'héberge. L'usage réel — noter une idée, ajouter une tâche, interroger la
+mémoire — arrive rarement devant ce clavier. Trois voies existaient :
+
+| Voie | Délai | Ce qu'elle coûte |
+|---|---|---|
+| Application iOS native (Swift, ADR-016) | semaines | compte développeur, cycle de signature, une seconde implémentation de la boucle |
+| Tunnel vers un service tiers (ngrok, Tailscale Funnel…) | minutes | expose Jarvis hors du domicile, dépendance à un tiers — **I5** et §30 |
+| Passerelle HTTP sur le réseau local, authentifiée | heures | élargit la surface d'attaque au Wi-Fi domestique |
+
+**Décision.** La troisième. Une passerelle HTTP servie sur **une adresse privée
+nommée**, protégée par un jeton obligatoire, sans aucune ressource distante.
+L'application iOS reste la cible (ADR-016) ; elle parlera à cette même API.
+
+**Ce que la décision change au modèle de menace — et ce qui l'encadre.**
+
+Ouvrir Jarvis au Wi-Fi domestique est un élargissement réel : la mémoire
+personnelle devient joignable par tout appareil du réseau, y compris un objet
+connecté compromis qui ne demande la permission de personne pour scanner un
+port. Cinq contraintes, toutes vérifiées par des tests :
+
+1. **Jeton obligatoire sur `/api/*`**, comparé en temps constant. 256 bits,
+   généré par `jarvis:setup`, jamais dans le dépôt.
+2. **Verrouillage par adresse** après 5 échecs, une minute. Il tient même face
+   au bon jeton : une force brute qui aurait trouvé au 6ᵉ essai est arrêtée.
+3. **Écoute sur une adresse privée nommée, jamais sur `0.0.0.0`.** Le risque
+   n'est pas l'inventaire du moment, c'est le VPN ou le partage de connexion
+   qui apparaît plus tard sans nouvelle décision. L'ouverture explicite reste
+   possible (`JARVIS_WEB_ALLOW_PUBLIC=yes`) parce qu'un garde-fou qu'on ne peut
+   pas lever se contourne en le retirant du code — mais elle est refusée par
+   défaut et signalée à chaque démarrage.
+4. **Refus de démarrer si la chaîne d'audit est rompue.** Servir la mémoire sur
+   le réseau alors qu'on ne peut plus dire ce qui lui est arrivé, c'est perdre
+   la seule chose qui rend l'incident analysable.
+5. **Aucune ressource distante dans la page**, ce qui rend tenable une CSP
+   `default-src 'self'` : une page qui ne peut charger que ses propres
+   ressources ne peut rien exfiltrer, même injectée.
+
+**Deux choix de conception qui portent la sécurité.**
+
+*Le jeton voyage dans le fragment d'URL (`#t=…`), pas dans la requête.* Un
+fragment n'est jamais transmis au serveur : il n'entre ni dans les journaux
+d'accès, ni dans l'en-tête `Referer`, ni dans l'historique d'un proxy. Le
+navigateur le range une fois dans `localStorage`, retire le fragment de la barre
+d'adresse, puis l'envoie en en-tête `Authorization` à chaque appel.
+
+*Aucun cookie, donc aucun CSRF.* Un navigateur n'attache pas spontanément un
+en-tête `Authorization` à une requête déclenchée par un autre site. Le vecteur
+n'existe pas — ce n'est pas une mitigation, c'est une absence.
+
+**Ce que la passerelle ne fait pas.** Elle n'exécute rien elle-même. Elle appelle
+le même `Assistant` que le CLI, donc le même Policy Gate, le même Memory Guard,
+le même Verification Engine et le même journal. Un chemin d'exécution propre au
+web serait un chemin où une barrière peut manquer ; il n'y en a pas.
+
+**Une propriété exploitée : la confirmation est sans état serveur.** L'Intent
+Engine étant déterministe (Tier 0, règles), rejouer le même texte produit la
+même proposition. Le client renvoie donc le texte d'origine avec la clé
+d'opération, et Jarvis redérive puis exécute. Aucune session de confirmation à
+stocker, donc aucune à détourner — et le bouton « Confirmer » reste sûr sur un
+téléphone dont le Wi-Fi vacille, par idempotence (ADR-013).
+
+**Conséquences.** `pnpm jarvis:web`. Un `JARVIS_WEB_TOKEN` dans `.env`.
+`src/core/assistant.ts` et `src/apps/runtime.ts` extraits pour que CLI et web
+partagent la boucle plutôt que de la dupliquer.
+
+**Condition de révision.** Quand l'application iOS existe, la page web reste
+utile (Android, ordinateur d'appoint) mais cesse d'être le chemin principal. Si
+l'accès hors domicile devient nécessaire, ce ne sera ni un tunnel tiers ni une
+ouverture de port : ce sera un ADR distinct, avec son propre modèle de menace.
