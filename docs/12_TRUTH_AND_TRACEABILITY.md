@@ -1,7 +1,9 @@
 # 12 — ARCHITECTURE DE VÉRITÉ ET TRAÇABILITÉ
 
-**Sprint Foundation 2 — spécification. Gel architectural maintenu : aucun code
-fonctionnel n'a été écrit pour ce document.**
+**Sprint Foundation 2 puis 2.1.** Le gel a été levé pour **une seule**
+correction — le journal d'intention (ADR-027), désormais implémenté et éprouvé
+par sept scénarios de crash réels. Tout le reste de ce document reste de la
+spécification.
 
 Trois livrables :
 
@@ -40,7 +42,7 @@ DECISION        Policy Gate : préparer un brouillon = L3
                 le destinataire vient d'une déduction → confirmation sur la VALEUR
 
 ACTION          gmail.create_draft(...)   opération 8f2a…
-                enregistrée ATTEMPTED avant l'appel (ADR-025 §B)
+                inscrite EXECUTING AVANT l'appel (ADR-027)
 
 OBSERVATION     draft_id = r-9931  ← preuve du fournisseur
                 relecture indépendante : le brouillon existe, destinataire conforme
@@ -51,7 +53,7 @@ Et le même cas qui tourne mal :
 
 ```text
 ACTION          gmail.create_draft(...)   opération 8f2a…
-                enregistrée ATTEMPTED
+                inscrite EXECUTING
 
 OBSERVATION     ─ pas de réponse en 5 s
                 ─ relecture impossible : Gmail ne répond pas
@@ -63,8 +65,9 @@ Jarvis dit alors :
 > « Je n'ai pas pu terminer : Gmail n'a pas répondu. Le brouillon n'est pas
 > confirmé comme créé. »
 
-Et surtout — **il ne réessaie pas**. Au rejeu, il trouve la ligne `ATTEMPTED`
-sans observation, relit l'état réel, et ne tranche que sur ce qu'il constate.
+Et surtout — **il ne réessaie pas**. Au rejeu, il trouve la ligne `EXECUTING`
+sans observation, interroge le fournisseur si celui-ci sait répondre, et ne
+tranche que sur ce qu'il constate.
 
 ### Ce que le contrat interdit, formulé en une ligne
 
@@ -91,8 +94,9 @@ qui ne l'est pas.
 | **`PARTIAL`** | ❌ | *aucune façon d'exprimer « 3 sur 5 »* |
 | **Identité de l'observation** | ❌ | on sait qu'une relecture a eu lieu, pas laquelle |
 | **`INTERPRETATION` explicite** | ❌ | l'Intent Engine va de la phrase à l'outil |
-| **Enregistrement avant exécution** | ❌ | ADR-025 §B — défaut trouvé |
-| **États de connaissance** | ◐ | `scope`/`scopeLabel` posés au Sprint 1, le reste absent |
+| **Enregistrement avant exécution** | ✅ | **ADR-027** — implémenté, 7 crashs éprouvés |
+| **Vérification de tentative** | ✅ | `attemptVerification` + `verifyAttempt` |
+| **États de connaissance** | ◐ | trois axes définis (`domain.ts`) ; seul `coverage` porte des données réelles |
 
 ---
 
@@ -149,7 +153,17 @@ attendu est spécifié, rien ne le prouve encore.*
 | B3 | Retour d'outil mensonger (200, rien fait) | `FAILED` — la parole de l'outil n'est pas une preuve | ✅ | `fault_lies` |
 | B4 | Outil externe malveillant | isolé derrière le contrat | ◐ | isolation des fournisseurs testée ; aucun outil externe n'existe |
 | C1 | Timeout **avant** action | `UNKNOWN`, jamais « c'est fait » | ✅ | `fault_timeout` |
-| C2 | Timeout **après** action | ne pas réessayer aveuglément | ❌ | **défaut ADR-025 §B** — l'opération n'est enregistrée qu'après |
+| C2 | Timeout **après** action | ne pas réessayer aveuglément | ✅ | **corrigé** — ADR-027, `redteam/intent-journal` |
+| C2a | Crash **avant** le journal | exécution unique à la reprise | ✅ | point A — 1 effet |
+| C2b | Crash après `PLANNED` | exécution unique | ✅ | point B — 1 effet |
+| C2c | Crash **pendant** l'appel | `UNKNOWN`, aucun rejeu | ✅ | point C — 0 effet, refus |
+| C2d | Crash **après** l'effet externe | `UNKNOWN`, **pas de doublon** | ✅ | point D — **1 effet, pas 2** |
+| C2e | Crash avant persistance du résultat | `UNKNOWN`, pas de doublon | ✅ | point E — 1 effet |
+| C2f | Crash après persistance | relecture confirme | ✅ | point F — 1 effet |
+| C2g | Redémarrage | état retrouvé, tentatives ≤ 1 | ✅ | chaque reprise est un processus neuf |
+| C2h | Fournisseur confirme l'effet | succès sans réexécution | ✅ | `verifyAttempt` → `EFFECT_CONFIRMED` |
+| C2i | Fournisseur infirme l'effet | réexécution autorisée, **une fois** | ✅ | `NO_EFFECT` |
+| C2j | Vérification non concluante | `UNKNOWN`, aucun rejeu | ✅ | `INCONCLUSIVE` |
 | C3 | Double commande | idempotence, aucun doublon | ✅ | `tools/idempotency` |
 | C4 | Rejeu dont la ressource a disparu | ne prétend pas au succès | ✅ | `tools/idempotency` |
 | C5 | Même clé, arguments différents | refus | ✅ | `tools/idempotency` |
@@ -174,12 +188,12 @@ attendu est spécifié, rien ne le prouve encore.*
 | H1 | Migration interrompue | rollback | ◐ | descente testée à chaque suite ; interruption **au milieu** non testée |
 | H2 | Mise à jour défectueuse | rollback automatique | ⏳ | aucun Update Engine |
 
-**Décompte honnête : 19 vérifiés · 8 partiels · 4 défauts ouverts · 3 impossibles
-à tester aujourd'hui.**
+**Décompte au commit courant : 30 vérifiés · 8 partiels · 3 défauts ouverts ·
+3 impossibles à tester aujourd'hui.**
 
-Les quatre `❌` sont, dans l'ordre de gravité : `C2` (double exécution
-possible), `F3`, `F4` (mémoire sans contradiction ni fraîcheur), `F1`
-(désambiguïsation). Les trois premiers sont adressés par ADR-025 §B et ADR-026.
+Les trois `❌` restants sont `F3`, `F4` (mémoire sans contradiction ni
+fraîcheur) et `F1` (désambiguïsation). Tous trois relèvent de Foundation 3.
+`C2` — le plus grave — est fermé, avec dix lignes de preuve.
 
 > **Sur les 345 tests.** Le brief a raison de ne pas leur accorder de valeur en
 > soi : une suite de 10 000 tests peut éprouver le mauvais système. Ce tableau
@@ -189,9 +203,32 @@ possible), `F3`, `F4` (mémoire sans contradiction ni fraîcheur), `F1`
 
 ---
 
-## 5. Chantier — Journal d'intention (ADR-025 §B)
+## 5. Journal d'intention — **implémenté** (ADR-027)
 
-Le plus petit des trois, et le plus urgent : il ferme `C2`.
+Le seul chantier pour lequel le gel a été levé. Il ferme `C2`.
+
+### Résultats des sept scénarios de crash
+
+Chaque ligne : un processus enfant réellement tué au point indiqué, puis un
+**second processus** qui rejoue la même clé d'opération. Ce n'est pas une
+simulation de redémarrage — c'en est un.
+
+| Point | Où le processus meurt | État retrouvé | Effets externes | Réexécution |
+|---|---|---|---|---|
+| **A** | avant l'écriture du journal | `SUCCEEDED` | **1** | oui — légitime, rien n'avait eu lieu |
+| **B** | après `PLANNED` | `SUCCEEDED` | **1** | oui — aucun appel n'était parti |
+| **C** | pendant l'appel, avant l'effet | `UNKNOWN` | **0** | **non** |
+| **D** | après l'effet externe | `UNKNOWN` | **1** | **non** — le doublon est évité |
+| **E** | avant la persistance du résultat | `UNKNOWN` | **1** | **non** |
+| **F** | après la persistance | `SUCCEEDED` | **1** | non — la relecture confirme |
+| **G** | redémarrage | — | ≤ 1 | compteur de tentatives ≤ 1 partout |
+
+**Le cas C mérite d'être lu attentivement.** L'effet n'avait en réalité *pas*
+eu lieu, et Jarvis refuse quand même de rejouer. C'est le coût assumé du
+modèle, et il est du bon côté : le doute penche toujours vers ce qui ne produit
+pas de doublon.
+
+### Analyse initiale, conservée pour mémoire
 
 | Rubrique | |
 |---|---|
@@ -337,14 +374,53 @@ vécues. Pas avant.
   **émergente**, jamais le produit.
 - Aucun outil supplémentaire, aucune voix, aucune proactivité.
 
-## 9. Les trois décisions attendues
+## 9. Les trois décisions — arbitrées le 10 août 2026
 
-| | Décision | Défaut si pas de réponse |
+| | Décision | Issue |
 |---|---|---|
-| 1 | ADR-025 §A — décomposer les états de connaissance en trois axes | j'applique la décomposition |
-| 2 | ADR-026 §A — retirer `status` et `superseded_by` du modèle | j'applique le retrait |
-| 3 | ADR-025 §B — implémenter le journal d'intention | **j'attends** : cela sort du gel |
+| 1 | Décomposer les états de connaissance en trois axes | ✅ **validée** — `KnowledgeVerdict` / `KnowledgeQuality` / `KnowledgeScope` |
+| 2 | Retirer `status` et `superseded_by` du modèle mémoire | ✅ **validée** — dérivés, jamais stockés |
+| 3 | Implémenter le journal d'intention | ✅ **validée, P0** — gel levé pour cette seule correction |
 
-La troisième est la seule qui bloque. Les deux premières sont des choix de
-modélisation que je peux porter sous ma responsabilité ; la troisième modifie le
-Tool Gateway, et le gel a été demandé explicitement.
+L'axe 2 (`VERIFIED / UNVERIFIED / STALE`) a été retenu dans la forme proposée
+par le brief plutôt que dans la mienne : trois valeurs exclusives valent mieux
+qu'un jeu de qualificatifs cumulables, parce qu'une information ne peut pas être
+à la fois fraîchement vérifiée et périmée.
+
+---
+
+## 10. Ce qui reste impossible à garantir aujourd'hui
+
+Cette section existe pour qu'aucune des lignes ci-dessus ne soit lue comme plus
+forte qu'elle ne l'est.
+
+**Les cinq outils du noyau ne savent pas vérifier une tentative.** Ils déclarent
+`NONE`, donc un crash en cours d'appel les laisse en `UNKNOWN` — sans jamais
+produire de doublon, mais sans jamais trancher non plus. Les rendre vérifiables
+suppose d'écrire la clé d'opération dans la ressource créée. **Chantier nommé,
+non fait.**
+
+**`PARTIAL` n'existe toujours pas.** Aucune façon d'exprimer « 3 destinataires
+sur 5 ». Doit exister avant le premier outil capable de réussir à moitié.
+
+**L'identité de l'observation reste absente.** On sait qu'une relecture a eu
+lieu, pas contre quelle source ni avec quel identifiant de preuve. Une
+observation sans identité n'est pas rejouable.
+
+**Les axes de connaissance ne sont pas alimentés.** `KnowledgeVerdict` et
+`KnowledgeScope` portent des valeurs réelles pour `memory_search` ;
+`KnowledgeQuality` vaut toujours `UNVERIFIED`, faute de fraîcheur et de
+relecture — deux notions qui attendent la mémoire bitemporelle.
+
+**La bitemporalité n'est pas migrée.** Le gel n'a été levé que pour ADR-027.
+
+**Le crash entre l'écriture `EXECUTING` et l'appel produit un faux `UNKNOWN`.**
+Une action qui n'a jamais eu lieu sera rapportée comme incertaine. C'est le
+biais assumé du modèle, et il ne peut pas être éliminé : il faudrait une
+transaction distribuée avec le fournisseur, ce qu'aucune API réelle n'offre.
+
+**Rien de tout cela n'a été éprouvé sous charge**, ni avec un fournisseur
+distant réel. Les sept crashs tournent contre PostgreSQL local, où le temps de
+vol est de l'ordre de la milliseconde. Un fournisseur à 800 ms de latence
+élargit chaque fenêtre — sans changer la logique, mais en rendant les états
+transitoires beaucoup plus fréquents.

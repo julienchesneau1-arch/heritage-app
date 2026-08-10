@@ -309,6 +309,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
         auditEvent: 'INCOHERENT',
         requiredSecrets: [],
         rollback: null, // contredit reversible: true
+        attemptVerification: 'NONE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -343,6 +344,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
         auditEvent: 'FORBIDDEN',
         requiredSecrets: [],
         rollback: null,
+        attemptVerification: 'NONE',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -382,6 +384,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
           auditEvent: 'PROBE',
           requiredSecrets: [], // n'en déclare aucun
           rollback: null,
+          attemptVerification: 'NONE',
         },
         inputSchema: z.object({}),
         execute: (_input, ctx) => {

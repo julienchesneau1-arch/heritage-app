@@ -9,11 +9,28 @@ pas une mise à jour de documentation.**
 
 ## 1. Ce qu'est Jarvis
 
-Jarvis est un **Personal Operating System** : une couche de confiance entre un
-utilisateur et ses données, ses outils et ses modèles.
+> **Jarvis est une couche personnelle de confiance qui transforme une intention
+> humaine en action vérifiable.**
+> *(principe directeur, ratifié le 10 août 2026)*
+
+Cette phrase est plus précise que « un assistant », et la précision compte : le
+produit n'est pas une IA qui fait des choses. C'est ce qui se tient **entre**
+plusieurs IA, vos données et le monde extérieur — et cette couche doit rester
+indépendante des modèles qui la traversent.
 
 Jarvis n'est pas un chatbot. Ce n'est pas un agent autonome à qui on donne tout.
 Ce n'est pas une démonstration technologique.
+
+### La règle de tri
+
+Le principe directeur n'est pas décoratif : c'est le filtre que doit franchir
+**toute** fonctionnalité proposée.
+
+> Est-ce que cela augmente la capacité de Jarvis à transformer une intention en
+> action **vérifiable** — ou est-ce un gadget d'IA ?
+
+Si c'est un gadget : dehors. Cette question a déjà écarté plus de travail
+qu'elle n'en a produit, et c'est le signe qu'elle fonctionne.
 
 ### Le principe fondamental
 

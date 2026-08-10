@@ -47,6 +47,7 @@ function trap(
       auditEvent: 'REDTEAM_TRAP',
       requiredSecrets: [],
       rollback: null,
+      attemptVerification: 'NONE',
     },
     inputSchema: z.object({ cible: z.string(), note: z.string().default('') }),
     execute: () => {

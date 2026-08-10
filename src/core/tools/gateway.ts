@@ -25,6 +25,7 @@ import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domai
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
 import type { VerificationEngine } from '../verification/engine.js';
+import { verificationOutcome } from '../verification/engine.js';
 import type {
   RegisteredTool,
   ToolContext,
@@ -78,11 +79,44 @@ function inputDigest(input: unknown): string {
 interface OperationRow {
   operation_id: string;
   tool_id: string;
-  status: string;
+  status: string | null;
+  state: OperationState;
   resource_kind: string | null;
   resource_id: string | null;
   input_digest: string;
+  attempts: number;
 }
+
+/**
+ * Cycle de vie d'une opération — ADR-027.
+ *
+ *   PLANNED                  décidée, rien de tenté
+ *   COMMITTED_TO_EXECUTION   barrière de durabilité, appel imminent
+ *   EXECUTING                l'appel est parti — un effet est POSSIBLE
+ *   SUCCEEDED │ FAILED │ UNKNOWN
+ *
+ * `EXECUTING` est l'état coûteux, et celui qui justifie tout le mécanisme :
+ * c'est le seul depuis lequel Jarvis ignore si le monde a changé.
+ */
+export type OperationState =
+  | 'PLANNED'
+  | 'COMMITTED_TO_EXECUTION'
+  | 'EXECUTING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'UNKNOWN';
+
+/** Les états depuis lesquels un effet externe ne peut pas être exclu. */
+const EFFECT_POSSIBLE: ReadonlySet<OperationState> = new Set<OperationState>([
+  'EXECUTING',
+  'UNKNOWN',
+]);
+
+/** Les états qui garantissent qu'aucun appel n'a été lancé. */
+const NEVER_CALLED: ReadonlySet<OperationState> = new Set<OperationState>([
+  'PLANNED',
+  'COMMITTED_TO_EXECUTION',
+]);
 
 /** Exécute avec un plafond de temps. Un outil qui ne rend pas la main ne bloque pas Jarvis. */
 async function withTimeout<T>(
@@ -124,7 +158,10 @@ export function createToolGateway(deps: {
 
   const gateway: ToolGateway = {
     register(tool: RegisteredTool): Result<void> {
-      const problems = validateDefinition(tool.definition);
+      const problems = validateDefinition(
+        tool.definition,
+        tool.verifyAttempt !== undefined,
+      );
       if (problems.length > 0) {
         // Un contrat incohérent doit faire échouer le démarrage, pas produire
         // une surprise au premier appel.
@@ -199,6 +236,134 @@ export function createToolGateway(deps: {
           cause,
         ),
       );
+    }
+  }
+
+  /**
+   * REPRISE D'UNE OPÉRATION DONT L'EFFET EST INCERTAIN — ADR-027.
+   *
+   * On arrive ici quand l'état trouvé est `EXECUTING` (le processus est mort
+   * pendant l'appel) ou `UNKNOWN` (un timeout l'a déjà laissée en suspens).
+   *
+   * La règle est simple à énoncer et coûteuse à tenir :
+   *
+   *     ON NE REJOUE JAMAIS. On cherche à SAVOIR.
+   *
+   * Trois issues, et la troisième est la plus fréquente :
+   *
+   *   l'outil sait vérifier, et confirme  → CONFIRMED, sans réexécution
+   *   l'outil sait vérifier, et infirme   → aucun effet : on peut exécuter
+   *   l'outil ne sait pas, ou doute       → UNKNOWN, et Jarvis le DIT
+   *
+   * Le dernier cas n'est pas un échec du mécanisme : c'est son résultat le
+   * plus honnête. Un système qui ne sait pas et le dit vaut infiniment mieux
+   * qu'un système qui ne sait pas et renvoie un second virement.
+   */
+  async function resumeUncertain(
+    call: ToolCall,
+    tool: RegisteredTool,
+    prior: OperationRow,
+    digest: string,
+    policy: PolicyOutcome,
+    ctx: ToolContext,
+  ): Promise<Result<GatewayResult>> {
+    const def = tool.definition;
+
+    const settle = async (
+      state: OperationState,
+      verification: VerificationOutcome,
+      detail: string,
+    ): Promise<Result<GatewayResult>> => {
+      await deps.db.query(
+        `UPDATE tool_operations
+            SET state = $2, status = $3, observed_at = now(), recovery_detail = $4
+          WHERE operation_id = $1`,
+        [call.operationId, state, verification.status, detail.slice(0, 500)],
+      );
+      const event = await deps.ledger.append({
+        actor: call.actor,
+        eventType: `${def.auditEvent}_RESUMED`,
+        tool: def.id,
+        policyDecision: 'ALLOW',
+        autonomyLevel: policy.effectiveAutonomy,
+        status: verification.status,
+        operationId: call.operationId,
+        payloadDigest: digest,
+      });
+      if (!event.ok) return event;
+      return ok({
+        status: verification.status,
+        output: null,
+        verification,
+        policy,
+        eventId: event.value.eventId,
+        replayed: true,
+      });
+    };
+
+    /* --- L'outil ne sait pas vérifier : c'est le cas des cinq outils --- */
+    if (def.attemptVerification === 'NONE' || tool.verifyAttempt === undefined) {
+      return settle(
+        'UNKNOWN',
+        verificationOutcome.unknown(
+          `Une tentative de ${def.id} était en cours et son sort est inconnu. ` +
+            'Je ne peux pas confirmer si l\'action a été exécutée, et je ne vais ' +
+            'pas la rejouer automatiquement pour éviter un doublon.',
+        ),
+        `Reprise depuis ${prior.state} : aucune vérification de tentative disponible.`,
+      );
+    }
+
+    /* --- L'outil sait vérifier : on lui demande --------------------------- */
+    const verdict = await tool.verifyAttempt(call.operationId, ctx);
+    if (!verdict.ok) {
+      return settle(
+        'UNKNOWN',
+        verificationOutcome.unknown(
+          `La vérification de la tentative a échoué (${verdict.error.message}). ` +
+            'Je ne rejoue pas : le doute ne justifie pas un doublon.',
+        ),
+        'Reprise : vérification indisponible.',
+      );
+    }
+
+    switch (verdict.value.kind) {
+      case 'EFFECT_CONFIRMED':
+        // `confirmed()` est la fabrique UNIQUE de CONFIRMED du système, et elle
+        // exige une preuve. La reprise ne fait pas exception : elle passe par
+        // le même goulot que l'exécution normale (S15).
+        return settle(
+          'SUCCEEDED',
+          verificationOutcome.confirmed({
+            observed: `reprise — ${verdict.value.detail}`,
+            ...(verdict.value.proof === undefined ? {} : { proof: verdict.value.proof }),
+          }),
+          'Reprise : effet confirmé auprès du fournisseur, aucune réexécution.',
+        );
+
+      case 'NO_EFFECT': {
+        // Le seul chemin qui autorise une nouvelle exécution — et il exige une
+        // affirmation POSITIVE du fournisseur, jamais une absence de preuve.
+        const reset = await deps.db.query(
+          `UPDATE tool_operations
+              SET state = 'PLANNED', recovery_detail = $2
+            WHERE operation_id = $1`,
+          [call.operationId, `Reprise : ${verdict.value.detail}`],
+        );
+        if (!reset.ok) return reset;
+        return gateway.invoke(call);
+      }
+
+      case 'INCONCLUSIVE':
+        return settle(
+          'UNKNOWN',
+          verificationOutcome.unknown(
+            `Vérification non concluante : ${verdict.value.detail}. ` +
+              'Je ne peux pas confirmer si l\'action a été exécutée. Je ne la ' +
+              'rejoue pas automatiquement.',
+          ),
+          'Reprise : vérification non concluante.',
+        );
     }
   }
 
@@ -339,7 +504,16 @@ export function createToolGateway(deps: {
       );
     }
 
-    /* --- 3. Idempotence ------------------------------------------------ */
+    /* --- 3. Idempotence et REPRISE (ADR-027) ---------------------------
+       Ce bloc décide du sort d'une clé d'opération déjà connue. La règle qui
+       le gouverne :
+
+           « Le système ne doit jamais déduire "non exécuté" de "aucune
+             trace". »
+
+       Elle n'est tenable que parce que la trace PRÉCÈDE tout effet externe
+       (§4 bis). L'absence de ligne devient alors une information fiable, et
+       non un pari. */
     const digest = inputDigest(parsed.value);
     const existing = await deps.db.query<OperationRow>(
       'SELECT * FROM tool_operations WHERE operation_id = $1',
@@ -362,48 +536,78 @@ export function createToolGateway(deps: {
         );
       }
 
-      // Rejeu authentique : on ne réexécute pas, on relit l'état réel.
       const replayContext: ToolContext = {
         db: deps.db,
         secrets: new Map(),
         operationId: call.operationId,
         actor: call.actor,
       };
-      const replayExecution: ToolExecution = {
-        output: null,
-        ...(prior.resource_id !== null && prior.resource_kind !== null
-          ? { resource: { kind: prior.resource_kind, id: prior.resource_id } }
-          : {}),
-      };
-      const reVerified = await tool.readBack(replayExecution, replayContext);
 
-      const verification: VerificationOutcome = reVerified.ok
-        ? reVerified.value
-        : {
-            status: 'UNKNOWN',
-            detail: `Rejeu : relecture impossible (${reVerified.error.message}).`,
-          };
+      /* --- 3a. L'opération a pu avoir un effet : on NE REJOUE PAS ------- */
+      if (EFFECT_POSSIBLE.has(prior.state)) {
+        return await resumeUncertain(call, tool, prior, digest, policy, replayContext);
+      }
 
-      const event = await deps.ledger.append({
-        actor: call.actor,
-        eventType: `${def.auditEvent}_REPLAYED`,
-        tool: def.id,
-        policyDecision: 'ALLOW',
-        autonomyLevel: policy.effectiveAutonomy,
-        status: verification.status,
-        operationId: call.operationId,
-        payloadDigest: digest,
-      });
-      if (!event.ok) return event;
+      /* --- 3b. Aucun appel n'a jamais été lancé : on peut exécuter ------ */
+      if (NEVER_CALLED.has(prior.state)) {
+        // On repart de la ligne existante plutôt que d'en créer une seconde.
+        const reset = await deps.db.query(
+          `UPDATE tool_operations SET state = 'PLANNED', recovery_detail = $2
+             WHERE operation_id = $1`,
+          [
+            call.operationId,
+            `Reprise depuis ${prior.state} : aucun appel n'avait été lancé.`,
+          ],
+        );
+        if (!reset.ok) return reset;
+      } else {
+        /* --- 3c. Rejeu d'une opération terminée : on relit l'état réel -- */
+        const replayExecution: ToolExecution = {
+          output: null,
+          ...(prior.resource_id !== null && prior.resource_kind !== null
+            ? { resource: { kind: prior.resource_kind, id: prior.resource_id } }
+            : {}),
+        };
+        const reVerified = await tool.readBack(replayExecution, replayContext);
 
-      return ok({
-        status: verification.status,
-        output: null,
-        verification,
-        policy,
-        eventId: event.value.eventId,
-        replayed: true,
-      });
+        const verification: VerificationOutcome = reVerified.ok
+          ? reVerified.value
+          : {
+              status: 'UNKNOWN',
+              detail: `Rejeu : relecture impossible (${reVerified.error.message}).`,
+            };
+
+        const event = await deps.ledger.append({
+          actor: call.actor,
+          eventType: `${def.auditEvent}_REPLAYED`,
+          tool: def.id,
+          policyDecision: 'ALLOW',
+          autonomyLevel: policy.effectiveAutonomy,
+          status: verification.status,
+          operationId: call.operationId,
+          payloadDigest: digest,
+        });
+        if (!event.ok) return event;
+
+        return ok({
+          status: verification.status,
+          output: null,
+          verification,
+          policy,
+          eventId: event.value.eventId,
+          replayed: true,
+        });
+      }
+    } else {
+      /* --- 3d. Première tentative : on INSCRIT L'INTENTION ------------- */
+      const planned = await deps.db.query(
+        `INSERT INTO tool_operations
+           (operation_id, tool_id, tool_version, state, resource_kind,
+            resource_id, input_digest, actor, attempts)
+         VALUES ($1,$2,$3,'PLANNED',NULL,NULL,$4,$5,0)`,
+        [call.operationId, def.id, def.version, digest, call.actor],
+      );
+      if (!planned.ok) return planned;
     }
 
     /* --- 4. Secrets ----------------------------------------------------
@@ -423,6 +627,37 @@ export function createToolGateway(deps: {
       actor: call.actor,
     };
 
+    /* --- 4 bis. BARRIÈRE DE DURABILITÉ (ADR-027) -----------------------
+       Deux écritures, et l'ordre est la propriété :
+
+         COMMITTED_TO_EXECUTION   la décision d'appeler est durable ; l'appel
+                                  n'est pas encore parti
+         EXECUTING                l'appel part MAINTENANT
+
+       Un arrêt entre les deux laisse `COMMITTED_TO_EXECUTION` : on sait
+       qu'aucun effet n'existe, et le rejeu peut exécuter sereinement.
+       Un arrêt après laisse `EXECUTING` : on ne sait pas, et le rejeu ne
+       rejouera jamais de lui-même.
+
+       Le biais est délibéré : le journal penche vers `UNKNOWN`, jamais vers la
+       réexécution. Un doute coûte une question à l'utilisateur ; une
+       réexécution coûte un second virement. */
+    const committed = await deps.db.query(
+      `UPDATE tool_operations
+          SET state = 'COMMITTED_TO_EXECUTION', committed_at = now()
+        WHERE operation_id = $1`,
+      [call.operationId],
+    );
+    if (!committed.ok) return committed;
+
+    const executing = await deps.db.query(
+      `UPDATE tool_operations
+          SET state = 'EXECUTING', executing_at = now(), attempts = attempts + 1
+        WHERE operation_id = $1`,
+      [call.operationId],
+    );
+    if (!executing.ok) return executing;
+
     /* --- 5. Exécution --------------------------------------------------- */
     const executed = await withTimeout(
       tool.execute(parsed.value, ctx),
@@ -431,6 +666,21 @@ export function createToolGateway(deps: {
     );
 
     if (!executed.ok) {
+      // Un timeout n'est pas un échec constaté : l'outil a peut-être abouti.
+      // L'état reflète cette différence, parce que la reprise en dépendra.
+      const terminal: OperationState =
+        executed.error.kind === 'TIMEOUT' ? 'UNKNOWN' : 'FAILED';
+      await deps.db.query(
+        `UPDATE tool_operations
+            SET state = $2, status = $3, observed_at = now(), recovery_detail = $4
+          WHERE operation_id = $1`,
+        [
+          call.operationId,
+          terminal,
+          terminal === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
+          executed.error.message.slice(0, 500),
+        ],
+      );
       await deps.ledger.append({
         actor: call.actor,
         eventType: `${def.auditEvent}_FAILED`,
@@ -474,22 +724,23 @@ export function createToolGateway(deps: {
       undoCaptured = captured.ok;
     }
 
-    /* --- 8. Registre d'opérations + journal ----------------------------- */
+    /* --- 8. Clôture de l'opération + journal -----------------------------
+       La ligne existe déjà — elle a été inscrite AVANT l'appel. On ne
+       l'insère plus, on l'OBSERVE : c'est la distinction ACTION /
+       OBSERVATION d'ADR-025, portée par les données et non par le discours. */
     const recorded = await deps.db.query(
-      `INSERT INTO tool_operations
-         (operation_id, tool_id, tool_version, status, resource_kind,
-          resource_id, input_digest, actor)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (operation_id) DO NOTHING`,
+      `UPDATE tool_operations
+          SET state = $2, status = $3, resource_kind = $4, resource_id = $5,
+              observed_at = now()
+        WHERE operation_id = $1`,
       [
         call.operationId,
-        def.id,
-        def.version,
+        verification.status === 'FAILED' ? 'FAILED'
+          : verification.status === 'UNKNOWN' ? 'UNKNOWN'
+          : 'SUCCEEDED',
         verification.status,
         resource?.kind ?? null,
         resource?.id ?? null,
-        digest,
-        call.actor,
       ],
     );
     if (!recorded.ok) return recorded;

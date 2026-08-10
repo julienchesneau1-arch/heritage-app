@@ -48,6 +48,10 @@ export function taskCreateTool(): RegisteredTool {
       auditEvent: 'TASK_CREATED',
       requiredSecrets: [],
       rollback: 'Passer la tâche à CANCELLED via task_cancel.',
+      // Aucun de ces outils ne sait dire après coup si une tentative a eu un
+      // effet : ils n'écrivent pas la clé d'opération dans la ressource créée.
+      // La reprise conclura donc UNKNOWN, et refusera de rejouer (ADR-027).
+      attemptVerification: 'NONE',
     },
     inputSchema: TaskCreateInput,
 
@@ -146,6 +150,10 @@ export function taskListTool(): RegisteredTool {
       auditEvent: 'TASK_LISTED',
       requiredSecrets: [],
       rollback: null,
+      // Aucun de ces outils ne sait dire après coup si une tentative a eu un
+      // effet : ils n'écrivent pas la clé d'opération dans la ressource créée.
+      // La reprise conclura donc UNKNOWN, et refusera de rejouer (ADR-027).
+      attemptVerification: 'NONE',
     },
     inputSchema: TaskListInput,
 

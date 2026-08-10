@@ -86,6 +86,28 @@ export interface ToolDefinition {
 
   /** Comment défaire, quand c'est possible. `null` = irréversible. */
   readonly rollback: string | null;
+
+  /**
+   * L'outil sait-il dire, APRÈS COUP, si une tentative donnée a eu un effet ?
+   *
+   * Référence : ADR-027.
+   *
+   * C'est la question qui décide du sort d'une opération restée en
+   * `EXECUTING` — le processus est mort pendant l'appel, et Jarvis ignore si
+   * le monde a changé.
+   *
+   *   `NONE`               aucune vérification possible. La seule conduite
+   *                        honnête est alors `UNKNOWN` + refus de rejouer.
+   *   `BY_OPERATION_KEY`   le fournisseur sait répondre à « as-tu déjà traité
+   *                        l'opération 8f2a… ? ». C'est la seule forme de
+   *                        vérification qui soit réellement idempotente : elle
+   *                        ne dépend pas d'une ressource dont on aurait perdu
+   *                        l'identifiant.
+   *
+   * Déclarer `BY_OPERATION_KEY` sans fournir `verifyAttempt` est un défaut de
+   * contrat, refusé à l'enregistrement.
+   */
+  readonly attemptVerification: 'NONE' | 'BY_OPERATION_KEY';
 }
 
 /** Ce que le Gateway fournit à l'outil au moment de l'exécution. */
@@ -148,6 +170,18 @@ export interface VerificationOutcome {
  * entrées viennent d'un modèle, donc elles franchissent Zod avant d'exister
  * en tant que type. `defineTool` restaure le typage à l'intérieur.
  */
+/**
+ * Ce qu'une vérification de tentative peut établir.
+ *
+ * `INCONCLUSIVE` n'est pas un échec de la vérification : c'est son résultat le
+ * plus fréquent et le plus important. Le confondre avec `NO_EFFECT` produirait
+ * exactement le double envoi qu'on cherche à empêcher.
+ */
+export type AttemptVerdict =
+  | { readonly kind: 'EFFECT_CONFIRMED'; readonly detail: string; readonly proof?: string }
+  | { readonly kind: 'NO_EFFECT'; readonly detail: string }
+  | { readonly kind: 'INCONCLUSIVE'; readonly detail: string };
+
 export interface RegisteredTool {
   readonly definition: ToolDefinition;
   parseInput(raw: unknown): Result<unknown>;
@@ -157,6 +191,13 @@ export interface RegisteredTool {
     execution: ToolExecution,
     ctx: ToolContext,
   ): Promise<Result<VerificationOutcome>>;
+  /**
+   * « Cette opération a-t-elle déjà eu un effet ? »
+   *
+   * Présente uniquement si `attemptVerification` vaut `BY_OPERATION_KEY`.
+   * Appelée à la reprise, jamais pendant l'exécution normale.
+   */
+  verifyAttempt?(operationId: string, ctx: ToolContext): Promise<Result<AttemptVerdict>>;
 }
 
 /**
@@ -173,9 +214,14 @@ export function defineTool<I>(spec: {
     execution: ToolExecution,
     ctx: ToolContext,
   ) => Promise<Result<VerificationOutcome>>;
+  verifyAttempt?: (
+    operationId: string,
+    ctx: ToolContext,
+  ) => Promise<Result<AttemptVerdict>>;
 }): RegisteredTool {
   return {
     definition: spec.definition,
+    ...(spec.verifyAttempt === undefined ? {} : { verifyAttempt: spec.verifyAttempt }),
 
     parseInput(raw: unknown): Result<unknown> {
       const parsed = spec.inputSchema.safeParse(raw);
@@ -239,7 +285,10 @@ export function defineTool<I>(spec: {
  * Appelé à l'enregistrement : un contrat incohérent doit faire échouer le
  * démarrage, pas produire un comportement surprenant au premier appel.
  */
-export function validateDefinition(definition: ToolDefinition): readonly string[] {
+export function validateDefinition(
+  definition: ToolDefinition,
+  hasVerifyAttempt = false,
+): readonly string[] {
   const problems: string[] = [];
 
   if (definition.autonomy === 'L0') {
@@ -284,6 +333,15 @@ export function validateDefinition(definition: ToolDefinition): readonly string[
 
   if (definition.auditEvent.length === 0) {
     problems.push(`${definition.id} doit déclarer un événement d'audit.`);
+  }
+
+  // Un outil qui promet de savoir vérifier une tentative, sans savoir le
+  // faire, est pire qu'un outil qui l'avoue : la reprise croirait pouvoir
+  // trancher et conclurait au hasard.
+  if (definition.attemptVerification === 'BY_OPERATION_KEY' && !hasVerifyAttempt) {
+    problems.push(
+      `${definition.id} déclare BY_OPERATION_KEY sans fournir verifyAttempt.`,
+    );
   }
 
   return problems;

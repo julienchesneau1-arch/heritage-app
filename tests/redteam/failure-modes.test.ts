@@ -43,6 +43,7 @@ function faulty(
       auditEvent: 'REDTEAM_FAULT',
       requiredSecrets: [],
       rollback: null,
+      attemptVerification: 'NONE',
     },
     inputSchema: z.object({ valeur: z.string() }),
     async execute() {

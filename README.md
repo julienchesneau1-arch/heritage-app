@@ -1,6 +1,10 @@
 # JARVIS — Personal Operating System
 
 **Pack de référence v0.2 — Architecture-first**
+
+> **Jarvis est une couche personnelle de confiance qui transforme une intention
+> humaine en action vérifiable.**
+
 Statut : **Jarvis fonctionne.** Interface texte, passerelle web pour le téléphone,
 cinq outils, mémoire — sans Internet et sans aucun modèle installé.
 
@@ -38,7 +42,7 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 09 | [`docs/09_ARCHITECTURE_AUDIT_AND_GAPS.md`](docs/09_ARCHITECTURE_AUDIT_AND_GAPS.md) | **Audit d'architecture et analyse d'écarts** : ce qui doit être décidé maintenant vs plus tard | avant de reprendre le développement |
 | 10 | [`docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md`](docs/10_EXISTING_TECHNOLOGY_BENCHMARK.md) | **Build vs Buy** sur les systèmes personnels complets (OpenClaw, OpenJarvis, SemaClaw…) | avant d'adopter une orchestration existante |
 | 11 | [`docs/11_RED_TEAM_AUDIT.md`](docs/11_RED_TEAM_AUDIT.md) | **Audit et red team** : ce qui est vrai, ce qui est faux, ce qui est dangereux — avec preuves exécutables | avant de faire confiance à ce dépôt |
-| 12 | [`docs/12_TRUTH_AND_TRACEABILITY.md`](docs/12_TRUTH_AND_TRACEABILITY.md) | **Architecture de vérité** : le contrat `SOURCE → … → OBSERVATION`, la matrice adversariale, et trois chantiers spécifiés | avant de brancher le contexte ou un modèle |
+| 12 | [`docs/12_TRUTH_AND_TRACEABILITY.md`](docs/12_TRUTH_AND_TRACEABILITY.md) | **Architecture de vérité** : le contrat `SOURCE → … → OBSERVATION`, la matrice adversariale, le journal d'intention | avant de brancher le contexte ou un modèle |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.
@@ -58,8 +62,8 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 345 tests
-pnpm test:redteam           # les 70 tests d'audit (docs/11)
+pnpm test                   # 358 tests
+pnpm test:redteam           # les 83 tests d'audit et de red team
 pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
 pnpm gate:phase1            # vérifie la porte de sortie Phase 1
@@ -127,7 +131,7 @@ Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**345 tests passent**, dont 70 écrits pour l'audit de `docs/11`.
+**358 tests passent**, dont 83 écrits pour l'audit et la red team.
 
 Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
 Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit

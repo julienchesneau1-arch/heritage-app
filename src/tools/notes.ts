@@ -48,6 +48,10 @@ export function noteCreateTool(): RegisteredTool {
       auditEvent: 'NOTE_CREATED',
       requiredSecrets: [],
       rollback: 'Supprimer la note via note_delete.',
+      // Aucun de ces outils ne sait dire après coup si une tentative a eu un
+      // effet : ils n'écrivent pas la clé d'opération dans la ressource créée.
+      // La reprise conclura donc UNKNOWN, et refusera de rejouer (ADR-027).
+      attemptVerification: 'NONE',
     },
     inputSchema: NoteCreateInput,
 

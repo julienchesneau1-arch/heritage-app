@@ -834,11 +834,13 @@ Exemples, avec les trois axes :
 | « Aucun devis dans ce à quoi j'ai accès » | `UNKNOWN` | — | `NOT_AUTHORIZED` (emails) |
 | « Je ne sais pas chercher dans tes documents » | `UNKNOWN` | — | `OUT_OF_SCOPE` |
 
-**Décision demandée :** valider cette décomposition, ou imposer l'énumération
-plate. Je recommande la décomposition ; je l'appliquerai telle quelle sauf
-instruction contraire.
+**Issue :** validée. Les trois axes sont définis dans `src/core/types/domain.ts`.
+L'axe 2 a été retenu dans la forme du brief — `VERIFIED / UNVERIFIED / STALE`,
+trois valeurs exclusives — plutôt que dans la mienne : une information ne peut
+pas être à la fois fraîchement vérifiée et périmée.
 
-### §B — Arbitrage ouvert : une opération doit être enregistrée AVANT d'être tentée
+### §B — Arbitré et CORRIGÉ : une opération est enregistrée AVANT d'être tentée
+*(validé le 10 août 2026, implémenté en ADR-027)*
 
 **Défaut trouvé en écrivant cet ADR**, et il appartient au domaine
 `ACTION → OBSERVATION`.
@@ -871,9 +873,8 @@ cas le plus délicat : *l'action a peut-être eu lieu*. Il ne réexécute pas, i
 **relit l'état réel** — ce que le Gateway sait déjà faire — et rend `UNKNOWN`
 si la relecture ne tranche pas.
 
-**Décision demandée :** cette correction touche le Tool Gateway, donc du code
-fonctionnel. Elle sort du gel. Je la spécifie ici et **ne l'implémente pas**
-sans accord.
+**Issue :** validée en P0, gel levé pour cette seule correction. Implémentée et
+éprouvée par sept scénarios de crash réels — voir **ADR-027** et `docs/12 §5`.
 
 **Conséquences.** Nouveau document `docs/12`. `PARTIAL` et l'identité
 d'observation entrent dans le périmètre du Sprint 2 ; le journal d'intention
@@ -982,7 +983,9 @@ représenter. Le modèle bitemporel rend la contradiction *exprimable* ; il ne l
 détecte pas. La détection exige un `(subject, predicate)` structuré — donc une
 extraction — et c'est le vrai chantier du Sprint 2.
 
-**Décision demandée :** valider le retrait de `status` et de `superseded_by`.
+**Issue :** validé le 10 août 2026, avec une contrainte ajoutée par le
+propriétaire : *la bitemporalité ne doit pas devenir une complexité permanente
+pour le reste du code*. La vue `memories_current` n'est donc pas facultative.
 
 **Conséquences.** Migration à écrire (non écrite : gel). `docs/12 §3` en donne
 la forme et les tests exigés.
@@ -990,3 +993,81 @@ la forme et les tests exigés.
 **Condition de révision.** Si le coût de lecture se révèle insoutenable à
 l'usage, on peut dénormaliser un indicateur `is_current` — **calculé par
 trigger**, jamais écrit par l'applicatif. Jamais l'inverse.
+
+---
+
+## ADR-027 — Journal d'intention : l'absence de trace doit être une information
+
+**Statut : RATIFIÉ et IMPLÉMENTÉ** *(10 août 2026)*
+
+**Contexte.** Le Tool Gateway vérifiait l'idempotence, exécutait, **puis**
+enregistrait l'opération. Un arrêt pendant l'exécution ne laissait donc aucune
+ligne — et un rejeu avec la même clé, ne trouvant rien, **réexécutait**.
+
+Nul pour les cinq outils actuels : ils écrivent dans PostgreSQL, de façon
+transactionnelle. **Double envoi** pour un outil d'email. C'est la différence
+entre un agent conversationnel et un système capable d'agir dans le monde.
+
+**Décision.** Toute action est inscrite **avant** d'être tentée.
+
+```text
+PLANNED                  décidée, rien de tenté
+    ↓
+COMMITTED_TO_EXECUTION   barrière de durabilité, appel imminent
+    ↓
+EXECUTING                l'appel est parti — un effet est POSSIBLE
+    ↓
+SUCCEEDED │ FAILED │ UNKNOWN
+```
+
+La règle qui gouverne l'ensemble :
+
+> **Le système ne doit jamais déduire « non exécuté » de « aucune trace ».**
+
+Elle n'est tenable *que parce que* la trace précède tout effet externe. C'est
+une inversion de dépendance : l'absence de ligne cesse d'être un pari pour
+devenir une information — mais seulement au prix de l'ordre d'écriture.
+
+### Le biais est délibéré : vers `UNKNOWN`, jamais vers la réexécution
+
+Un arrêt entre `COMMITTED_TO_EXECUTION` et `EXECUTING` laisse un état d'où l'on
+sait qu'aucun appel n'est parti. Un arrêt après laisse `EXECUTING` : on ne sait
+pas. Et si l'écriture `EXECUTING` aboutit alors que le processus meurt juste
+avant l'appel, on conclura `UNKNOWN` pour une action qui n'a jamais eu lieu.
+
+**C'est voulu.** Un doute coûte une question à l'utilisateur ; une réexécution
+coûte un second virement.
+
+### La reprise cherche à savoir, elle ne rejoue jamais
+
+Depuis `EXECUTING` ou `UNKNOWN`, trois issues :
+
+| Ce que dit le fournisseur | Conduite |
+|---|---|
+| `EFFECT_CONFIRMED` | `CONFIRMED`, **sans réexécution** |
+| `NO_EFFECT` | seul chemin qui rouvre l'exécution — exige une affirmation **positive** d'absence |
+| `INCONCLUSIVE` — ou aucune vérification possible | `UNKNOWN`, et Jarvis le dit |
+
+Le contrat d'outil déclare donc `attemptVerification: 'NONE' | 'BY_OPERATION_KEY'`.
+Promettre `BY_OPERATION_KEY` sans fournir `verifyAttempt` est refusé **à
+l'enregistrement** : un outil qui prétend savoir vérifier sans savoir le faire
+est pire qu'un outil qui l'avoue — la reprise croirait pouvoir trancher.
+
+**Les cinq outils du noyau déclarent `NONE`.** C'est honnête et c'est une dette
+nommée : les rendre vérifiables suppose d'écrire la clé d'opération dans la
+ressource créée.
+
+### Aucun rejeu automatique
+
+`maxRetries` figure dans les contrats et n'est **consommé par personne**. C'est
+délibéré tant que la sémantique d'`UNKNOWN` n'est pas éprouvée en usage réel.
+Un test structurel interdit d'en introduire un par inadvertance.
+
+**Vérification.** Sept points d'arrêt, chacun dans un processus enfant réellement
+tué, chacun suivi d'un **vrai redémarrage** qui rejoue la même clé. Aucun
+scénario ne produit deux effets ; le compteur de tentatives ne dépasse jamais 1.
+Voir `docs/12 §4`.
+
+**Condition de révision.** Si un fournisseur impose une sémantique de reprise
+incompatible, elle s'exprime dans son adaptateur via `verifyAttempt` — jamais en
+assouplissant le Gateway.

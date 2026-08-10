@@ -66,6 +66,10 @@ export function memoryAddTool(
       auditEvent: 'MEMORY_ADDED',
       requiredSecrets: [],
       rollback: 'Marquer la mémoire DELETED via memory_forget.',
+      // Aucun de ces outils ne sait dire après coup si une tentative a eu un
+      // effet : ils n'écrivent pas la clé d'opération dans la ressource créée.
+      // La reprise conclura donc UNKNOWN, et refusera de rejouer (ADR-027).
+      attemptVerification: 'NONE',
     },
     inputSchema: MemoryAddInput,
 
@@ -172,6 +176,10 @@ export function memorySearchTool(search: HybridSearch): RegisteredTool {
       auditEvent: 'MEMORY_SEARCHED',
       requiredSecrets: [],
       rollback: null, // une lecture ne se défait pas
+      // Aucun de ces outils ne sait dire après coup si une tentative a eu un
+      // effet : ils n'écrivent pas la clé d'opération dans la ressource créée.
+      // La reprise conclura donc UNKNOWN, et refusera de rejouer (ADR-027).
+      attemptVerification: 'NONE',
     },
     inputSchema: MemorySearchInput,
 
@@ -204,6 +212,33 @@ export function memorySearchTool(search: HybridSearch): RegisteredTool {
            * chose, sinon l'utilisateur ne saura jamais ce qui n'a PAS été
            * consulté.
            */
+          knowledge: {
+            verdict: found.value.merged.length > 0 ? 'KNOWN' : 'UNKNOWN',
+            // Une mémoire relue n'est pas pour autant re-vérifiée contre le
+            // monde. `VERIFIED` exigerait une relecture de la source d'origine,
+            // et `STALE` une notion de fraîcheur — l'un et l'autre attendent la
+            // mémoire bitemporelle (ADR-026).
+            quality: 'UNVERIFIED',
+            coverage: [
+              {
+                source: 'mémoire personnelle',
+                scope: 'IN_SCOPE',
+                detail: found.value.degraded
+                  ? 'consultée, sans la voie sémantique'
+                  : 'consultée',
+              },
+              {
+                source: 'web',
+                scope: 'OUT_OF_SCOPE',
+                detail: 'aucune capacité de recherche web',
+              },
+              {
+                source: 'documents',
+                scope: 'OUT_OF_SCOPE',
+                detail: 'aucune capacité de lecture de documents',
+              },
+            ],
+          },
           scope: 'MEMOIRE_PERSONNELLE',
           scopeLabel:
             'recherche limitée à ta mémoire personnelle — ni web, ni documents',

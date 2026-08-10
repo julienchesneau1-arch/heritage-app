@@ -256,6 +256,76 @@ export const MemoryKind = z.enum([
 export type MemoryKind = z.infer<typeof MemoryKind>;
 
 /* -------------------------------------------------------------------------- */
+/* États de connaissance — ADR-025 §A                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * « Que sais-tu, au juste ? »
+ *
+ * TROIS AXES INDÉPENDANTS, ET C'EST LE POINT.
+ *
+ * Une énumération unique aurait paru plus simple une semaine, puis serait
+ * devenue indécidable : que vaut une information à la fois contradictoire et
+ * périmée ? Le code aurait dû choisir, et aurait choisi mal.
+ *
+ * Les trois axes se combinent librement :
+ *
+ *   KNOWN   + STALE      + IN_SCOPE        « 4 800 €, mais ça date de 8 mois »
+ *   KNOWN   + VERIFIED   + IN_SCOPE        « 4 800 €, relu à l'instant »
+ *   UNKNOWN + UNVERIFIED + NOT_AUTHORIZED  « rien trouvé — tes emails me sont fermés »
+ */
+
+/** Axe 1 — que sait-on ? */
+export const KnowledgeVerdict = z.enum([
+  'KNOWN', // une réponse existe
+  'UNKNOWN', // aucune réponse dans ce qui a été consulté
+  'CONFLICTING', // plusieurs réponses incompatibles, sans arbitrage possible
+]);
+export type KnowledgeVerdict = z.infer<typeof KnowledgeVerdict>;
+
+/** Axe 2 — quel crédit lui accorder ? */
+export const KnowledgeQuality = z.enum([
+  'VERIFIED', // relu contre l'état réel
+  'UNVERIFIED', // jamais recoupé depuis l'enregistrement
+  'STALE', // recoupé autrefois, mais l'information a vieilli
+]);
+export type KnowledgeQuality = z.infer<typeof KnowledgeQuality>;
+
+/**
+ * Axe 3 — où a-t-on cherché, et surtout : où n'a-t-on PAS cherché ?
+ *
+ * C'est le prolongement direct du `scope` posé au Sprint 1. Il répond à la
+ * question que l'utilisateur ne pense pas à poser, et dont dépend pourtant
+ * toute la valeur de la réponse.
+ */
+export const KnowledgeScope = z.enum([
+  'IN_SCOPE', // la source était accessible et a été consultée
+  'OUT_OF_SCOPE', // Jarvis ne sait pas atteindre cette source — capacité absente
+  'NOT_AUTHORIZED', // la source existe, l'accès n'a pas été accordé
+]);
+export type KnowledgeScope = z.infer<typeof KnowledgeScope>;
+
+/** Ce qu'une source a donné, et ce qu'elle n'a pas pu donner. */
+export interface SourceCoverage {
+  readonly source: string;
+  readonly scope: KnowledgeScope;
+  /** Lisible par un humain. Affiché tel quel, jamais reformulé. */
+  readonly detail: string;
+}
+
+/**
+ * Une réponse complète : le verdict, sa qualité, et la couverture réelle.
+ *
+ * Les trois voyagent ensemble. Séparer le verdict de sa couverture, c'est
+ * rendre possible « je n'ai rien trouvé » sans « je n'ai pas regardé partout ».
+ */
+export interface KnowledgeAnswer {
+  readonly verdict: KnowledgeVerdict;
+  readonly quality: KnowledgeQuality;
+  readonly coverage: readonly SourceCoverage[];
+}
+
+/* -------------------------------------------------------------------------- */
 /* Modes — PRD §66                                                            */
 /* -------------------------------------------------------------------------- */
 
