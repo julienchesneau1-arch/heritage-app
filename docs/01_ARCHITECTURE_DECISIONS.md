@@ -1569,3 +1569,173 @@ du registre lui-même.
 **Condition de révision.** Chaque nouveau contrat candidat doit d'abord passer
 par un contre-exemple : *quelle séquence rendrait cette garantie fausse ?* Si
 la question n'a pas de réponse écrite, le contrat n'entre pas au registre.
+
+---
+
+## ADR-035 — Sémantique du bail, et cloisonnement par génération
+
+**Statut :** accepté (Foundation 5.1). **Corrige un défaut MESURÉ**
+(`docs/23 §6`). **Précise ADR-032 / ADR-033.**
+
+### Le défaut
+
+Mesuré, pas supposé :
+
+```text
+opération en EXECUTING, démarrée il y a une heure
+B reprend et clôt      →  state = SUCCEEDED, « repris par B »
+A, zombie, revient     →  state = UNKNOWN,   « écriture tardive de A »
+                          ═══════════════════════════════════════════
+état final : celui de A
+```
+
+L'écriture terminale du Gateway était inconditionnelle. Un exécutant dont
+l'autorité avait expiré possédait exactement les mêmes droits qu'un exécutant
+courant. Jarvis racontait l'histoire de A à propos d'un monde façonné par B.
+
+### Ce qu'est un bail — une phrase, et pas une autre
+
+> Jusqu'à cet instant, cet exécutant possède le **droit logique d'écrire** dans
+> l'état de cette opération.
+
+Ce qu'un bail n'est **jamais** :
+
+| ✗ | Pourquoi |
+|---|---|
+| une mesure de la vie d'un processus | `docs/21` — mesuré faux |
+| une preuve d'absence d'effet externe | ADR-033 |
+| une annulation de requête | rien dans la pile ne l'offre |
+
+### Sémantique, champ par champ
+
+La question posée n'était pas *« quelle horloge est juste ? »* mais *« quelle
+horloge peut ouvrir une reprise prématurée ? »*. La réponse diffère selon le
+champ, et c'est pour cela que le tableau existe.
+
+| Champ | Horloge | Évaluée | Dans quelle transaction | Propriété |
+|---|---|---|---|---|
+| `lease_generation` | **aucune** | à l'acquisition | celle du `UPDATE` | **sûreté** |
+| `lease_expires_at` | `clock_timestamp()` | à l'acquisition | celle du `UPDATE` | vivacité |
+| `executing_at` | `clock_timestamp()` | à l'acquisition | celle du `UPDATE` | vivacité |
+| contrôle d'expiration | `now()` côté base | à la reprise | celle du `SELECT` | vivacité |
+| `lease_owner` | — | à l'acquisition | — | diagnostic seul |
+
+**La ligne qui compte est la première.** Le droit d'écrire est porté par la
+**génération**, pas par le temps. Aucune horloge ne participe à la sûreté :
+un dérèglement d'horloge coûte de la disponibilité, jamais de la sûreté.
+
+L'échéance ne sert qu'à décider **quand un autre exécutant a le droit de
+prendre la relève**. Elle ne conclut rien sur le monde.
+
+#### Pourquoi `clock_timestamp()` et non `now()`
+
+`now()` est un alias de `transaction_timestamp()` : il rend l'heure de **début
+de transaction**. Mesuré en couche 01 : figé à 0 ms sur deux secondes réelles.
+
+La direction de l'erreur décide de tout :
+
+```text
+now() figé au CONTRÔLE   →  bail SUR-estimé   →  reprise BLOQUÉE     →  DISPONIBILITÉ
+now() figé à l'ÉCRITURE  →  bail SOUS-estimé  →  reprise PRÉMATURÉE  →  SÛRETÉ
+```
+
+Le second est le contre-exemple de `docs/23 §3.2` : une estampille écrite dans
+une transaction longue naît vieille, et l'opération est déclarée expirée à
+l'instant où elle démarre.
+
+**Mesure d'exposition réelle** (`docs/24 §2`) : le Gateway est structurellement
+immun. `deps.db.query()` prend une connexion distincte du pool ; la transaction
+d'un appelant ne l'englobe jamais. Mesuré : estampille écrite 2,6 s après le
+`now()` de la transaction enveloppante, âgée de 39 ms à la relecture.
+
+> La protection principale est l'**isolation de connexion**, pas la fonction
+> d'horloge. `clock_timestamp()` est une défense en profondeur — et on le dit,
+> plutôt que de laisser croire qu'une ligne de SQL a fermé le sujet.
+
+### Décision — le cloisonnement
+
+1. `lease_generation INTEGER NOT NULL DEFAULT 0`, monotone.
+2. Frappée dans le **même compare-and-swap** que la prise de bail : deux
+   exécutants ne peuvent jamais obtenir la même génération.
+3. **Toute** écriture d'un détenteur de bail passe par une primitive unique,
+   `writeAuthoritative`, gardée par `lease_generation = <celle du détenteur>`.
+4. Une écriture périmée n'est **pas une erreur** : elle rend `false`. Être
+   périmé n'est pas une panne, c'est une perte d'autorité.
+5. Nouvelle famille d'erreur `STALE_EXECUTOR`, distincte d'`OPERATION_IN_FLIGHT` :
+   l'un n'a jamais eu l'autorité, l'autre l'a eue et l'a perdue.
+
+**Une seule garde pour toutes les colonnes.** Un cloisonnement écrit colonne par
+colonne aurait la faiblesse qu'il prétend corriger : un `SET` oublié rouvrirait
+le passage sans que rien ne le signale.
+
+### La catégorie d'exception, nommée plutôt que tolérée
+
+Deux écritures **ne peuvent pas** être cloisonnées : ce sont celles qui rendent
+la frappe du bail possible.
+
+```text
+PLANNED                 → COMMITTED_TO_EXECUTION
+COMMITTED_TO_EXECUTION  → PLANNED   (reprise, aucun appel n'est parti)
+```
+
+Leur garde est un **littéral d'état d'où aucun effet externe n'est possible**.
+Un exécutant périmé est en `EXECUTING` ou au-delà : la clause l'exclut. La
+propriété est vérifiée par test, pas affirmée
+(`fencing-adversarial.test.ts`).
+
+### L'invariant structurel I17
+
+> Tout `UPDATE tool_operations` de `src/` est soit cloisonné par
+> `lease_generation`, soit cantonné à un état d'où aucun effet n'est possible.
+
+Fermé par défaut : toute forme que l'analyseur ne sait pas lire est comptée
+comme non gardée. Six contrôles négatifs attaquent l'analyseur, dont la faute
+exacte de `docs/23 §6` et la garde par `attempts` qui a réellement échoué —
+sans quoi « aucune violation » ne prouverait rien.
+
+**Ce qu'I17 ne prouve pas, et il faut le dire ici :** il lit du texte. Il
+établit qu'une garde est **écrite**, pas qu'elle porte la bonne valeur. La
+sémantique est établie par les épreuves comportementales. Les deux sont
+nécessaires, aucun ne remplace l'autre.
+
+### LA FRONTIÈRE — à ne jamais déplacer
+
+```text
+le cloisonnement PROTÈGE       l'état interne de Jarvis contre ses anciens
+                               exécutants
+
+le cloisonnement NE PROTÈGE    le monde extérieur contre une requête déjà
+PAS                            partie
+
+    fencing ≠ annulation ≠ idempotence ≠ vérification ≠ absence d'effet
+```
+
+Un test mesure explicitement la moitié négative : A est déclaré périmé, son
+écriture est refusée — **et son effet existe quand même dans le monde**. Un
+système qui conclurait « écriture refusée, donc pas d'effet » aurait remplacé
+un défaut par un mensonge.
+
+### Le journal n'est pas effacé, il est marqué
+
+Le journal était un second chemin parallèle : un exécutant périmé y inscrivait
+`…_FAILED`, et l'audit lisait une histoire contradictoire avec l'état.
+
+Le supprimer aurait été pire — c'est parfois la **seule trace qu'une requête
+est partie vers le monde**. Un exécutant périmé produit donc un événement
+`…_STALE` au statut `UNKNOWN` : l'exécution est conservée, l'opinion ne l'est
+pas.
+
+### Ce qui reste NON GARANTI
+
+| | |
+|---|---|
+| qu'un exécutant périmé n'ait pas produit d'effet | **NON GARANTI**, et hors de portée du mécanisme |
+| que sa requête soit annulée | **NON GARANTI** — rien ne l'offre |
+| le comportement sur deux hôtes physiques | **NON TESTÉ** — une seule instance |
+| une dérive d'horloge entre deux serveurs PostgreSQL | **NON TESTABLE** ici |
+
+### Condition de révision
+
+Si une mesure montre que la latence de reprise gêne réellement, rouvrir la
+question du battement de cœur — **pas avant**. Aucune mesure ne le justifie
+aujourd'hui, et il ajouterait une écriture périodique et un mode de panne neuf.

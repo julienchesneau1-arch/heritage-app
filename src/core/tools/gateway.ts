@@ -95,6 +95,7 @@ interface OperationRow {
   resource_id: string | null;
   input_digest: string;
   attempts: number;
+  lease_generation: number;
 }
 
 /**
@@ -129,6 +130,39 @@ export type OperationState =
  */
 const LEASE_MARGIN_MS = 5_000;
 
+/**
+ * CE QU'EST UN BAIL JARVIS — ADR-035.
+ *
+ * Une seule phrase, et surtout PAS une autre :
+ *
+ *   > Jusqu'à cet instant, cet exécutant possède le DROIT LOGIQUE d'écrire
+ *   > dans l'état de cette opération.
+ *
+ * Ce qu'un bail n'est jamais :
+ *
+ *   ✗ une mesure de la vie d'un processus        (`docs/21`)
+ *   ✗ une preuve d'absence d'effet externe       (ADR-033)
+ *   ✗ une annulation de requête                  (rien ne l'offre)
+ *
+ * Le droit d'écrire est porté par la GÉNÉRATION, pas par le temps. L'échéance
+ * ne sert qu'à décider quand un autre exécutant a le droit de PRENDRE la
+ * relève — jamais à conclure quoi que ce soit sur le monde.
+ */
+export interface LeaseHolder {
+  readonly operationId: OperationIdentity;
+  /** Le jeton de cloisonnement. Frappé atomiquement, jamais réutilisé. */
+  readonly generation: number;
+}
+
+/**
+ * Identité du processus, à titre DIAGNOSTIC uniquement.
+ *
+ * Ne participe à aucune décision de sûreté : la génération suffit, puisqu'elle
+ * est frappée dans le même compare-and-swap que la prise de bail. Sert à
+ * répondre à « quel processus a lancé cet appel ? ».
+ */
+const EXECUTOR_ID = `pid-${String(process.pid)}`;
+
 /** Les états depuis lesquels un effet externe ne peut pas être exclu. */
 const EFFECT_POSSIBLE: ReadonlySet<OperationState> = new Set<OperationState>([
   'EXECUTING',
@@ -158,6 +192,33 @@ function inFlight(call: ToolCall, toolId: string): Result<never> {
       `Une opération de même clé (${call.operationId}) est déjà engagée. ` +
         "Je n'ai rien tenté, et je n'affirme rien sur l'issue de l'autre appel.",
       { tool: toolId },
+    ),
+  );
+}
+
+/**
+ * Réponse à un exécutant dont l'autorité a EXPIRÉ — ADR-035.
+ *
+ * Catégorie distincte d'`OPERATION_IN_FLIGHT` : celui-là n'avait jamais obtenu
+ * l'autorité ; celui-ci l'a EUE et l'a PERDUE. Entre les deux, il a peut-être
+ * lancé un appel, et cet appel a peut-être eu un effet.
+ *
+ * On ne lui rend donc PAS un état terminal — il n'a plus l'autorité d'en
+ * décider un, et il n'a aucune information neuve sur le monde. On lui dit
+ * exactement ce qu'il est : périmé, et sans opinion recevable.
+ */
+function staleExecutor(
+  call: ToolCall,
+  toolId: string,
+  lease: LeaseHolder,
+): Result<never> {
+  return err(
+    jarvisError(
+      'STALE_EXECUTOR',
+      `Le bail de cette exécution (génération ${String(lease.generation)}) a été ` +
+        "repris par un autre exécutant. Je n'ai plus l'autorité d'écrire le " +
+        "résultat de cette opération, et je n'affirme rien sur son issue.",
+      { tool: toolId, operation: call.operationId },
     ),
   );
 }
@@ -199,6 +260,112 @@ export function createToolGateway(deps: {
 }): ToolGateway {
   const tools = new Map<string, RegisteredTool>();
   const snapshots = createSnapshotStore(deps.db);
+
+  /* ══════════════════════════════════════════════════════════════════════
+     LA PRIMITIVE UNIQUE D'ÉCRITURE AUTORITAIRE — ADR-035.
+
+     TOUTE écriture d'un détenteur de bail passe par ici, et par nulle part
+     ailleurs. Elle couvre l'intégralité de ce que le mandat énumère :
+
+       état terminal · verdict de vérification · provenance de la ressource
+       estampille d'observation · métadonnées de reprise · échéance de bail
+
+     La garde est la MÊME pour toutes — une seule clause, un seul endroit. Un
+     cloisonnement écrit colonne par colonne aurait exactement la faiblesse
+     qu'il prétend corriger : il suffirait d'un `SET` oublié pour rouvrir le
+     passage, et rien ne le signalerait.
+
+     L'invariant I17 (`tests/lab/invariants.ts`) vérifie MÉCANIQUEMENT que tout
+     `UPDATE tool_operations` de `src/` est soit cloisonné par
+     `lease_generation`, soit cantonné à un état d'où aucun effet n'est
+     possible. Corriger le défaut principal en laissant une porte latérale
+     serait pire que de ne rien corriger : on croirait le trou fermé.
+
+     Rend `false` quand le jeton est périmé — jamais une erreur : être périmé
+     n'est pas une panne, c'est une perte d'autorité, et l'appelant doit
+     pouvoir la traiter comme telle.
+     ══════════════════════════════════════════════════════════════════════ */
+  async function writeAuthoritative(
+    lease: LeaseHolder,
+    setClause: string,
+    params: readonly unknown[],
+    /** Garde supplémentaire, jamais substitutive. Peut réutiliser `params`. */
+    extraGuard?: string,
+  ): Promise<Result<boolean>> {
+    const fence = `$${String(params.length + 2)}`;
+    const written = await deps.db.query(
+      `UPDATE tool_operations SET ${setClause}
+        WHERE operation_id = $1
+          AND lease_generation = ${fence}
+          ${extraGuard === undefined ? '' : `AND ${extraGuard}`}`,
+      [lease.operationId, ...params, lease.generation],
+    );
+    if (!written.ok) return written;
+    return ok((written.value.rowCount ?? 0) === 1);
+  }
+
+  /**
+   * PREND le bail pour une REPRISE, sans toucher à l'état.
+   *
+   * Concurrence optimiste : la garde porte sur la génération LUE par le
+   * repreneur. Deux repreneurs simultanés lisent la même valeur, un seul
+   * l'incrémente — l'autre apprend qu'il est arrivé trop tard au lieu
+   * d'écraser silencieusement le verdict du premier.
+   */
+  async function claimForRecovery(
+    operationId: OperationIdentity,
+    expectedGeneration: number,
+  ): Promise<Result<LeaseHolder | null>> {
+    const taken = await deps.db.query<{ lease_generation: number }>(
+      `UPDATE tool_operations
+          SET lease_generation = lease_generation + 1, lease_owner = $3
+        WHERE operation_id = $1 AND lease_generation = $2
+      RETURNING lease_generation`,
+      [operationId, expectedGeneration, EXECUTOR_ID],
+    );
+    if (!taken.ok) return taken;
+    const row = taken.value.rows[0];
+    if (row === undefined) return ok(null);
+    return ok({ operationId, generation: row.lease_generation });
+  }
+
+  /**
+   * PREND le bail et frappe une génération neuve.
+   *
+   * Le compare-and-swap et l'incrément de génération sont la MÊME instruction :
+   * deux exécutants ne peuvent donc jamais obtenir la même génération.
+   *
+   * `clock_timestamp()` et non `now()` : `now()` rend l'heure de début de
+   * transaction, et une échéance née vieille ferait expirer le bail trop tôt —
+   * donc une reprise prématurée (`docs/23 §3.2`). Défense en profondeur : le
+   * Gateway n'est de toute façon jamais dans la transaction d'un appelant.
+   */
+  async function acquireLease(
+    operationId: OperationIdentity,
+    leaseMs: number,
+  ): Promise<Result<LeaseHolder | null>> {
+    const taken = await deps.db.query<{ lease_generation: number }>(
+      /* L'état de départ est un LITTÉRAL, pas un paramètre. Un bail ne se
+         frappe qu'à un seul endroit du cycle de vie, et le lecteur — humain ou
+         invariant structurel — doit pouvoir le constater sans suivre les
+         appelants. */
+      `UPDATE tool_operations
+          SET state = 'EXECUTING',
+              executing_at = clock_timestamp(),
+              attempts = attempts + 1,
+              lease_generation = lease_generation + 1,
+              lease_owner = $2,
+              lease_expires_at = clock_timestamp() + ($3 || ' milliseconds')::interval
+        WHERE operation_id = $1 AND state = 'COMMITTED_TO_EXECUTION'
+      RETURNING lease_generation`,
+      [operationId, EXECUTOR_ID, String(leaseMs)],
+    );
+    if (!taken.ok) return taken;
+
+    const row = taken.value.rows[0];
+    if (row === undefined) return ok(null);
+    return ok({ operationId, generation: row.lease_generation });
+  }
 
   const gateway: ToolGateway = {
     register(tool: RegisteredTool): Result<void> {
@@ -310,6 +477,7 @@ export function createToolGateway(deps: {
     digest: string,
     policy: PolicyOutcome,
     ctx: ToolContext,
+    recoveryLease: LeaseHolder,
   ): Promise<Result<GatewayResult>> {
     const def = tool.definition;
 
@@ -318,16 +486,18 @@ export function createToolGateway(deps: {
       verification: VerificationOutcome,
       detail: string,
     ): Promise<Result<GatewayResult>> => {
-      // Garde d'état (ADR-029) : on ne clôt que ce qui est encore en suspens.
-      // Sans elle, une reprise lente écraserait le `SUCCEEDED` qu'une autre
-      // reprise vient d'établir — Jarvis dirait « je ne sais pas » d'une
-      // action qu'il vient pourtant de confirmer.
-      await deps.db.query(
-        `UPDATE tool_operations
-            SET state = $2, status = $3, observed_at = now(), recovery_detail = $4
-          WHERE operation_id = $1 AND state IN ('EXECUTING', 'UNKNOWN')`,
-        [call.operationId, state, verification.status, detail.slice(0, 500)],
+      /* Le repreneur écrit sous SON bail (ADR-035). S'il l'a perdu entre-temps,
+         `writeAuthoritative` rend `false` et rien n'est écrit — la garde d'état
+         d'ADR-029 ne suffisait pas : deux repreneurs concurrents la
+         satisfaisaient tous les deux. */
+      const settled = await writeAuthoritative(
+        recoveryLease,
+        `state = $2, status = $3, observed_at = clock_timestamp(),
+         recovery_detail = $4, lease_expires_at = NULL`,
+        [state, verification.status, detail.slice(0, 500)],
       );
+      if (!settled.ok) return settled;
+      if (!settled.value) return staleExecutor(call, def.id, recoveryLease);
       const event = await deps.ledger.append({
         actor: call.actor,
         eventType: `${def.auditEvent}_RESUMED`,
@@ -431,23 +601,27 @@ export function createToolGateway(deps: {
         /* Le seul chemin qui autorise une nouvelle exécution — et il exige une
            affirmation POSITIVE du fournisseur, jamais une absence de preuve.
 
-           LE DÉFAUT QUE FOUNDATION 3 A MESURÉ ICI
-           ---------------------------------------
-           Ce retour à `PLANNED` était un `UPDATE` inconditionnel. Sur des
-           reprises CONCURRENTES, il pouvait ramener en arrière une opération
-           qu'une autre reprise venait d'engager : la seconde reprise rouvrait
-           l'exécution d'un appel déjà en vol, et le monde changeait deux fois.
+           LE CHEMIN PARALLÈLE QUE L'AUDIT DE F5.1 A TROUVÉ ICI
+           ---------------------------------------------------
+           Ce rembobinage était gardé par `attempts`, tenu depuis Foundation 3
+           pour un numéro de version suffisant. Il ne l'est pas, et c'est
+           mesurable :
 
-           La garde combine deux conditions, et il faut les deux :
+             B reprend            → génération 5, `attempts` INCHANGÉ
+             B interroge le monde → NO_EFFECT (l'appel prend du temps)
+             C reprend            → génération 6 ; B est désormais périmé
+             B rembobine          → `attempts` n'a pas bougé : ÇA PASSE
 
-             state IN ('EXECUTING','UNKNOWN')   l'opération est encore en suspens
-             attempts = <valeur lue au départ>  personne ne l'a reprise depuis
+           Un exécutant sans autorité rouvrait donc l'exécution d'une opération
+           qu'un autre était en train de trancher. `claimForRecovery` ne touche
+           pas à `attempts` — seule l'exécution l'incrémente — si bien que le
+           compteur ne voyait tout simplement pas passer les reprises.
 
-           `attempts` sert ici de NUMÉRO DE VERSION. L'état seul ne suffit pas :
-           il ne dit pas si le `EXECUTING` qu'on observe est celui d'un
-           processus mort ou celui d'un appelant bien vivant. Le compteur, lui,
-           les distingue. */
-        const rewound = await deps.db.query(
+           La garde est maintenant la génération, comme partout ailleurs. Le
+           filtre d'état reste, en défense supplémentaire et jamais en
+           remplacement : il dit ce qu'on croyait rembobiner. */
+        const rewound = await writeAuthoritative(
+          recoveryLease,
           /* `observed_at` et `status` doivent être effacés en même temps :
              la contrainte `terminal_states_are_observed` interdit un état non
              terminal qui porterait encore une observation.
@@ -457,19 +631,17 @@ export function createToolGateway(deps: {
              Le défaut était masqué par `guarded()`, qui transformait le
              plantage en `INTERNAL` : les tests passaient, pour la pire des
              raisons (`docs/21 §3`). */
-          `UPDATE tool_operations
-              SET state = 'PLANNED', recovery_detail = $3,
-                  observed_at = NULL, status = NULL
-            WHERE operation_id = $1
-              AND state IN ('EXECUTING', 'UNKNOWN')
-              AND attempts = $2`,
-          [call.operationId, prior.attempts, `Reprise : ${verdict.value.detail}`],
+          `state = 'PLANNED', recovery_detail = $2,
+           observed_at = NULL, status = NULL, lease_expires_at = NULL`,
+          [`Reprise : ${verdict.value.detail}`],
+          `state IN ('EXECUTING', 'UNKNOWN')`,
         );
         if (!rewound.ok) return rewound;
-        if ((rewound.value.rowCount ?? 0) === 0) {
+        if (!rewound.value) {
           // Une autre reprise a pris la main entre notre lecture et notre
-          // écriture. On ne rejoue pas derrière elle.
-          return inFlight(call, def.id);
+          // écriture. On ne rejoue pas derrière elle, et on ne prétend pas
+          // savoir ce qu'elle a conclu.
+          return staleExecutor(call, def.id, recoveryLease);
         }
         return gateway.invoke(call);
       }
@@ -748,16 +920,37 @@ export function createToolGateway(deps: {
           if (!lease.ok) return lease;
           if (lease.value.rows[0]?.live === true) return inFlight(call, def.id);
         }
-        return await resumeUncertain(call, tool, prior, digest, policy, replayContext);
+        /* Le repreneur doit d'abord PRENDRE le bail (ADR-035). Deux repreneurs
+           simultanés lisent la même génération ; un seul l'incrémente. Le
+           perdant apprend qu'il est arrivé trop tard, au lieu d'écraser le
+           verdict du premier. */
+        const claimed = await claimForRecovery(call.operationId, prior.lease_generation);
+        if (!claimed.ok) return claimed;
+        if (claimed.value === null) return inFlight(call, def.id);
+
+        return await resumeUncertain(
+          call, tool, prior, digest, policy, replayContext, claimed.value,
+        );
       }
 
       /* --- 3d. Aucun appel n'a jamais été lancé : on peut tenter -------- */
       if (NEVER_CALLED.has(prior.state)) {
         if (prior.state === 'COMMITTED_TO_EXECUTION') {
-          // Arrêt entre les deux barrières : la décision était durable, l'appel
-          // n'est jamais parti. On ramène à `PLANNED` — par compare-and-swap,
-          // pour qu'un seul appelant le fasse et qu'aucun ne puisse ramener en
-          // arrière une opération qu'un autre vient d'engager.
+          /* ÉCRITURE PRÉ-BAIL — la seconde des deux, et la classification
+             compte autant que le code.
+
+             Arrêt entre les deux barrières : la décision était durable, l'appel
+             n'est jamais parti. On ramène à `PLANNED` par compare-and-swap.
+
+             Pourquoi le cloisonnement ne s'applique PAS ici : à cet instant
+             aucun bail n'a jamais été frappé pour cette opération, donc aucune
+             génération ne peut faire autorité. Ce qui tient lieu de garde est
+             le LITTÉRAL `state = 'COMMITTED_TO_EXECUTION'` — un état d'où, par
+             construction (§4), aucun effet externe n'est possible.
+
+             Un exécutant périmé ne peut donc pas emprunter ce chemin : son
+             opération est en `EXECUTING` ou au-delà, et la clause l'exclut.
+             I17 vérifie mécaniquement que ce littéral ne disparaît pas. */
           const rewound = await deps.db.query(
             `UPDATE tool_operations SET state = 'PLANNED', recovery_detail = $2
                WHERE operation_id = $1 AND state = 'COMMITTED_TO_EXECUTION'`,
@@ -836,7 +1029,13 @@ export function createToolGateway(deps: {
 
        C'est le seul goulot d'étranglement du système, et il est en base — pas
        dans un verrou en mémoire, qui ne survivrait ni à plusieurs processus ni
-       à un redémarrage. */
+       à un redémarrage.
+
+       ÉCRITURE PRÉ-BAIL — la première des deux (ADR-035).
+       Aucune génération ne peut la garder : c'est justement l'écriture qui
+       rend la frappe du bail possible. Le littéral `state = 'PLANNED'` en tient
+       lieu, et il est de la même famille que l'autre : un état d'où aucun effet
+       externe n'est possible. */
     const committed = await deps.db.query(
       `UPDATE tool_operations
           SET state = 'COMMITTED_TO_EXECUTION', committed_at = now()
@@ -868,14 +1067,18 @@ export function createToolGateway(deps: {
       actor: call.actor,
     };
 
-    const executing = await deps.db.query(
-      `UPDATE tool_operations
-          SET state = 'EXECUTING', executing_at = now(), attempts = attempts + 1
-        WHERE operation_id = $1 AND state = 'COMMITTED_TO_EXECUTION'`,
-      [call.operationId],
+    /* PRISE DE BAIL — ADR-035.
+       Le passage à `EXECUTING` frappe la génération qui autorisera, plus tard,
+       l'écriture du résultat. Un exécutant qui perdrait le bail pendant son
+       appel se verra refuser cette écriture plutôt que d'écraser celle du
+       repreneur. */
+    const acquired = await acquireLease(
+      call.operationId,
+      def.timeoutMs + LEASE_MARGIN_MS,
     );
-    if (!executing.ok) return executing;
-    if ((executing.value.rowCount ?? 0) === 0) return inFlight(call, def.id);
+    if (!acquired.ok) return acquired;
+    if (acquired.value === null) return inFlight(call, def.id);
+    const lease = acquired.value;
 
     /* --- 5. Exécution --------------------------------------------------- */
     const executed = await withTimeout(
@@ -917,29 +1120,40 @@ export function createToolGateway(deps: {
             ? 'PROVIDER_TIMEOUT'
             : 'EXTERNAL_STATE';
 
-      await deps.db.query(
-        `UPDATE tool_operations
-            SET state = $2, status = $3, observed_at = now(), recovery_detail = $4
-          WHERE operation_id = $1`,
+      const wroteFailure = await writeAuthoritative(
+        lease,
+        `state = $2, status = $3, observed_at = clock_timestamp(),
+         recovery_detail = $4, lease_expires_at = NULL`,
         [
-          call.operationId,
           terminal,
           terminal === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
           `${cause} — ${executed.error.message}`.slice(0, 500),
         ],
       );
+      /* LE SECOND CHEMIN PARALLÈLE TROUVÉ PAR L'AUDIT DE F5.1.
+         Le registre était cloisonné, le JOURNAL ne l'était pas : un exécutant
+         périmé y inscrivait tout de même `…_FAILED`, et `/audit` lisait une
+         histoire contradictoire avec l'état.
+
+         On n'efface pas l'événement pour autant — l'appel de A a bel et bien
+         eu lieu, et c'est peut-être la seule trace qu'une requête est partie
+         vers le monde. On le MARQUE, et son statut retombe à `UNKNOWN` :
+         périmé, A n'a plus d'opinion recevable sur l'issue. */
+      const staleFailure = wroteFailure.ok && !wroteFailure.value;
       await deps.ledger.append({
         actor: call.actor,
-        eventType: `${def.auditEvent}_FAILED`,
+        eventType: `${def.auditEvent}${staleFailure ? '_STALE' : '_FAILED'}`,
         tool: def.id,
         policyDecision: 'ALLOW',
         autonomyLevel: policy.effectiveAutonomy,
         // Le journal dit la même chose que le registre : ni plus affirmatif,
         // ni moins. Deux sources qui divergent, c'est une source de moins.
-        status: terminal === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
+        status:
+          staleFailure || terminal === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
         operationId: call.operationId,
         payloadDigest: digest,
       });
+      if (staleFailure) return staleExecutor(call, def.id, lease);
       return executed;
     }
 
@@ -976,13 +1190,11 @@ export function createToolGateway(deps: {
        La ligne existe déjà — elle a été inscrite AVANT l'appel. On ne
        l'insère plus, on l'OBSERVE : c'est la distinction ACTION /
        OBSERVATION d'ADR-025, portée par les données et non par le discours. */
-    const recorded = await deps.db.query(
-      `UPDATE tool_operations
-          SET state = $2, status = $3, resource_kind = $4, resource_id = $5,
-              observed_at = now()
-        WHERE operation_id = $1`,
+    const recorded = await writeAuthoritative(
+      lease,
+      `state = $2, status = $3, resource_kind = $4, resource_id = $5,
+       observed_at = clock_timestamp(), lease_expires_at = NULL`,
       [
-        call.operationId,
         verification.status === 'FAILED' ? 'FAILED'
           : verification.status === 'UNKNOWN' ? 'UNKNOWN'
           : 'SUCCEEDED',
@@ -992,6 +1204,27 @@ export function createToolGateway(deps: {
       ],
     );
     if (!recorded.ok) return recorded;
+    if (!recorded.value) {
+      /* A a exécuté, obtenu un reçu, et peut-être produit un effet dans le
+         monde. Son VERDICT n'a plus d'autorité — mais faire disparaître son
+         exécution du journal serait la pire des deux options : ce serait
+         effacer la seule trace qu'une requête est partie.
+
+         Statut `UNKNOWN`, jamais celui que A avait vérifié : sa vérification
+         portait sur un monde dont un autre exécutant a peut-être depuis
+         changé la lecture. */
+      await deps.ledger.append({
+        actor: call.actor,
+        eventType: `${def.auditEvent}_STALE`,
+        tool: def.id,
+        policyDecision: 'ALLOW',
+        autonomyLevel: policy.effectiveAutonomy,
+        status: 'UNKNOWN',
+        operationId: call.operationId,
+        payloadDigest: digest,
+      });
+      return staleExecutor(call, def.id, lease);
+    }
 
     // Le suffixe ne s'applique qu'à une MUTATION restée sans capture. Une
     // lecture n'a rien à annuler : la suffixer polluerait le journal d'audit

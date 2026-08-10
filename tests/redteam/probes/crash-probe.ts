@@ -60,17 +60,25 @@ function credentials() {
  * déclenché en exploitation.
  */
 function crashingDb(real: Db, point: CrashPoint): Db {
+  /* L'ÉCRITURE DE PERSISTANCE, reconnue par ce qui la caractérise.
+     Le motif portait `observed_at = now()`. ADR-035 a fait passer l'estampille
+     à `clock_timestamp()`, et les points d'arrêt E et F ont cessé de tirer —
+     sans qu'aucun test ne devienne rouge : E s'est mis à observer une exécution
+     normale, et F a continué de passer POUR UNE MAUVAISE RAISON.
+
+     On reconnaît donc la colonne, jamais la fonction qui l'alimente. Et
+     `crashThenRecover` vérifie désormais que le point d'arrêt a bien tiré :
+     une sonde muette ne doit plus pouvoir se faire passer pour un test vert. */
+  const persistsOutcome = (sql: string): boolean =>
+    /UPDATE tool_operations/.test(sql) && /observed_at\s*=/.test(sql);
+
   const shouldCrashBefore = (sql: string): boolean =>
     (point === 'A_AVANT_JOURNAL' && /INSERT INTO tool_operations/.test(sql)) ||
-    (point === 'E_AVANT_PERSISTANCE' &&
-      /UPDATE tool_operations/.test(sql) &&
-      /observed_at = now\(\)/.test(sql));
+    (point === 'E_AVANT_PERSISTANCE' && persistsOutcome(sql));
 
   const shouldCrashAfter = (sql: string): boolean =>
     (point === 'B_APRES_JOURNAL' && /INSERT INTO tool_operations/.test(sql)) ||
-    (point === 'F_APRES_PERSISTANCE' &&
-      /UPDATE tool_operations/.test(sql) &&
-      /observed_at = now\(\)/.test(sql));
+    (point === 'F_APRES_PERSISTANCE' && persistsOutcome(sql));
 
   return {
     async query<T extends pg.QueryResultRow>(text: string, params?: readonly unknown[]) {

@@ -109,9 +109,13 @@ describe.runIf(enabled)('banc — le bail face à un exécutant vivant', () => {
     const seeded = await db.query(
       `INSERT INTO tool_operations
          (operation_id, tool_id, tool_version, state, input_digest, actor,
-          attempts, committed_at, executing_at)
+          attempts, committed_at, executing_at, lease_expires_at)
        VALUES ($1,'lab_external_send','1.0.0','EXECUTING',$2,'USER',1,
-               now() - interval '1 hour', now() - interval '1 hour')`,
+               clock_timestamp() - interval '1 hour',
+               clock_timestamp() - interval '1 hour',
+               -- Bail DÉJÀ EXPIRÉ : on met en scène un exécutant dont
+               -- l'autorité est morte, pas un exécutant courant.
+               clock_timestamp() - interval '59 minutes')`,
       [key, PAYLOAD_DIGEST],
     );
     if (!seeded.ok) throw new Error(seeded.error.message);

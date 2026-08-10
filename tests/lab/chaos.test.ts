@@ -54,10 +54,13 @@ describe.runIf(enabled)('banc — chaos', () => {
    * Les invariants existent et sont évaluables
    * ================================================================== */
 
-  it('les dix invariants sont déclarés et évaluables', async () => {
+  it('les invariants sont déclarés et évaluables', async () => {
+    // Dix depuis Foundation 4, plus I17 (cloisonnement) depuis F5.1.
     const report = await checkInvariants(db, world);
-    expect(report.checked).toHaveLength(10);
-    for (const id of ['I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9', 'I10']) {
+    expect(report.checked).toHaveLength(11);
+    for (const id of [
+      'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9', 'I10', 'I17',
+    ]) {
       expect(report.checked.some((c) => c.startsWith(`${id} —`))).toBe(true);
     }
   });

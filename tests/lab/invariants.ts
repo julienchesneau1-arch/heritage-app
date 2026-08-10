@@ -403,10 +403,156 @@ const I10: StructuralInvariant = {
   },
 };
 
+/* ========================================================================== *
+ * I17 — aucune écriture autoritaire ne contourne le cloisonnement
+ *
+ * L'invariant qui donne sa valeur à ADR-035. Cloisonner deux `UPDATE` en
+ * laissant les autres ouverts ne corrige rien : ça donne l'illusion que le
+ * trou est fermé, ce qui est strictement pire que de le savoir ouvert.
+ * ========================================================================== */
+
+/** Ce qui protège une écriture de `tool_operations`, ou rien. */
+export type WriteGuard =
+  /** Gardée par la génération de bail : seul l'exécutant courant passe. */
+  | 'FENCED'
+  /**
+   * Gardée par un état d'où aucun effet externe n'est possible.
+   *
+   * Catégorie NÉCESSAIRE, pas une tolérance : les écritures qui rendent la
+   * frappe du bail possible ne peuvent pas être gardées par une génération
+   * qu'elles n'ont pas encore frappée. Le compare-and-swap sur un littéral
+   * `PLANNED` / `COMMITTED_TO_EXECUTION` en tient lieu, et il est suffisant
+   * parce qu'un exécutant périmé est, lui, en `EXECUTING` ou au-delà.
+   */
+  | 'PRE_LEASE'
+  /** Ni l'un ni l'autre. C'est exactement le défaut de `docs/23 §6`. */
+  | 'UNGUARDED';
+
+export interface WritePath {
+  readonly file: string;
+  readonly guard: WriteGuard;
+  /** Le texte de la clause de garde, pour que le verdict soit relisible. */
+  readonly where: string;
+}
+
+/**
+ * Retire les commentaires, en conservant le contenu des chaînes.
+ *
+ * Nécessaire, et découvert en exécutant l'analyseur : la documentation
+ * d'ADR-035 cite `UPDATE tool_operations` en prose, entre accents graves
+ * markdown. Sans ce filtrage, l'invariant se dénonçait lui-même — une garde
+ * qui hurle sur un commentaire finit désactivée, et le trou se rouvre par
+ * lassitude plutôt que par décision.
+ *
+ * Erre du bon côté : une chaîne mal suivie fait tomber un `//` en commentaire
+ * et amputer la fin de ligne, donc perdre un `WHERE` — donc `UNGUARDED`.
+ */
+function stripComments(source: string): string {
+  let out = '';
+  let mode: 'code' | 'line' | 'block' | 'string' = 'code';
+  let delimiter = '';
+
+  for (let i = 0; i < source.length; i += 1) {
+    const c = source[i] ?? '';
+    const next = source[i + 1] ?? '';
+
+    if (mode === 'line') {
+      if (c === '\n') { mode = 'code'; out += c; }
+      continue;
+    }
+    if (mode === 'block') {
+      if (c === '*' && next === '/') { mode = 'code'; i += 1; }
+      continue;
+    }
+    if (mode === 'string') {
+      out += c;
+      if (c === '\\') { out += next; i += 1; }
+      else if (c === delimiter) mode = 'code';
+      continue;
+    }
+    if (c === '/' && next === '/') { mode = 'line'; continue; }
+    if (c === '/' && next === '*') { mode = 'block'; i += 1; continue; }
+    if (c === '"' || c === "'" || c === '`') { mode = 'string'; delimiter = c; }
+    out += c;
+  }
+  return out;
+}
+
+/**
+ * Classe chaque `UPDATE tool_operations` d'un fichier.
+ *
+ * Séparée de l'invariant à dessein : un détecteur qu'on ne peut pas attaquer
+ * ne prouve rien. `fencing-structure.test.ts` lui soumet des écritures
+ * délibérément non gardées et vérifie qu'il les voit — la leçon de la sentinelle
+ * réseau de Foundation 3, qui était aveugle pendant que tout était vert.
+ *
+ * FERMÉE PAR DÉFAUT : toute forme qu'elle ne sait pas lire est `UNGUARDED`.
+ * Un analyseur qui « laisse passer en cas de doute » est un analyseur qui ment.
+ */
+export function classifyOperationWrites(
+  file: string,
+  source: string,
+): readonly WritePath[] {
+  const found: WritePath[] = [];
+  const content = stripComments(source);
+  const needle = 'UPDATE tool_operations';
+
+  for (let at = content.indexOf(needle); at !== -1; at = content.indexOf(needle, at + 1)) {
+    // Le littéral s'arrête au premier accent grave. Une interpolation qui
+    // couperait avant le `WHERE` produit donc un texte sans garde — et sera
+    // classée `UNGUARDED`, ce qui est la bonne direction.
+    const end = content.indexOf('`', at);
+    const statement = content.slice(at, end === -1 ? content.length : end);
+    const parts = statement.split(/\bWHERE\b/i);
+    const where = parts[1];
+
+    if (where === undefined) {
+      found.push({ file, guard: 'UNGUARDED', where: '(aucune clause WHERE lisible)' });
+      continue;
+    }
+
+    const guard: WriteGuard = /lease_generation\s*=/.test(where)
+      ? 'FENCED'
+      : /state\s*=\s*'(PLANNED|COMMITTED_TO_EXECUTION)'/.test(where)
+        ? 'PRE_LEASE'
+        : 'UNGUARDED';
+
+    found.push({ file, guard, where: where.replace(/\s+/g, ' ').trim() });
+  }
+  return found;
+}
+
+const I17: StructuralInvariant = {
+  id: 'I17',
+  claim:
+    'toute écriture de tool_operations est cloisonnée par la génération, ' +
+    "ou cantonnée à un état d'où aucun effet n'est possible",
+  check() {
+    /* CE QUE CET INVARIANT NE PROUVE PAS — et il faut le dire ici, pas dans
+       une note de bas de page. Il lit du TEXTE. Il établit qu'une garde est
+       ÉCRITE ; il n'établit pas qu'elle porte la bonne valeur. Une garde
+       `lease_generation = 0` en dur passerait ce contrôle.
+
+       Ce sont les tests adversariaux de `fencing-adversarial.test.ts` qui
+       établissent la SÉMANTIQUE. Les deux sont nécessaires et aucun ne
+       remplace l'autre : le structurel couvre le code non encore écrit, le
+       comportemental couvre le code écrit. */
+    return sourcesUnder('src')
+      .flatMap((file) => classifyOperationWrites(file, readFileSync(file, 'utf8')))
+      .filter((path) => path.guard === 'UNGUARDED')
+      .map((path) =>
+        violation('I17', 'écriture de tool_operations sans cloisonnement', {
+          fichier: path.file,
+          garde: path.where,
+        }),
+      );
+  },
+};
+
 /* ========================================================================== */
 
 const STATEFUL: readonly StatefulInvariant[] = [I1, I2, I3, I4, I7, I8];
-const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10];
+const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10, I17];
 
 /** Évalue les dix invariants sur l'état courant. */
 export async function checkInvariants(db: Db, world: Db): Promise<InvariantReport> {

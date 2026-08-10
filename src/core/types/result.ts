@@ -42,6 +42,16 @@ export type ErrorKind =
    * tenté, et ne sait rien de l'issue de celui qui a gagné.
    */
   | 'OPERATION_IN_FLIGHT'
+  /**
+   * L'exécutant a perdu son autorité pendant qu'il exécutait — ADR-035.
+   *
+   * Distinct d'`OPERATION_IN_FLIGHT` : ici l'appel EST parti, et il a peut-être
+   * eu un effet. Un autre exécutant a simplement pris la relève entre-temps.
+   *
+   * L'appelant périmé ne peut plus écrire de résultat autoritaire, et ne doit
+   * surtout pas en conclure un échec : son effet, lui, existe peut-être.
+   */
+  | 'STALE_EXECUTOR'
   | 'PROVIDER_UNAVAILABLE'
   | 'TIMEOUT'
   | 'VERIFICATION_FAILED'

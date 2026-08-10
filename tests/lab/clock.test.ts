@@ -198,9 +198,9 @@ describe.runIf(enabled)('couche 01 — horloge', () => {
         const written = await tx.query(
           `INSERT INTO tool_operations
              (operation_id, tool_id, tool_version, state, input_digest, actor,
-              attempts, committed_at, executing_at)
+              attempts, committed_at, executing_at, lease_expires_at)
            VALUES ($1,'lab_clock','1.0.0','EXECUTING',
-                   repeat('a',64), 'USER', 1, now(), now())`,
+                   repeat('a',64), 'USER', 1, now(), now(), now())`,
           [key],
         );
         if (!written.ok) throw new Error(written.error.message);
@@ -347,15 +347,19 @@ describe.runIf(enabled)('couche 01 — horloge', () => {
     30_000,
   );
 
-  it.fails(
-    'PROPRIÉTÉ SOUHAITÉE (I15) — une écriture de génération périmée est refusée',
+  it(
+    'I15 — une écriture de génération périmée est refusée',
     async () => {
-      /* Ce test énonce la propriété visée et ÉCHOUE aujourd'hui : la colonne
-         `lease_generation` n'existe pas.
+      /* CE TEST A CHANGÉ DE NATURE, ET LA TRACE COMPTE AUTANT QUE LE RÉSULTAT.
+         Il a été écrit en couche 01 sous `it.fails()` : il énonçait la
+         propriété SOUHAITÉE et échouait, parce que `lease_generation`
+         n'existait pas.
 
-         `it.fails()` est délibéré. Le jour où le cloisonnement est implémenté,
-         ce test passe au vert et Vitest le signale — la correction ne peut pas
-         se faire en silence, et le marqueur ne peut pas être oublié. */
+         Le protocole prévu s'est déroulé exactement comme annoncé. À la
+         première exécution suivant la migration 0008, Vitest a signalé
+         « Expect test to fail » — la correction n'a PAS pu se faire en
+         silence, et le marqueur n'a pas pu être oublié. Il est retiré ici
+         parce que la propriété est tenue, pas parce qu'il gênait. */
       const key = labKey('fencing-souhaite');
       await seedExecuting(db, key, 3_600);
 
@@ -383,8 +387,9 @@ async function seedExecuting(
   const written = await db.query(
     `INSERT INTO tool_operations
        (operation_id, tool_id, tool_version, state, input_digest, actor,
-        attempts, committed_at, executing_at)
+        attempts, committed_at, executing_at, lease_expires_at)
      VALUES ($1,'lab_clock','1.0.0','EXECUTING', repeat('a',64), 'USER', 1,
+             clock_timestamp() - ($2 || ' seconds')::interval,
              clock_timestamp() - ($2 || ' seconds')::interval,
              clock_timestamp() - ($2 || ' seconds')::interval)`,
     [key, String(agoSeconds)],

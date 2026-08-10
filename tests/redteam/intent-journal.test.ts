@@ -62,7 +62,19 @@ async function probe(point: string, opId: string): Promise<string> {
 /** Tue le processus au point demandé, puis REDÉMARRE et rejoue. */
 async function crashThenRecover(point: string): Promise<Observation> {
   const opId = `crash-${point}-${String(Date.now())}-${String(Math.random()).slice(2, 8)}`;
-  await probe(point, opId);
+  const crashed = await probe(point, opId);
+
+  /* LA SONDE A-T-ELLE RÉELLEMENT PLANTÉ ?
+     Sans ce contrôle, un point d'arrêt qui cesse de reconnaître son motif SQL
+     transforme silencieusement le scénario en exécution normale — et le test
+     reste vert en n'éprouvant plus rien. C'est arrivé : ADR-035 a fait passer
+     l'estampille de `now()` à `clock_timestamp()`, et les points E et F ont
+     cessé de tirer sans qu'aucune suite ne rougisse. */
+  if (!crashed.includes(`CRASH ${point}`)) {
+    throw new Error(
+      `le point d'arrêt ${point} n'a pas tiré : la sonde n'a rien éprouvé.\n${crashed}`,
+    );
+  }
 
   /* ATTENTE DU BAIL D'EXÉCUTION — ADR-032.
 
@@ -238,11 +250,17 @@ describe.skipIf(skip)('RED TEAM — vérification idempotente auprès du fournis
        `executing_at` est donc reculé au-delà du bail (ADR-032) : sans cela,
        l'opération serait considérée comme encore en cours, et la reprise
        refuserait de prendre la main — ce qui est le comportement correct, mais
-       pas celui que ce test cherche à éprouver. */
+       pas celui que ce test cherche à éprouver.
+
+       `lease_expires_at` est reculé de même. La contrainte `lease_has_deadline`
+       (migration 0008) l'exige, et c'est tant mieux : une mise en scène qui
+       laisserait `EXECUTING` sans échéance décrirait un état que le système ne
+       peut pas produire, et le test éprouverait une fiction. */
     const forced = await db.query(
       `UPDATE tool_operations
           SET state = 'EXECUTING', status = NULL, observed_at = NULL,
-              executing_at = now() - interval '1 hour'
+              executing_at = clock_timestamp() - interval '1 hour',
+              lease_expires_at = clock_timestamp() - interval '59 minutes'
         WHERE operation_id = $1`,
       [opId],
     );
