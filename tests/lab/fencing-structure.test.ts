@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkStructuralInvariants,
   classifyOperationWrites,
+  classifyStamps,
   renderViolations,
 } from './invariants.js';
 
@@ -120,6 +121,74 @@ describe('I17 — cloisonnement des écritures autoritaires', () => {
     // La garde est lue dans le `WHERE`, jamais dans le `SET` : la même valeur
     // littérale y a deux sens opposés.
     expect(paths[0]?.guard).toBe('PRE_LEASE');
+  });
+
+  /* ================================================================== *
+   * I16 — l'estampille, l'autre moitié de la sémantique du bail
+   * ================================================================== */
+
+  describe('I16 — aucune estampille de décision frappée avec now()', () => {
+    it('le dépôt courant ne frappe aucune estampille avec now()', () => {
+      const i16 = checkStructuralInvariants().violations.filter(
+        (v) => v.invariant === 'I16',
+      );
+      if (i16.length > 0) {
+        throw new Error(`estampilles dangereuses :\n${renderViolations(i16)}`);
+      }
+      expect(i16).toEqual([]);
+    });
+
+    const dangereuses: readonly { readonly nom: string; readonly sql: string }[] = [
+      {
+        nom: "le contre-exemple exact de docs/23 §3.2 — executing_at = now()",
+        sql: 'executing_at = now()',
+      },
+      {
+        nom: "une échéance de bail née vieille",
+        sql: "lease_expires_at = now() + interval '5 seconds'",
+      },
+      {
+        nom: "l'estampille d'observation",
+        sql: 'observed_at = now()',
+      },
+    ];
+
+    for (const cas of dangereuses) {
+      it(`DÉTECTE : ${cas.nom}`, () => {
+        const sites = classifyStamps('attaque.ts', `const q = \`UPDATE t SET ${cas.sql}\`;`);
+        expect(sites).toHaveLength(1);
+        expect(sites[0]?.wallClock).toBe(false);
+      });
+    }
+
+    it('accepte une horloge murale', () => {
+      const sites = classifyStamps(
+        'ok.ts',
+        'const q = `UPDATE t SET executing_at = clock_timestamp()`;',
+      );
+      expect(sites[0]?.wallClock).toBe(true);
+    });
+
+    it("IGNORE un CONTRÔLE — `now()` y est délibéré et protecteur", () => {
+      /* La distinction est tout l'objet de `docs/23 §3`. Un `now()` figé au
+         contrôle ne peut que SUR-estimer un bail, donc bloquer une reprise :
+         c'est un risque de disponibilité, jamais de sûreté. Un analyseur qui
+         confondrait les deux ferait « corriger » la seule occurrence qui
+         protège. */
+      const sites = classifyStamps(
+        'controle.ts',
+        "const q = `SELECT executing_at > now() - interval '1 second' AS live`;",
+      );
+      expect(sites).toEqual([]);
+    });
+
+    it('IGNORE une libération d\'estampille', () => {
+      const sites = classifyStamps(
+        'ok.ts',
+        'const q = `UPDATE t SET lease_expires_at = NULL`;',
+      );
+      expect(sites).toEqual([]);
+    });
   });
 
   it('IGNORE une mention en commentaire — sinon il se dénoncerait lui-même', () => {

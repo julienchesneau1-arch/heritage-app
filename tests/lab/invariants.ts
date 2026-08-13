@@ -404,6 +404,83 @@ const I10: StructuralInvariant = {
 };
 
 /* ========================================================================== *
+ * I16 — une estampille de décision n'est jamais frappée avec `now()`
+ *
+ * Proposé par `docs/23 §8`, encodé ici. La mesure qui le justifie tient en
+ * deux lignes (`docs/23 §3`) :
+ *
+ *   now() figé au CONTRÔLE   →  bail SUR-estimé   →  reprise BLOQUÉE
+ *   now() figé à l'ÉCRITURE  →  bail SOUS-estimé  →  reprise PRÉMATURÉE
+ *
+ * Seule la seconde direction menace la sûreté. Le contrôle garde donc `now()`
+ * délibérément ; ce sont les ÉCRITURES qui doivent porter une horloge murale.
+ * ========================================================================== */
+
+/**
+ * Les colonnes dont l'estampille participe à une décision.
+ *
+ * `committed_at` n'y figure pas, et la raison est MESURÉE, pas supposée :
+ * aucune lecture de cette colonne n'existe dans `src/`, `ops/` ni `tests/`.
+ * C'est une trace d'audit, jamais une entrée de décision. Le jour où elle en
+ * devient une, elle doit rejoindre cette liste — et ce commentaire est le seul
+ * endroit où cette dette est écrite.
+ */
+const DECISION_TIMESTAMPS = ['executing_at', 'lease_expires_at', 'observed_at'] as const;
+
+export interface StampSite {
+  readonly file: string;
+  readonly column: string;
+  readonly expression: string;
+  readonly wallClock: boolean;
+}
+
+/**
+ * Repère les ÉCRITURES d'estampilles de décision, jamais les comparaisons.
+ *
+ * `executing_at > now() - interval …` est un contrôle et doit rester tel quel :
+ * l'analyseur exige un `=` immédiat, donc ne le voit pas.
+ */
+export function classifyStamps(file: string, source: string): readonly StampSite[] {
+  const content = stripComments(source);
+  const found: StampSite[] = [];
+
+  for (const column of DECISION_TIMESTAMPS) {
+    const pattern = new RegExp(`(?<![<>!=])\\b${column}\\s*=\\s*([^,\\n\`]+)`, 'g');
+    for (const match of content.matchAll(pattern)) {
+      const expression = (match[1] ?? '').trim();
+      // `NULL` libère l'estampille : aucune horloge n'est en jeu.
+      if (/^NULL\b/i.test(expression)) continue;
+      found.push({
+        file,
+        column,
+        expression,
+        wallClock: !/\bnow\(\)/.test(expression),
+      });
+    }
+  }
+  return found;
+}
+
+const I16: StructuralInvariant = {
+  id: 'I16',
+  claim:
+    "aucune estampille de décision n'est frappée avec now() — une estampille " +
+    'née vieille ferait expirer un bail trop tôt',
+  check() {
+    return sourcesUnder('src')
+      .flatMap((file) => classifyStamps(file, readFileSync(file, 'utf8')))
+      .filter((site) => !site.wallClock)
+      .map((site) =>
+        violation('I16', 'estampille de décision frappée avec now()', {
+          fichier: site.file,
+          colonne: site.column,
+          expression: site.expression,
+        }),
+      );
+  },
+};
+
+/* ========================================================================== *
  * I17 — aucune écriture autoritaire ne contourne le cloisonnement
  *
  * L'invariant qui donne sa valeur à ADR-035. Cloisonner deux `UPDATE` en
@@ -552,7 +629,7 @@ const I17: StructuralInvariant = {
 /* ========================================================================== */
 
 const STATEFUL: readonly StatefulInvariant[] = [I1, I2, I3, I4, I7, I8];
-const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10, I17];
+const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10, I16, I17];
 
 /** Évalue les dix invariants sur l'état courant. */
 export async function checkInvariants(db: Db, world: Db): Promise<InvariantReport> {

@@ -259,6 +259,70 @@ son texte se périme dès que le code change.
 
 ---
 
+## 7 bis. DÉCOUVERTE NON CORRIGÉE — `lease_expires_at` n'est lu par personne
+
+Trouvée en encodant I16, donc **après** la clôture du correctif. Elle est
+consignée ici et **délibérément laissée en l'état**, conformément au protocole :
+`DISCOVERY → REPRODUCTION → INVARIANT → ADR → CORRECTION`. Nous sommes à
+`DISCOVERY`.
+
+### La mesure
+
+```text
+lease_expires_at  écrit  : gateway.ts:358 (acquisition), puis remis à NULL
+lease_expires_at  lu     : NULLE PART dans src/
+contrôle d'expiration    : gateway.ts:916
+                           executing_at > now() − (timeoutMs + marge)
+```
+
+La migration 0008 a ajouté la colonne, sa contrainte `lease_has_deadline` et
+son index. La contrainte **travaille** — elle a fait échouer deux mises en
+scène de test qui décrivaient un `EXECUTING` sans échéance, c'est-à-dire un
+état que le système ne peut pas produire. Mais **aucune décision ne lit la
+colonne**.
+
+### Pourquoi ce n'est pas qu'un doublon
+
+Le contrôle recalcule l'échéance avec le `def.timeoutMs` **de l'outil tel que
+le repreneur le connaît**. Or l'échéance est une propriété de l'ACQUISITION,
+décidée par l'exécutant qui partait, avec le délai qu'il appliquait vraiment.
+
+```text
+A acquiert avec timeoutMs = 30 000        → échéance réelle : +35 s
+le contrat est modifié, redéploiement     → timeoutMs = 2 000
+B reprend et RECALCULE                    → croit l'échéance à +7 s
+                                             ⟹ reprise PRÉMATURÉE de 28 s
+```
+
+C'est le même motif que celui déjà rencontré trois fois : **l'observateur
+redéfinit le passé.** `attempts` l'avait fait pour l'autorité, le recalcul le
+fait pour l'échéance.
+
+### Ce que ça vaut, honnêtement
+
+| | |
+|---|---|
+| Défaut **actif** aujourd'hui ? | **non** — aucun `timeoutMs` n'a changé entre deux versions |
+| Défaut **latent** ? | **oui** — s'active au premier changement de `timeoutMs` en exploitation |
+| Reproduit par un test ? | **non** — rien n'est écrit, c'est une lecture de code |
+
+Exactement la même catégorie que le défaut d'estampille de `docs/23 §3.3` :
+réel, mais non atteignable par le code tel qu'il est écrit aujourd'hui.
+
+### Les deux issues, et aucune n'est prise ici
+
+| | |
+|---|---|
+| **Lire la colonne** | le contrôle devient `lease_expires_at > now()`. L'échéance cesse d'être recalculée par l'observateur. Ferme le défaut latent. |
+| **Supprimer la colonne** | *« si une partie n'apporte aucune garantie supplémentaire mesurable, on la supprime »*. Applicable tel quel, aujourd'hui. |
+
+Ma lecture : la première, parce que le défaut latent est nommé et que la
+colonne existe déjà. Mais **changer le contrôle d'expiration est de la
+VIVACITÉ, pas du cloisonnement** — hors du périmètre gelé de F5.1. La décision
+attend arbitrage.
+
+---
+
 ## 8. Classification honnête
 
 | Propriété | Verdict |
@@ -273,6 +337,8 @@ son texte se périme dès que le code change.
 | Un repreneur périmé ne peut pas rembobiner | **PROUVÉ** — régression dédiée |
 | Le verdict de bail ignore l'horloge du processus | **PROUVÉ** (`docs/23 §4`) |
 | Le Gateway est immun à une transaction englobante | **PROUVÉ** — mesuré, par isolation de connexion |
+| Aucune estampille de décision n'est frappée avec `now()` | **PROUVÉ STRUCTURELLEMENT** — I16, sabotage vérifié |
+| Que l'échéance de bail ne soit pas recalculée par l'observateur | **NON TENU** — défaut LATENT, §7 bis, non corrigé |
 | L'effet externe de A n'est pas annulé | **MESURÉ** — et c'est la frontière, pas un défaut |
 | Qu'un exécutant périmé n'ait produit aucun effet | **NON GARANTI** — hors de portée du mécanisme |
 | Que sa requête soit annulée | **NON GARANTI** — rien dans la pile ne l'offre |

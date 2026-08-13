@@ -74,9 +74,9 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 474 tests
+pnpm test                   # 481 tests
 pnpm test:redteam           # les 97 tests d'audit et de red team
-pnpm test:lab               # les 102 tests du banc (chaos, bail, horloge, cloisonnement)
+pnpm test:lab               # les 109 tests du banc (chaos, bail, horloge, cloisonnement)
 JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
 pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
@@ -145,7 +145,7 @@ Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**474 tests passent**, dont 97 écrits pour l'audit et la red team.
+**481 tests passent**, dont 97 écrits pour l'audit et la red team.
 
 Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
 Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit

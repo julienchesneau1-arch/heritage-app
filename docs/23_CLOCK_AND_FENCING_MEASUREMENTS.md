@@ -225,6 +225,11 @@ espérer qu'une couche ultérieure le fasse.**
 | **I15** | aucune écriture d'un exécutant de génération périmée | **NON TENU** — mesuré, `it.fails()` |
 | **I16** | `executing_at` est estampillé avec une horloge murale, jamais avec `now()` dans une transaction | **PROPOSÉ** — défaut latent mesuré |
 
+> **Ce tableau est daté, et le reste.** Il décrit l'état au moment de la
+> mesure — c'est un relevé, pas un tableau de bord. Foundation 5.1 a depuis
+> tenu I15 et I16 (ADR-035, `docs/24`). Le corriger ici effacerait la seule
+> chose qui rend un relevé utile : ce qu'on savait, et quand.
+
 ---
 
 ## 9. Classification honnête
