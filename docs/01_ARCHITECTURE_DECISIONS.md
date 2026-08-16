@@ -1739,3 +1739,101 @@ pas.
 Si une mesure montre que la latence de reprise gêne réellement, rouvrir la
 question du battement de cœur — **pas avant**. Aucune mesure ne le justifie
 aujourd'hui, et il ajouterait une écriture périodique et un mode de panne neuf.
+
+---
+
+## ADR-036 — L'échéance d'un bail est LUE, jamais recalculée
+
+**Statut :** accepté (Foundation 5, couche 02). **Corrige un défaut LATENT
+découvert par audit** (`docs/24 §7 bis`). **Précise ADR-032 et ADR-035.**
+
+### Le défaut
+
+La colonne `lease_expires_at`, ajoutée par la migration 0008, était **écrite
+et jamais lue**. Le contrôle d'expiration reconstituait l'échéance :
+
+```sql
+executing_at > now() − (def.timeoutMs + LEASE_MARGIN_MS)
+```
+
+avec le `timeoutMs` que **le repreneur** connaît. Or l'échéance est une
+propriété de l'**acquisition** : c'est l'exécutant parti qui l'a fixée, avec le
+délai qu'il appliquait vraiment.
+
+```text
+A part avec timeoutMs = 30 000        →  échéance réelle : +35 s
+6 secondes passent
+le contrat change, redéploiement      →  timeoutMs = 2 000
+B reprend et RECALCULE                →  seuil à 7 s : « expiré depuis 800 ms »
+                                         ⟹ REPRISE PRÉMATURÉE de 29 s
+```
+
+Reproduit sans aucun `sleep`, sur un état que le système sait produire.
+
+### La quatrième occurrence d'un même motif
+
+C'est ce qui justifie un invariant plutôt qu'un correctif :
+
+| Sprint | La phrase qu'on croyait vraie | Verdict |
+|---|---|---|
+| Foundation 3 | `attempts` distingue un mort d'un vivant | **faux** |
+| Foundation 4 | idem — retrouvé par le chaos (CRIT-5) | **faux** |
+| F5.1 | `attempts` garde le rembobinage | **faux** |
+| F5.2 | le `timeoutMs` du repreneur donne l'échéance | **faux** |
+
+> **L'OBSERVATEUR REDÉFINIT LE PASSÉ.**
+> Quatre fois, sous quatre déguisements. Un fait établi par celui qui agissait
+> a été reconstitué par celui qui regardait.
+
+### Décision
+
+```sql
+COALESCE(lease_expires_at, 'infinity'::timestamptz) > now()
+```
+
+1. L'échéance est **lue**. `def.timeoutMs` ne participe plus à aucune décision
+   de reprise ; il ne sert qu'à **fixer** l'échéance, à l'acquisition.
+2. `COALESCE(…, 'infinity')` est du **FAIL CLOSED**. Une échéance nulle sur un
+   `EXECUTING` est impossible par contrainte ; si elle survenait, bloquer une
+   reprise coûte une attente là où la permettre coûterait un second effet.
+3. `now()` est **conservé** au contrôle. Figé, il ne peut que sur-estimer le
+   bail, donc bloquer — la direction qui protège (`docs/23 §3.1`).
+
+**Effet de bord bénéfique :** `LEASE_MARGIN_MS` était appliqué deux fois — une
+fois à l'acquisition, une fois au contrôle. Il ne l'est plus qu'une.
+
+### Invariant I18
+
+> L'échéance d'un bail est lue dans `lease_expires_at`, jamais recalculée à
+> partir d'`executing_at` et du `timeoutMs` de l'observateur.
+
+Mécanique : toute **comparaison** portant sur `executing_at` dans `src/` est
+une violation. `executing_at` est un fait d'archive — *quand l'appel est parti*
+— et en faire une borne de décision oblige à lui ajouter une durée, donc à
+laisser l'observateur trancher.
+
+I16 et I18 se partagent la colonne sans se recouvrir :
+
+| | Garde | Question |
+|---|---|---|
+| **I16** | `executing_at =` | avec quelle horloge l'écrit-on ? |
+| **I18** | `executing_at <` `>` | s'en sert-on pour décider ? |
+
+### Ce que la mesure a AUSSI corrigé — dans mon assertion, pas dans le code
+
+En éprouvant vingt reprises concurrentes, j'attendais « exactement un
+vainqueur ». La mesure en a rendu quatre, et le système avait raison : le bail
+ne garde que la reprise depuis `EXECUTING`. Une opération en `UNKNOWN` n'a plus
+d'exécutant vivant — celui qui a écrit `UNKNOWN` avait terminé — donc plus de
+bail à respecter. Les repreneurs se succèdent par génération et re-constatent
+la même ignorance.
+
+La propriété n'a jamais été « un seul vainqueur ». C'est **aucune seconde
+exécution, et aucun verdict affirmatif fabriqué**.
+
+### Condition de révision
+
+Si un mécanisme de renouvellement est un jour introduit, `lease_expires_at`
+devra être repoussé **par le détenteur du bail courant uniquement** — donc via
+`writeAuthoritative`, sous cloisonnement. Un renouvellement non cloisonné
+ressusciterait exactement le défaut qu'ADR-035 a fermé.

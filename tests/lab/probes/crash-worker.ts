@@ -79,7 +79,13 @@ async function main(): Promise<void> {
     createHostileTool({
       provider: createSuicidalProvider(world),
       world,
-      timeoutMs: 20_000,
+      /* MÊME délai que la pile de reprise — ADR-036.
+         Il valait 20 000 ms, contre 300 ms côté repreneur. Les tests
+         passaient donc GRÂCE au défaut : le repreneur recalculait l'échéance
+         avec SON délai, plus court, et concluait à tort que le bail de ce
+         processus-ci était expiré. La correction rend le bail réel, et
+         l'attente doit désormais être honnête. */
+      timeoutMs: 2_000,
     }),
   );
 

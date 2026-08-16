@@ -55,6 +55,7 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 22 | [`docs/22_EXTERNAL_REALITY_LAB_DESIGN.md`](docs/22_EXTERNAL_REALITY_LAB_DESIGN.md) | **Conception du banc de réalité extérieure** : six invariants, jeton de cloisonnement, deux mondes, matrice de vérité | avant d'écrire la moindre ligne de Foundation 5 |
 | 23 | [`docs/23_CLOCK_AND_FENCING_MEASUREMENTS.md`](docs/23_CLOCK_AND_FENCING_MEASUREMENTS.md) | **Couche 01 mesurée** : les trois horloges, le défaut latent de l'estampille, l'absence de cloisonnement | avant de toucher au bail ou d'envelopper le Gateway dans une transaction |
 | 24 | [`docs/24_FENCING_REPORT.md`](docs/24_FENCING_REPORT.md) | **Cloisonnement du bail** : matrice des chemins d'écriture audités, test de sabotage, et la frontière que le cloisonnement ne franchit pas | avant d'écrire quoi que ce soit dans `tool_operations` |
+| 25 | [`docs/25_LEASE_LAYER_REPORT.md`](docs/25_LEASE_LAYER_REPORT.md) | **Couche 02 — le bail** : l'échéance appartient à l'acquisition, le gel qu'aucune mesure ne détecte, et le coût mesuré de l'absence de renouvellement | avant de toucher à l'expiration d'un bail ou au `timeoutMs` d'un outil |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.
@@ -74,9 +75,9 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 481 tests
+pnpm test                   # 493 tests
 pnpm test:redteam           # les 97 tests d'audit et de red team
-pnpm test:lab               # les 109 tests du banc (chaos, bail, horloge, cloisonnement)
+pnpm test:lab               # les 121 tests du banc (chaos, bail, horloge, cloisonnement)
 JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
 pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
@@ -145,7 +146,7 @@ Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**481 tests passent**, dont 97 écrits pour l'audit et la red team.
+**493 tests passent**, dont 97 écrits pour l'audit et la red team.
 
 Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
 Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit

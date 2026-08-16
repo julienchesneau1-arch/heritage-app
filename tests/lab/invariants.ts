@@ -481,6 +481,75 @@ const I16: StructuralInvariant = {
 };
 
 /* ========================================================================== *
+ * I18 — l'échéance d'un bail est LUE, jamais recalculée
+ *
+ * Quatrième occurrence d'un même motif, et c'est ce qui justifie un invariant
+ * plutôt qu'un simple correctif :
+ *
+ *   Foundation 3   `attempts` distinguerait un mort d'un vivant       — faux
+ *   Foundation 4   idem, retrouvé par le chaos (CRIT-5)               — faux
+ *   F5.1           `attempts` garderait le rembobinage                — faux
+ *   F5.2           `timeoutMs` du repreneur donnerait l'échéance      — faux
+ *
+ * À chaque fois, L'OBSERVATEUR REDÉFINIT LE PASSÉ. L'invariant interdit la
+ * forme, pas seulement l'occurrence.
+ * ========================================================================== */
+
+export interface LeaseRead {
+  readonly file: string;
+  readonly expression: string;
+  /** Vrai si l'échéance est comparée plutôt que reconstituée. */
+  readonly readsDeadline: boolean;
+}
+
+/**
+ * Repère toute COMPARAISON portant sur `executing_at`.
+ *
+ * `executing_at` est un fait d'archive : quand l'appel est parti. En faire une
+ * borne de décision oblige à lui ajouter une durée — donc à choisir laquelle,
+ * donc à laisser l'observateur trancher. `lease_expires_at` existe justement
+ * pour que ce choix ait été fait une fois, par celui qui partait.
+ */
+export function classifyLeaseReads(file: string, source: string): readonly LeaseRead[] {
+  const content = stripComments(source);
+  const found: LeaseRead[] = [];
+
+  for (const match of content.matchAll(/\bexecuting_at\s*(?:[<>]=?)\s*([^\n`]+)/g)) {
+    found.push({
+      file,
+      expression: `executing_at ${(match[0] ?? '').slice('executing_at'.length).trim()}`,
+      readsDeadline: false,
+    });
+  }
+  for (const match of content.matchAll(/\blease_expires_at[^\n`]*?[<>]=?\s*([^\n`]+)/g)) {
+    found.push({
+      file,
+      expression: (match[0] ?? '').replace(/\s+/g, ' ').trim(),
+      readsDeadline: true,
+    });
+  }
+  return found;
+}
+
+const I18: StructuralInvariant = {
+  id: 'I18',
+  claim:
+    "l'échéance d'un bail est lue dans lease_expires_at, jamais recalculée " +
+    "à partir d'executing_at et du timeoutMs de l'observateur",
+  check() {
+    return sourcesUnder('src')
+      .flatMap((file) => classifyLeaseReads(file, readFileSync(file, 'utf8')))
+      .filter((read) => !read.readsDeadline)
+      .map((read) =>
+        violation('I18', "échéance de bail recalculée par l'observateur", {
+          fichier: read.file,
+          expression: read.expression,
+        }),
+      );
+  },
+};
+
+/* ========================================================================== *
  * I17 — aucune écriture autoritaire ne contourne le cloisonnement
  *
  * L'invariant qui donne sa valeur à ADR-035. Cloisonner deux `UPDATE` en
@@ -629,7 +698,7 @@ const I17: StructuralInvariant = {
 /* ========================================================================== */
 
 const STATEFUL: readonly StatefulInvariant[] = [I1, I2, I3, I4, I7, I8];
-const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10, I16, I17];
+const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10, I16, I17, I18];
 
 /** Évalue les dix invariants sur l'état courant. */
 export async function checkInvariants(db: Db, world: Db): Promise<InvariantReport> {

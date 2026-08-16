@@ -72,8 +72,27 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
    * C'est un échange délibéré : on paie une latence de reprise pour ne jamais
    * doubler un effet.
    */
-  async function waitForLease(toolTimeoutMs = 300): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, toolTimeoutMs + 5_200));
+  async function waitForLease(key: string): Promise<void> {
+    /* ON N'ESTIME PLUS L'ÉCHÉANCE, ON LA LIT — même leçon qu'ADR-036.
+
+       Cette attente valait `toolTimeoutMs + 5 200`, c'est-à-dire une échéance
+       RECONSTITUÉE par l'observateur à partir du délai qu'il croyait
+       applicable. Elle était fausse, et les tests passaient quand même : la
+       sonde de crash prenait son bail avec 20 000 ms, le repreneur recalculait
+       avec 300 ms, et tout le monde tombait d'accord sur une échéance que
+       personne n'avait fixée.
+
+       La base connaît l'échéance. On la lui demande. */
+    for (let attempt = 0; attempt < 400; attempt += 1) {
+      const row = await db.query<{ expire: boolean }>(
+        `SELECT COALESCE(lease_expires_at, 'infinity'::timestamptz) <= now() AS expire
+           FROM tool_operations WHERE operation_id = $1`,
+        [key],
+      );
+      if (row.ok && row.value.rows[0]?.expire === true) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`le bail de ${key} n'a jamais expiré`);
   }
 
   async function stateOf(key: string): Promise<string | undefined> {
@@ -134,7 +153,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
       const key = labKey('crash-conc');
       await crash('APRES_EFFET', key);
       expect(await externalEffectCount(world, key)).toBe(1);
-      await waitForLease();
+      await waitForLease(key);
 
       // 30 reprises simultanées, sur un outil incapable de vérifier.
       const stack = recoveryStack(false);
@@ -163,7 +182,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
       const key = labKey('crash-verif');
       await crash('APRES_EFFET', key);
       expect(await externalEffectCount(world, key)).toBe(1);
-      await waitForLease();
+      await waitForLease(key);
 
       const stack = recoveryStack(true);
       const resumed = await stack.gateway.invoke(labCall(key));
@@ -184,7 +203,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
       const key = labKey('crash-noeffect');
       await crash('AVANT_EFFET', key);
       expect(await externalEffectCount(world, key)).toBe(0);
-      await waitForLease();
+      await waitForLease(key);
 
       // 25 reprises simultanées. Chacune obtiendra `NO_EFFECT` — le seul verdict
       // qui rouvre l'exécution. Si le compare-and-swap ne tenait pas, ce test
@@ -206,7 +225,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
     async () => {
       const key = labKey('crash-mature');
       await crash('APRES_EFFET', key);
-      await waitForLease();
+      await waitForLease(key);
 
       const stack = recoveryStack(false);
       for (let round = 0; round < 5; round += 1) {
@@ -246,7 +265,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
       expect(await externalEffectCount(world, key)).toBe(1);
 
       // Une fois le bail expiré, la reprise redevient possible.
-      await waitForLease();
+      await waitForLease(key);
       const resumed = await stack.gateway.invoke(labCall(key));
       expect(resumed.ok).toBe(true);
       if (resumed.ok) expect(resumed.value.status).toBe('CONFIRMED');
@@ -309,7 +328,7 @@ describe.runIf(enabled)('banc — crash pendant un effet externe', () => {
     async () => {
       const key = labKey('crash-attempts');
       await crash('APRES_EFFET', key);
-      await waitForLease();
+      await waitForLease(key);
 
       const stack = recoveryStack(false);
       await Promise.all(

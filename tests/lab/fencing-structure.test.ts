@@ -21,6 +21,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   checkStructuralInvariants,
+  classifyLeaseReads,
   classifyOperationWrites,
   classifyStamps,
   renderViolations,
@@ -188,6 +189,60 @@ describe('I17 — cloisonnement des écritures autoritaires', () => {
         'const q = `UPDATE t SET lease_expires_at = NULL`;',
       );
       expect(sites).toEqual([]);
+    });
+  });
+
+  /* ================================================================== *
+   * I18 — l'échéance est LUE, jamais recalculée
+   * ================================================================== */
+
+  describe("I18 — l'échéance de bail n'est pas recalculée", () => {
+    it("le dépôt courant ne recalcule aucune échéance", () => {
+      const i18 = checkStructuralInvariants().violations.filter(
+        (v) => v.invariant === 'I18',
+      );
+      if (i18.length > 0) {
+        throw new Error(`échéances recalculées :\n${renderViolations(i18)}`);
+      }
+      expect(i18).toEqual([]);
+    });
+
+    it("DÉTECTE : le contre-exemple exact — executing_at + timeoutMs de l'observateur", () => {
+      const reads = classifyLeaseReads(
+        'attaque.ts',
+        'const q = `SELECT executing_at > now() - ($2 || \' milliseconds\')::interval AS live`;',
+      );
+      expect(reads).toHaveLength(1);
+      expect(reads[0]?.readsDeadline).toBe(false);
+    });
+
+    it('DÉTECTE : toute comparaison sur executing_at, même sans intervalle', () => {
+      const reads = classifyLeaseReads(
+        'attaque.ts',
+        'const q = `SELECT executing_at < now() AS vieux`;',
+      );
+      expect(reads[0]?.readsDeadline).toBe(false);
+    });
+
+    it("accepte la LECTURE de l'échéance stockée", () => {
+      const reads = classifyLeaseReads(
+        'ok.ts',
+        "const q = `SELECT COALESCE(lease_expires_at, 'infinity'::timestamptz) > now() AS live`;",
+      );
+      expect(reads).toHaveLength(1);
+      expect(reads[0]?.readsDeadline).toBe(true);
+    });
+
+    it("IGNORE l'ÉCRITURE d'executing_at — c'est I16 qui la garde", () => {
+      /* Les deux invariants se partagent la colonne sans se marcher dessus :
+         I16 garde le `=` (avec quelle horloge on l'écrit), I18 garde le `<`
+         et le `>` (si on s'en sert pour décider). Confondre les deux ferait
+         signaler l'acquisition, qui est parfaitement légitime. */
+      const reads = classifyLeaseReads(
+        'ok.ts',
+        'const q = `UPDATE t SET executing_at = clock_timestamp()`;',
+      );
+      expect(reads).toEqual([]);
     });
   });
 

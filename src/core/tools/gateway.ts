@@ -909,13 +909,36 @@ export function createToolGateway(deps: {
          appel est en vol. */
       if (EFFECT_POSSIBLE.has(prior.state)) {
         if (prior.state === 'EXECUTING') {
-          // Évalué PAR LA BASE : comparer avec l'horloge du processus
-          // introduirait une dérive entre machines, et le bail deviendrait
-          // faux là où il compte le plus.
+          /* L'ÉCHÉANCE EST LUE, JAMAIS RECALCULÉE — ADR-036.
+
+             Ce contrôle recalculait `executing_at + def.timeoutMs + marge`
+             avec le `timeoutMs` que LE REPRENEUR connaît. Or l'échéance est
+             une propriété de l'ACQUISITION : c'est l'exécutant parti qui l'a
+             fixée, avec le délai qu'il appliquait vraiment.
+
+               A part avec timeoutMs = 30 000   →  échéance réelle : +35 s
+               le contrat change, redéploiement →  timeoutMs = 2 000
+               B reprend et RECALCULE           →  croit l'échéance à +7 s
+                                                   ⟹ reprise PRÉMATURÉE
+
+             Quatrième occurrence du même motif : l'observateur redéfinit le
+             passé. `attempts` l'avait fait pour l'autorité (trois fois), le
+             recalcul le faisait pour l'échéance.
+
+             `COALESCE(…, 'infinity')` est du FAIL CLOSED : une échéance nulle
+             sur un `EXECUTING` est impossible par contrainte, et si elle
+             survenait, bloquer une reprise coûte une attente là où la
+             permettre coûterait un second effet.
+
+             Évalué PAR LA BASE : comparer avec l'horloge du processus
+             introduirait une dérive entre machines, et le bail deviendrait
+             faux là où il compte le plus. `now()` figé ne peut ici que
+             SUR-estimer le bail, donc bloquer — la direction qui protège
+             (`docs/23 §3.1`). */
           const lease = await deps.db.query<{ live: boolean }>(
-            `SELECT executing_at > now() - ($2 || ' milliseconds')::interval AS live
+            `SELECT COALESCE(lease_expires_at, 'infinity'::timestamptz) > now() AS live
                FROM tool_operations WHERE operation_id = $1`,
-            [call.operationId, String(def.timeoutMs + LEASE_MARGIN_MS)],
+            [call.operationId],
           );
           if (!lease.ok) return lease;
           if (lease.value.rows[0]?.live === true) return inFlight(call, def.id);

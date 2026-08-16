@@ -55,12 +55,13 @@ describe.runIf(enabled)('banc — chaos', () => {
    * ================================================================== */
 
   it('les invariants sont déclarés et évaluables', async () => {
-    // Dix depuis Foundation 4, plus I16 (estampille) et I17 (cloisonnement)
-    // depuis F5.1.
+    /* Dix depuis Foundation 4 ; I16 (estampille) et I17 (cloisonnement)
+       depuis F5.1 ; I18 (échéance lue, jamais recalculée) depuis F5.2. */
     const report = await checkInvariants(db, world);
-    expect(report.checked).toHaveLength(12);
+    expect(report.checked).toHaveLength(13);
     for (const id of [
-      'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9', 'I10', 'I16', 'I17',
+      'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9', 'I10',
+      'I16', 'I17', 'I18',
     ]) {
       expect(report.checked.some((c) => c.startsWith(`${id} —`))).toBe(true);
     }
