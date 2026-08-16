@@ -193,6 +193,53 @@ provenance `intentId → effectId`, invariants I11 à I13.
 > Ce qui a pris sa place — **I12** (aucune action nouvelle après violation) et
 > **I13** (chaîne de provenance complète) — est nommé en `docs/27 §8`.
 
+### 4.5 `egress` est un booléen là où il y a DEUX questions
+
+**Trouvé en écrivant `calendar_read`, pas en relisant le modèle.**
+
+Le premier outil sortant du dépôt a rendu mesurable ce qui n'était jusque-là
+qu'une élégance de schéma : `egress` est dérivé de `networkRequired`
+(`gateway.ts:801`), puis confronté à un interrupteur nommé `cloudEnabled`.
+Deux questions distinctes sont écrasées sur un seul bit.
+
+| Question | Champ qui la porte |
+|---|---|
+| l'appel quitte-t-il le **processus** ? | `ToolDefinition.networkRequired` |
+| la destination est-elle hors de la **machine** ? | *(personne)* |
+
+Un CalDAV sur `127.0.0.1` sort du processus sans sortir de la machine. Le
+modèle ne sait pas l'exprimer, et les deux issues sont mauvaises :
+
+- `networkRequired: false` ferait sortir un agenda **cloud** sans que le Gate
+  le voie ;
+- `networkRequired: true` — le choix retenu, fail-closed — oblige l'utilisateur
+  à laisser `cloudEnabled` armé pour un usage quotidien. **Un interrupteur de
+  sûreté qu'il faut désarmer pour se servir de la machine cesse d'être un
+  interrupteur de sûreté.**
+
+Mesuré : `tests/tools/calendar-read.test.ts`, dernier test — un fournisseur
+dont `capabilities.local === true` est refusé sans `cloudEnabled`, autorisé
+avec.
+
+**Ce n'est pas réparable dans un outil.** `ProviderCapabilities.local` porte
+déjà la réponse ; ce qui manque est le composant qui croise le contrat de
+l'outil et les capacités du fournisseur — le **Data Firewall** de `docs/02`
+Phase 4, dont la mission est littéralement « classification, redaction,
+**décision d'égression** ».
+
+**Conséquence sur l'ordre des chantiers.** Tout agenda cloud exige que ce
+composant existe D'ABORD. Aujourd'hui, la règle censée protéger l'agenda
+(`docs/14` : agenda = `SENSITIVE`, cloud interdit) **n'est pas en vigueur dans
+le code** — `DataLevel` n'est pas implémenté, `PrivacyClass` en est encore à
+trois valeurs, et la politique dure ne refuse que `RED + egress`. Un outil
+d'agenda déclare `ORANGE` et passe. Ouvrir le cloud avant le Data Firewall
+reviendrait donc à lui donner pour première mission de rattraper un trou déjà
+ouvert.
+
+**Condition de levée :** `DataLevel` implémenté et Data Firewall branché. Le
+dernier test de `calendar-read.test.ts` échouera ce jour-là — c'est ce qu'on
+demande à une zone d'ombre : se signaler quand elle disparaît.
+
 ---
 
 ## 5. IRRÉDUCTIBLES — et elles le resteront

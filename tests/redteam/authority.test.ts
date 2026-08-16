@@ -19,6 +19,25 @@ import type { ToolCall } from '../../src/core/tools/gateway.js';
 
 const skip = !databaseAvailable();
 
+/**
+ * Entrée VALIDE par outil sortant.
+ *
+ * Indispensable, et pas un détail de confort : le Gateway valide le schéma
+ * AVANT d'interroger la politique. Une entrée vide rendrait `VALIDATION`, le
+ * test serait vert, et il n'aurait jamais atteint la barrière qu'il prétend
+ * éprouver — vert pour la mauvaise raison.
+ *
+ * Un outil sortant sans entrée ici fait ÉCHOUER le test plutôt que de le
+ * laisser glisser : c'est ce qui force à réfléchir au prochain.
+ */
+const ENTREES_VALIDES: Readonly<Record<string, unknown>> = {
+  calendar_read: {
+    fromIso: '2026-08-16T00:00:00.000Z',
+    toIso: '2026-08-16T23:59:59.000Z',
+  },
+};
+
+
 /** Un outil-piège : s'il s'exécute une seule fois, l'attaque a réussi. */
 let executions = 0;
 
@@ -257,21 +276,54 @@ describe.skipIf(skip)('RED TEAM — le modèle propose, le système décide', ()
   /* E. Surface d'outils                                                 */
   /* ------------------------------------------------------------------ */
 
-  it('aucun outil du noyau n\'exécute de code ni ne sort sur le réseau', () => {
-    // Invariant S2. Aujourd'hui il tient par ABSENCE DE CAPACITÉ, ce qui est
-    // la forme la plus solide — mais aussi la moins éprouvée : il n'existe
-    // encore aucun outil réseau à refuser.
+  it('aucun outil du noyau n\'exécute de code, et tout outil sortant est REFUSÉ par défaut', async () => {
+    /* INVARIANT S2, ET IL A CHANGÉ DE FONDATION.
+
+       Il tenait par ABSENCE DE CAPACITÉ — « la forme la plus solide, mais
+       aussi la moins éprouvée : il n'existe encore aucun outil réseau à
+       refuser ». `calendar_read` est ce premier outil.
+
+       On ne relâche pas l'assertion en exemptant un identifiant : ce serait
+       remplacer une preuve par une liste d'exceptions, et la liste
+       grandirait. On la remplace par la propriété qu'elle visait vraiment —
+       **rien ne sort sans autorisation d'égression.** */
     const core = stack.gateway
       .list()
       .filter((t) => !t.definition.id.startsWith('redteam_'));
 
     expect(core.length).toBeGreaterThan(0);
+
     for (const tool of core) {
-      expect(tool.definition.networkRequired, tool.definition.id).toBe(false);
+      // Inchangé, et ce sont les deux qui n'admettent aucune exception :
+      // aucun outil du noyau ne réclame de secret, aucun ne s'appelle shell.
       expect(tool.definition.requiredSecrets, tool.definition.id).toEqual([]);
       expect(tool.definition.id).not.toMatch(/shell|exec|eval|command|http/i);
     }
-  });
+
+    const sortants = core.filter((t) => t.definition.networkRequired);
+    for (const tool of sortants) {
+      const entree = ENTREES_VALIDES[tool.definition.id];
+      expect(entree, `entrée valide manquante pour ${tool.definition.id}`).toBeDefined();
+      const result = await stack.gateway.invoke({
+        toolId: tool.definition.id,
+        input: entree ?? {},
+        parameterProvenance: {},
+        operationId: operationId(`s2-egress-${tool.definition.id}`),
+        actor: 'USER',
+        // Posture par défaut : cloud coupé. La politique dure
+        // `egress && !cloudEnabled` doit suffire, sans rien d'autre.
+        context: callContext({ userConfirmed: true }),
+      });
+      expect(result.ok, tool.definition.id).toBe(false);
+      if (result.ok) continue;
+      expect(result.error.kind, tool.definition.id).toBe('POLICY_DENIED');
+    }
+
+    // CONTRÔLE NÉGATIF — la boucle ci-dessus serait vide, donc verte pour
+    // rien, si plus aucun outil ne déclarait `networkRequired`. On fixe le
+    // fait qu'elle a du travail.
+    expect(sortants.length).toBeGreaterThan(0);
+  }, 30_000);
 
   it('refuse un outil inconnu sans révéler la surface disponible', async () => {
     const result = await stack.gateway.invoke(call('shell_exec'));

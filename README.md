@@ -6,7 +6,7 @@
 > humaine en action vérifiable.**
 
 Statut : **Jarvis fonctionne.** Interface texte, passerelle web pour le téléphone,
-sept outils, mémoire, journal interrogeable — sans Internet et sans aucun modèle
+huit outils, mémoire, journal interrogeable — sans Internet et sans aucun modèle
 installé.
 
 ---
@@ -79,7 +79,7 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 568 tests
+pnpm test                   # 579 tests
 pnpm test:redteam           # les 97 tests d'audit et de red team
 pnpm test:lab               # les 149 tests du banc (chaos, bail, deux mondes, byzantin, provenance)
 JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
@@ -145,14 +145,16 @@ séparation Privileged/Quarantined (ADR-004), les sept outils écrits —
 `memory_add`, `memory_search`, `task_create`, `task_list`, `note_create`,
 `audit_query`, qui rend le journal interrogeable (ADR-041), et `task_complete`,
 premier outil qui MODIFIE une ligne et donc le premier dont l'annulation exige
-de restaurer l'état observé (ADR-042) — et une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
+de restaurer l'état observé (ADR-042), et `calendar_read`, premier outil qui
+dépend d'un système que nous ne possédons pas — un agenda inaccessible y est un
+échec nommé, jamais un agenda vide (ADR-043) — et une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
 aucun modèle requis).
 
 Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**568 tests passent**, dont 97 écrits pour l'audit et la red team.
+**579 tests passent**, dont 99 écrits pour l'audit et la red team.
 
 Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
 Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit

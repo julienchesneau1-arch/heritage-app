@@ -11,11 +11,13 @@ import type { ToolGateway } from '../core/tools/gateway.js';
 import type { MemoryGuard } from '../core/memory/guard.js';
 import type { MemoryStore } from '../core/memory/store.js';
 import type { HybridSearch } from '../core/memory/search.js';
+import type { CalendarProvider } from '../providers/contract.js';
 import { ok, type Result } from '../core/types/result.js';
 import { memoryAddTool, memorySearchTool } from './memory.js';
 import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
+import { calendarReadTool } from './calendar.js';
 
 export interface ToolDeps {
   readonly guard: MemoryGuard;
@@ -26,6 +28,16 @@ export interface ToolDeps {
    * l'outil : c'est une propriété de la conversation, pas de l'appel.
    */
   readonly isUserConfirmed: () => boolean;
+  /**
+   * Fournisseur d'agenda, ou `null`.
+   *
+   * `null` est un état NORMAL et déclaré, pas une panne : aucun adaptateur
+   * n'existe encore, et le choix du backend (CalDAV local, autre) est une
+   * décision de dépendance au sens de `docs/04`. L'outil s'enregistre quand
+   * même — il rend alors `PROVIDER_UNAVAILABLE`, ce qui est une réponse, là
+   * où l'absence d'outil n'en serait pas une.
+   */
+  readonly calendar?: CalendarProvider | null;
 }
 
 /**
@@ -52,6 +64,10 @@ export function registerCoreTools(
        le journal devient interrogeable par un humain. Il ne dépend d'aucune
        autre dépendance — il lit `event_ledger` par le contexte d'outil. */
     createAuditQueryTool(),
+    /* Phase 3, point 2. Premier outil qui parle à un FOURNISSEUR : un agenda
+       vide et un agenda inaccessible se ressemblent, et se racontent
+       différemment — ADR-043. */
+    calendarReadTool(deps.calendar ?? null),
   ];
 
   for (const tool of tools) {
@@ -68,4 +84,5 @@ export {
   taskListTool,
   taskCompleteTool,
   noteCreateTool,
+  calendarReadTool,
 };

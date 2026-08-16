@@ -23,7 +23,7 @@ import {
 } from '../../src/providers/policy/cedar.js';
 import { registerCoreTools } from '../../src/tools/index.js';
 import type { Db } from '../../src/core/db/client.js';
-import type { EmbeddingProvider } from '../../src/providers/contract.js';
+import type { CalendarProvider, EmbeddingProvider } from '../../src/providers/contract.js';
 import type { Ledger } from '../../src/core/ledger/ledger.js';
 import type { MemoryStore } from '../../src/core/memory/store.js';
 import type { RegisteredTool } from '../../src/core/tools/contract.js';
@@ -41,7 +41,11 @@ export interface Stack {
 
 export function buildStack(
   db: Db,
-  options: { embeddings?: EmbeddingProvider | null } = {},
+  options: {
+    embeddings?: EmbeddingProvider | null;
+    /** `undefined` reproduit le dépôt tel qu'il est : aucun adaptateur d'agenda. */
+    calendar?: CalendarProvider | null;
+  } = {},
 ): Stack {
   const source = loadPolicySource(join(process.cwd(), 'policies'));
   if (!source.ok) throw new Error(source.error.message);
@@ -68,6 +72,7 @@ export function buildStack(
     store,
     search,
     isUserConfirmed: () => userConfirmed,
+    calendar: options.calendar ?? null,
   });
   if (!registered.ok) throw new Error(registered.error.message);
 

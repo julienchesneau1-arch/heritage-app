@@ -2430,3 +2430,109 @@ Si un jour une mutation doit porter sur plusieurs lignes, `RETURNING` ne suffira
 plus à capturer l'avant : il faudra un instantané explicite dans la même
 transaction. Cette ADR ne tomberait pas, mais sa mise en œuvre en une instruction
 oui — et c'est le moment où il faudra revenir ici plutôt qu'improviser.
+
+---
+
+## ADR-043 — Un agenda inaccessible n'est pas un agenda vide
+
+**Statut :** accepté (Phase 3). **Référence :** `docs/02 §Phase 3`, `docs/16 §3`,
+`docs/14 §2`, `docs/26 §4.5`, invariant S2.
+
+### Le mode de panne que cet outil existe pour empêcher
+
+`calendar_read` est le premier outil du dépôt qui dépend d'un système que nous
+ne possédons pas. Sa difficulté tient en une phrase :
+
+> Un agenda vide et un agenda inaccessible se ressemblent, et se racontent
+> différemment.
+
+« Tu n'as rien aujourd'hui » quand le fournisseur est injoignable est un énoncé
+**faux sur le monde**. Aucune exception n'est levée, aucune erreur n'apparaît,
+et Jarvis vient de mentir sur une journée entière. C'est la règle 3 — *jamais de
+succès non vérifié* — dans sa forme la plus discrète : ici le succès non vérifié
+ne ressemble même pas à un succès, il ressemble à une information.
+
+**Décision :** l'absence de fournisseur est un **échec nommé**
+(`PROVIDER_UNAVAILABLE`), jamais une liste vide. Et une erreur du fournisseur
+remonte telle quelle — la rattraper pour rendre `[]` reproduirait le même défaut
+une couche plus bas, cette fois avec un fournisseur configuré, donc sans le
+moindre indice pour l'utilisateur.
+
+Un agenda **réellement** vide reste distinguable des deux : c'est le contrôle
+négatif sans lequel les deux propriétés ci-dessus seraient vertes en échouant
+toujours.
+
+### `NO_EXTERNAL_EFFECT` et `networkRequired: true` ne se contredisent pas
+
+L'un décrit **l'effet**, l'autre **le trajet**. Une lecture ne change rien, nulle
+part — y compris chez le fournisseur. Elle sort quand même du processus. Les
+confondre ferait d'un outil réseau un outil mutant, ou l'inverse.
+
+### Le pessimisme du contrat, assumé
+
+`egress` est dérivé de `networkRequired`. Or l'outil **ne peut pas savoir** si
+l'appel quitte la machine : cela dépend du fournisseur branché, connu seulement à
+l'exécution. Un contrat statique devant une inconnue déclare le **pire cas**.
+
+Conséquence acceptée : en mode privé, ou cloud coupé, `calendar_read` est refusé
+**même avec un fournisseur local**. C'est un refus faux, et c'est le bon sens du
+compromis — l'erreur inverse laisserait un agenda partir sans que le Gate le
+voie. Le défaut de modélisation sous-jacent est consigné en `docs/26 §4.5` ; il
+appartient au Data Firewall, pas à un outil.
+
+### L'outil s'enregistre même sans fournisseur
+
+Ne pas l'enregistrer serait une autre façon de mentir : l'utilisateur
+demanderait son agenda et Jarvis répondrait qu'il ne sait pas faire, alors qu'il
+sait faire et qu'il lui manque un branchement. C'est la distinction du dépôt
+depuis le début — **« CAPACITÉ ABSENTE (dit) »**.
+
+Aucun adaptateur n'est écrit. Le choix du backend est une décision de dépendance
+au sens de `docs/04`, et l'interface `CalendarProvider` est la couture qui permet
+de la prendre plus tard sans réécrire l'outil.
+
+### L'invariant S2 a changé de fondation, et c'est le vrai livrable
+
+Deux tests de red team tenaient par **absence de capacité**, et l'avaient écrit :
+
+```text
+authority.test.ts  « il n'existe encore aucun outil réseau à refuser »
+injection.test.ts  « à re-tester le jour où le premier outil sortant apparaîtra »
+```
+
+Ce jour est arrivé, et les deux sont tombés. **Aucune exemption n'a été
+ajoutée** — exempter un identifiant aurait remplacé une preuve par une liste, et
+la liste aurait grandi. Les deux propriétés ont été reformulées vers ce qu'elles
+visaient vraiment :
+
+> **Rien ne sort sans autorisation d'égression** — prouvé par le refus, plus par
+> le vide.
+
+Chacune porte désormais un contrôle négatif (`sortants.length > 0`) : le jour où
+plus aucun outil ne déclare `networkRequired`, la boucle serait vide et le test
+vert pour rien.
+
+**Détail qui a failli rendre ces tests creux :** le Gateway valide le schéma
+**avant** d'interroger la politique. Une entrée vide rendait `VALIDATION`, et le
+test n'atteignait jamais la barrière qu'il prétendait éprouver. D'où la table
+`ENTREES_VALIDES`, qui **échoue** sur un outil sortant sans entrée déclarée
+plutôt que de laisser glisser le suivant.
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| absence de fournisseur rendue comme agenda vide | **1 / 11** |
+| panne du fournisseur avalée en agenda vide | **1 / 11** |
+
+Deux défauts étroits, chacun couvert par le test écrit pour lui — et chacun
+serait invisible en exploitation, ce qui est précisément pourquoi ils sont
+testés.
+
+### Condition de révision
+
+Le jour où un adaptateur réel existe, `verification: 'NONE'` devra être
+réexaminé : lire un agenda distant n'a rien à vérifier, mais un agenda qui répond
+**partiellement** (page tronquée, fenêtre écrêtée côté serveur) est un cas que
+cette ADR ne couvre pas — et qui ressemble beaucoup, encore une fois, à un agenda
+vide.
