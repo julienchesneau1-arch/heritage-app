@@ -1,5 +1,5 @@
 /**
- * Assemblage des cinq premiers outils.
+ * Assemblage des outils du noyau.
  *
  * Référence : 02 Phase 2, `00 §6` (« pas de 50 outils au départ »).
  *
@@ -13,7 +13,7 @@ import type { MemoryStore } from '../core/memory/store.js';
 import type { HybridSearch } from '../core/memory/search.js';
 import { ok, type Result } from '../core/types/result.js';
 import { memoryAddTool, memorySearchTool } from './memory.js';
-import { taskCreateTool, taskListTool } from './tasks.js';
+import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
 
@@ -43,6 +43,10 @@ export function registerCoreTools(
     memorySearchTool(deps.search),
     taskCreateTool(),
     taskListTool(),
+    /* Phase 3, point 1 de `docs/02`. Premier outil qui MODIFIE une ligne :
+       la capture d'annulation y devient une restauration, pas une
+       suppression — ADR-042. */
+    taskCompleteTool(),
     noteCreateTool(),
     /* Premier outil de Phase 3, et celui qui tient la promesse de `docs/12` :
        le journal devient interrogeable par un humain. Il ne dépend d'aucune
@@ -57,4 +61,11 @@ export function registerCoreTools(
   return ok(undefined);
 }
 
-export { memoryAddTool, memorySearchTool, taskCreateTool, taskListTool, noteCreateTool };
+export {
+  memoryAddTool,
+  memorySearchTool,
+  taskCreateTool,
+  taskListTool,
+  taskCompleteTool,
+  noteCreateTool,
+};

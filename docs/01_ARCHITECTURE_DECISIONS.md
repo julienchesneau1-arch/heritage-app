@@ -2329,3 +2329,104 @@ Si le journal devait un jour être élagué pour tenir en volume, cette ADR ne
 tomberait pas — mais l'outil devrait alors **rapporter la borne d'élagage** dans
 sa réponse. Un audit qui ne dit pas où commence sa mémoire laisse croire que
 rien ne s'est passé avant.
+
+---
+
+## ADR-042 — Une modification ne se défait qu'en restaurant l'état OBSERVÉ
+
+**Statut :** accepté (Phase 3). **Référence :** `docs/02 §Phase 3`, ADR-019,
+invariant S6, `docs/26 §3`.
+
+### Ce que `task_complete` a révélé, et que les cinq premiers outils cachaient
+
+Les cinq outils de Phase 2 **créent**. `task_complete` est le premier qui
+**modifie**, et la différence n'est pas de degré :
+
+> Une suppression n'a besoin de rien savoir du passé.
+> Une restauration n'est correcte que si l'état antérieur a été LU.
+
+`note_delete`, `task_cancel` : l'annulation d'une création n'a besoin que de
+l'identifiant. Annuler une modification exige de savoir **ce qui était là** — et
+personne ne peut le reconstituer après coup, parce que c'est précisément ce que
+la modification a effacé.
+
+### La décision
+
+> **La mutation et la capture de l'état antérieur sont la MÊME instruction.**
+
+```sql
+UPDATE tasks AS t
+   SET state = 'DONE', updated_at = now()
+  FROM tasks AS prior          -- l'instantané pris au DÉBUT de la commande
+ WHERE t.id = $1 AND prior.id = t.id AND prior.state <> 'CANCELLED'
+RETURNING t.id, t.title, t.state, prior.state AS prior_state
+```
+
+Un `SELECT` suivi d'un `UPDATE` ouvrirait entre les deux une fenêtre où l'état
+peut changer. La capture décrirait alors **un passé qui n'a jamais existé** — et
+l'annulation restaurerait cet inexistant. C'est le motif « l'observateur
+redéfinit le passé » (`docs/26 §3`) dans sa forme la plus coûteuse : ici
+l'observation n'est pas un rapport, c'est la seule chose qui rendra l'annulation
+possible.
+
+**Corollaire : jamais d'état antérieur supposé.** Terminer une tâche déjà
+terminée capture `DONE`, pas `OPEN`. Un outil qui écrirait « l'état normal avant
+une complétion » passerait le cas nominal et inventerait un passé dans l'autre —
+annuler rouvrirait une tâche que l'utilisateur avait terminée *avant* l'appel.
+
+### Le validateur de contrat a eu raison contre la première rédaction
+
+Écrit `NATURALLY_IDEMPOTENT` — l'état final ne dépend pas du nombre
+d'exécutions. Refusé :
+
+```text
+task_complete mute mais se déclare naturellement idempotent.
+Une mutation exige une clé d'opération (invariant S6).
+```
+
+L'objection porte plus loin que la règle qui l'énonce. **L'idempotence valait
+pour l'ÉTAT, pas pour la CAPTURE.** Une seconde exécution aurait observé `DONE`
+et enregistré `priorState: 'DONE'` par-dessus la première : l'état inchangé,
+l'action devenue irréversible, et rien de visible dans la seule chose qu'on
+regardait.
+
+> Une mutation n'est jamais « naturellement » idempotente tant qu'elle traîne un
+> effet de bord qui, lui, ne l'est pas.
+
+C'est aussi pourquoi `attemptVerification: 'NONE'` est ici un **choix** et non un
+défaut d'outillage : un rejeu serait plus dangereux qu'un doublon, donc la
+reprise conclut `UNKNOWN` et refuse de rejouer (ADR-027).
+
+### Deux refus explicites
+
+**Une tâche `CANCELLED` ne devient pas `DONE`.** La conversion effacerait une
+décision de l'utilisateur du seul état qu'il consulte. Le journal la garderait —
+mais personne ne lit le journal pour savoir où en est sa liste. Refus `CONFLICT`,
+avec la marche à suivre.
+
+**Un état observé ≠ `DONE` après coup ne rend pas `FAILED`.** L'`UPDATE` a rendu
+une ligne : l'écriture a eu lieu. Observer autre chose ensuite prouve qu'un
+**autre écrivain** est passé après le commit, pas que l'écriture a échoué.
+Annoncer `FAILED` serait un échec inventé, et l'utilisateur relancerait une
+action déjà faite. Verdict : `UNKNOWN` / `EXTERNAL_STATE` — « externe » signifiant
+ici *extérieur à cette exécution*, pas extérieur à la machine.
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| `prior` lu APRÈS l'écriture (capture ≡ état courant) | **4 / 9** |
+| état antérieur écrit en dur (`'OPEN'`) | **1 / 9** |
+| conversion silencieuse d'une tâche `CANCELLED` | **1 / 9** |
+| relecture annonçant `FAILED` au lieu d'`UNKNOWN` | **1 / 9** |
+
+Les trois derniers sont des défauts étroits, chacun couvert par le test écrit
+pour lui. Le premier casse largement, ce qui est attendu : il vide la capture de
+sa substance sans rien changer à l'état, donc tout ce qui regarde le passé tombe.
+
+### Condition de révision
+
+Si un jour une mutation doit porter sur plusieurs lignes, `RETURNING` ne suffira
+plus à capturer l'avant : il faudra un instantané explicite dans la même
+transaction. Cette ADR ne tomberait pas, mais sa mise en œuvre en une instruction
+oui — et c'est le moment où il faudra revenir ici plutôt qu'improviser.
