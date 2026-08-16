@@ -121,6 +121,19 @@ describe('RED TEAM — code mort en production', () => {
         // décision d'égression — ne sont satisfaites par personne.
         'src/core/observability/logger.ts',
 
+        /* CostGate (ADR-040). Écrit, testé, et appelé par PERSONNE — parce
+           qu'aucun fournisseur cloud n'existe pour l'appeler.
+
+           C'est délibéré et c'est le bon ordre : `docs/04` pose « 0 €
+           récurrent » comme invariant, et il était jusqu'ici tenu par ABSENCE
+           DE DÉPENSE plutôt que par mécanisme. Le mécanisme existe désormais
+           AVANT le premier appel payant, au lieu d'être écrit dans l'urgence
+           après.
+
+           Il sortira de cette liste le jour où un fournisseur cloud sera
+           branché — et ce test le signalera si on oublie de l'y brancher. */
+        'src/core/cost/gate.ts',
+
         // Modèle d'effet par cible (ADR-031). Spécifié, implémenté, testé —
         // et PAS ENCORE BRANCHÉ au Tool Gateway, qui n'a aujourd'hui aucune
         // notion de cible à lui transmettre.
@@ -133,9 +146,9 @@ describe('RED TEAM — code mort en production', () => {
     );
   });
 
-  it('cinq modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('six modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
-    expect(deadLogic).toHaveLength(5);
+    expect(deadLogic).toHaveLength(6);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });
@@ -176,7 +189,7 @@ describe('RED TEAM — code mort en production', () => {
     await Promise.resolve();
   });
 
-  it('DÉMONSTRATION — 9 clés de configuration sur 16 n\'ont aucun effet', () => {
+  it('DÉMONSTRATION — 6 clés de configuration sur 16 n\'ont aucun effet', () => {
     // `06` impose « aucune configuration critique cachée dans le code ». Le
     // dépôt fait l'inverse du reproche attendu : la configuration existe, est
     // validée par Zod… et n'est lue par personne. Une clé décorative est pire
@@ -189,14 +202,22 @@ describe('RED TEAM — code mort en production', () => {
     // Aucun consommateur nulle part dans `src/` hors du schéma lui-même.
     for (const key of [
       'defaultDecision',
-      'alertAtPercent',
-      'hardBlockAtPercent',
       'startInPrivateMode',
       'externalTelemetry',
       'verifyChainOnStartup', // le CLI ne vérifie PAS la chaîne au démarrage
-      'budgetMonthlyEur', // lu par `load.ts`, appliqué par personne
     ]) {
       expect(sources.includes(key), key).toBe(false);
+    }
+
+    /* TROIS CLÉS ONT CESSÉ D'ÊTRE DÉCORATIVES — ADR-040.
+
+       `budgetMonthlyEur`, `alertAtPercent` et `hardBlockAtPercent` sont
+       désormais LUES et APPLIQUÉES par le CostGate. Elles restent inertes en
+       exploitation tant qu'aucun fournisseur cloud n'appelle le gate, mais la
+       distinction compte : une clé qu'aucun code ne lit est décorative, une
+       clé lue par un module non branché est en attente. */
+    for (const key of ['budgetMonthlyEur', 'alertAtPercent', 'hardBlockAtPercent']) {
+      expect(sources.includes(key), key).toBe(true);
     }
 
     // `policy.directory` et `cloud.enabled` sont contournés autrement : le

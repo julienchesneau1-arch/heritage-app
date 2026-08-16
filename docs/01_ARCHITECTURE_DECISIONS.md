@@ -2104,3 +2104,119 @@ la clé d'opération, pas par un identifiant propre.
 
 Suffisant pour les deux questions posées. Insuffisant le jour où une opération
 portera plusieurs tentatives adressant plusieurs fournisseurs.
+
+---
+
+## ADR-040 — Le CostGate ne peut que RESTREINDRE
+
+**Statut :** accepté (Phase 4). **Référence :** `docs/04 §9-11`, `docs/14 §4`.
+
+### Le problème, qui n'était pas « compter »
+
+`docs/04` pose **0 € récurrent** comme invariant. Il était tenu **par absence
+de dépense** — aucun fournisseur cloud n'est branché — et non **par
+mécanisme**.
+
+> Un invariant qui repose sur le fait que rien n'est branché cesse d'être un
+> invariant au premier branchement.
+
+### La propriété de sûreté, et c'est la seule
+
+`docs/14 §4` fixe l'ordre :
+
+```text
+REQUÊTE → CLASSIFICATION → POLITIQUE → CAPACITÉS AUTORISÉES
+        → CHOIX DU MODÈLE (le moins cher parmi les ÉLIGIBLES)
+        → BUDGET
+```
+
+Et **jamais** `LOCAL → échec → CLOUD → échec → PREMIUM`.
+
+D'où la décision structurante :
+
+> **Le CostGate ne peut que RESTREINDRE.**
+> Il transforme un `ALLOW_CLOUD` en `DENY` quand le budget est atteint. Il ne
+> transforme **jamais** un `LOCAL_ONLY` en `ALLOW_CLOUD` — quel que soit le
+> budget disponible, l'importance de la requête, ou l'indisponibilité du
+> local.
+
+Encodé par le type : l'entrée porte une `PolicyAllowance` déjà tranchée en
+amont. Le coût n'a aucun moyen de la rouvrir, et le premier test du module
+attaque exactement ce point avec un budget d'un million d'euros.
+
+Si le coût pouvait promouvoir, **il suffirait d'avoir de l'argent pour
+contourner la confidentialité.**
+
+### La monnaie est en entiers
+
+`cost_micros` — millionièmes d'euro, en `BIGINT`.
+
+Un budget en flottant dérive : additionner dix mille appels à 0,0001 € ne rend
+pas exactement 1 €, et « blocage dur à 100 % » devient « blocage dur *vers*
+100 % ». Sur un seuil, l'approximation n'est pas acceptable — c'est le genre de
+défaut qu'on ne voit qu'après le dépassement.
+
+**Les arrondis vont tous dans la direction qui protège** : au supérieur, des
+deux côtés. Un budget arrondi vers le bas serait dépassé sans le dire ; une
+estimation arrondie vers le bas laisserait passer un appel qui déborde. Les
+deux erreurs iraient dans le même mauvais sens.
+
+### « Aucun dépassement silencieux, jamais »
+
+La décision porte sur `dépensé + estimation`, **pas sur `dépensé`**. Décider
+sur le dépensé seul autoriserait un appel qui déborde, et le dépassement ne
+serait constaté qu'après coup.
+
+Reste le cas qu'on ne peut pas empêcher : une **estimation basse**. Le blocage
+travaille sur l'estimation, donc le seuil peut être franchi sur le coût réel.
+Ce n'est pas évitable ; ce qui l'est, c'est que ça passe inaperçu — `record()`
+rend `overrun`, et l'appelant doit le dire.
+
+**`ASK_USER` plutôt que `DENY` pour une requête `IMPORTANT`.** `docs/04`
+interdit le dépassement *silencieux*, pas la question posée. Refuser sans rien
+dire une opération importante serait une dégradation invisible — le défaut
+symétrique.
+
+### Le plafond ne se contourne pas en effaçant l'historique
+
+Le rôle applicatif a `SELECT, INSERT` sur `cloud_spend`. **Ni `DELETE` ni
+`UPDATE`.**
+
+Si l'application pouvait supprimer des lignes, elle pourrait remettre le
+compteur à zéro — et le plafond deviendrait une suggestion. Le contournement ne
+demanderait même pas de malveillance : un « nettoyage » de maintenance
+suffirait.
+
+Même raisonnement que pour `event_ledger` : ce qui sert de preuve ne s'écrit
+qu'une fois. La correction d'une erreur passe par une écriture compensatoire,
+visible, jamais par un effacement.
+
+### Le mois est calculé par la base
+
+`date_trunc('month', clock_timestamp())`, jamais une borne calculée en
+JavaScript. C'est ADR-036 et ADR-037 réunis, appliqués d'emblée : un processus
+dont l'horloge dérive d'un mois lirait un budget vide et dépenserait deux fois
+le plafond sans que rien ne le signale.
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| le coût peut promouvoir `LOCAL_ONLY` | **3 / 16** |
+| décision sur `dépensé` seul | **3 / 16** |
+| mois calculé par le processus | **2 / 16** |
+
+### Ce qui n'est PAS fait
+
+Le **Model Router** de `docs/04 §10` — choisir le moins cher *parmi les
+éligibles* — n'existe pas. Le CostGate décide si un appel passe ; il ne choisit
+pas encore quel modèle. Tant qu'aucun fournisseur n'est branché, la question ne
+se pose pas — mais l'ordre de `docs/14 §4` devra être respecté à ce
+moment-là, et c'est le point à ne pas manquer.
+
+### Condition de révision
+
+Si un jour un appel cloud doit être engagé **sans** estimation préalable, tout
+le mécanisme tombe : le blocage dur repose entièrement sur le fait qu'on sait
+estimer avant d'appeler. Ce serait une décision d'architecture, pas un
+ajustement.

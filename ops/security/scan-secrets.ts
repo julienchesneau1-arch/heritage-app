@@ -79,6 +79,17 @@ const PATTERN_EXCEPTIONS: readonly PatternException[] = [
       "qu'aucun secret ne fuit dans la configuration publique.",
   },
   {
+    file: /^tests\/golden\/scenarios\.test\.ts$/,
+    pattern: 'Clé de style OpenAI',
+    why:
+      "Scénario doré B11. La redaction de `logger.ts` reconnaît les secrets À " +
+      'LEUR FORME : un fixture qui ne ressemblerait pas à une clé rendrait ' +
+      "l'assertion creuse — elle passerait parce que rien ne correspond, non " +
+      'parce que la redaction fonctionne. La valeur « sk-secret-a-ne-jamais-' +
+      'voir » est un littéral inutilisable, choisi pour se dénoncer à la ' +
+      'lecture.',
+  },
+  {
     file: /^tests\/redteam\/failure-modes\.test\.ts$/,
     pattern: 'Mot de passe en dur',
     why:
@@ -88,7 +99,15 @@ const PATTERN_EXCEPTIONS: readonly PatternException[] = [
   },
 ];
 
-function isExcepted(file: string, pattern: string): boolean {
+/**
+ * Exporté pour que l'ÉTROITESSE des exceptions soit éprouvée — voir
+ * `tests/security/secret-scan-patterns.test.ts`.
+ *
+ * Une exception blanchit un couple (fichier, motif). Si elle blanchissait le
+ * fichier entier, un vrai secret ajouté plus tard au même endroit passerait
+ * sans bruit — et personne ne le saurait, puisque le scan resterait vert.
+ */
+export function isExcepted(file: string, pattern: string): boolean {
   return PATTERN_EXCEPTIONS.some(
     (e) => e.pattern === pattern && e.file.test(file),
   );

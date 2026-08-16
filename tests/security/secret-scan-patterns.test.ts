@@ -12,7 +12,7 @@
  * doit pas déclencher inutilement.
  */
 import { describe, expect, it } from 'vitest';
-import { PATTERNS } from '../../ops/security/scan-secrets.js';
+import { isExcepted, PATTERNS } from '../../ops/security/scan-secrets.js';
 
 /** Échantillons synthétiques. Aucun n'est un secret réel. */
 const SHOULD_DETECT: Readonly<Record<string, string>> = {
@@ -66,5 +66,49 @@ describe('motifs du scan de secrets', () => {
     const google = PATTERNS.find((p) => p.name === 'Clé Google');
     expect(google).toBeDefined();
     expect(google?.regex.test(`AIza${'C'.repeat(50)}`)).toBe(true);
+  });
+
+  /* ================================================================== *
+   * L'ÉTROITESSE DES EXCEPTIONS
+   *
+   * Ajoutée après avoir constaté que mon premier contrôle négatif était
+   * INVALIDE : le scanner lit `git show HEAD:<fichier>`, pas l'arbre de
+   * travail. Injecter un faux secret dans un fichier non commité ne prouve
+   * donc rien — le scan ne l'a jamais lu.
+   *
+   * La vérification se fait ici, au niveau où elle a un sens.
+   * ================================================================== */
+
+  describe('les exceptions blanchissent un COUPLE, jamais un fichier', () => {
+    const FIXTURE = 'tests/golden/scenarios.test.ts';
+
+    it("le scénario doré B11 est excepté pour le SEUL motif dont il a besoin", () => {
+      /* La redaction de `logger.ts` reconnaît les secrets à leur FORME. Un
+         fixture qui ne ressemblerait pas à une clé rendrait l'assertion de
+         B11 creuse — elle passerait parce que rien ne correspond, non parce
+         que la redaction fonctionne. */
+      expect(isExcepted(FIXTURE, 'Clé de style OpenAI')).toBe(true);
+    });
+
+    it("le MÊME fichier reste surveillé pour tous les autres motifs", () => {
+      // C'est ce que « couple » signifie, et c'est la seule chose qui
+      // distingue une exception d'un blanchiment.
+      for (const autre of [
+        'Jeton GitHub',
+        'Clé AWS',
+        'Clé Google',
+        'Clé Anthropic',
+        'JWT',
+        'Bloc de clé privée',
+        'Mot de passe en dur',
+      ]) {
+        expect(isExcepted(FIXTURE, autre), autre).toBe(false);
+      }
+    });
+
+    it("un fichier quelconque n'hérite d'aucune exception", () => {
+      expect(isExcepted('src/core/tools/gateway.ts', 'Clé de style OpenAI')).toBe(false);
+      expect(isExcepted('tests/golden/contract.test.ts', 'Clé de style OpenAI')).toBe(false);
+    });
   });
 });

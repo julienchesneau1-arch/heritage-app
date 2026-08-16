@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 49 %**
+## 1. Étendue fonctionnelle — **≈ 51 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -32,11 +32,11 @@ nombre de cases à cocher.
 | 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
 | 3 Les 10 outils restants | 12 % | **5 %** | 0,6 | **5 outils sur 15** ; `audit_query` absent |
-| 4 Confidentialité, coût, indépendance | 13 % | **30 %** | 3,9 | égression ✅ · redaction ✅ · **Cost Engine ✗** · **Model Router ✗** |
+| 4 Confidentialité, coût, indépendance | 13 % | **45 %** | 5,9 | égression ✅ · redaction ✅ · **Cost Engine ✅** (ADR-040) · **Model Router ✗** |
 | 5 Voix | 10 % | **0 %** | 0,0 | rien |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 49 %** | |
+| **TOTAL** | 100 % | | **≈ 51 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -98,7 +98,7 @@ parfaite.**
 
 | | |
 |---|---|
-| **La qualité de ce qui est fait** | 49 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
+| **La qualité de ce qui est fait** | 51 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
 | **La difficulté restante** | la Phase 5 (voix) est plus longue que la Phase 3, à poids presque égal. |
 | **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 49 %. |
 | **Ce qui est irréductible** | `docs/26 §5` — six limites qu'aucun pourcentage ne fera bouger. |
@@ -117,7 +117,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | 01 | ADR | **39 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; 3→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **9/15 nommés en test** |
-| 04 | Dépendances et coût | politique tenue ; **0 € réel** ; Cost Engine absent |
+| 04 | Dépendances et coût | **CostGate écrit** (ADR-040) ; 0 € tenu par MÉCANISME, plus par absence ; Model Router absent |
 | 05 | Tests dorés | **23/30 référencés**, 7 bloqués déclarés — lien mécanique |
 | 06 | Prompt maître | appliqué à chaque session |
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
@@ -138,9 +138,10 @@ mesurer contre `docs/02` le fait donc disparaître.
 | | Pourquoi celui-là |
 |---|---|
 | ~~1. Nommer les scénarios dorés manquants~~ | **FAIT** — 23/30 référencés, 7 bloqués déclarés, lien mécanique |
-| **1. Cost Engine + budget** (Phase 4) | `docs/04` pose **0 € récurrent** comme invariant. Il est tenu *par absence de dépense*, pas *par mécanisme* — donc pas tenu. |
-| **2. Les 10 outils restants** (Phase 3) | dont `audit_query`, qui rend le journal interrogeable par un humain — c'est la promesse de `docs/12`. Il débloque à lui seul **A9**. |
-| **3. Câbler le Context Engine** | débloque **A2**, et tient la promesse de levée d'ambiguïté du `QUICKSTART`. |
+| ~~1. Cost Engine + budget~~ | **FAIT** — ADR-040. Le 0 € est désormais tenu par mécanisme. Le **Model Router** reste à écrire. |
+| **1. Les 10 outils restants** (Phase 3) | dont `audit_query`, qui rend le journal interrogeable par un humain — c'est la promesse de `docs/12`. Il débloque à lui seul **A9**. |
+| **2. Câbler le Context Engine** | débloque **A2**, et tient la promesse de levée d'ambiguïté du `QUICKSTART`. |
+| **3. Model Router** (Phase 4) | choisir le moins cher **parmi les éligibles** — l'ordre de `docs/14 §4` devra y être respecté, et c'est le point à ne pas manquer. |
 
 La voix, l'iOS et l'Update Engine viennent après : chacun est un chantier
 entier, et aucun ne renforce ce qui existe.
@@ -150,7 +151,7 @@ entier, et aucun ne renforce ce qui existe.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 49 %     ce que Jarvis sait faire
+ÉTENDUE FONCTIONNELLE   ≈ 51 %     ce que Jarvis sait faire
 PROFONDEUR DE PREUVE    ≈ 76 %     ce qu'on peut en démontrer
 ```
 
@@ -159,5 +160,5 @@ Et la phrase qui les relie, qui n'a pas changé depuis le début :
 > Une fonctionnalité ne peut jamais être plus autonome que la qualité de la
 > preuve disponible sur son effet.
 
-Un projet à 49 % d'étendue et 76 % de preuve est exactement dans le bon ordre.
+Un projet à 51 % d'étendue et 76 % de preuve est exactement dans le bon ordre.
 L'inverse aurait été inquiétant.
