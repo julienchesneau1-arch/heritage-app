@@ -9,6 +9,9 @@
  * séparément qu'on peut affirmer que deux d'entre elles survivent à la
  * coupure — au lieu de constater qu'« il y a encore des résultats ».
  */
+/* Couvre **A5** de `docs/05` — requête structurée exacte : la voie
+   structurée rend la référence EXACTE, jamais une paraphrase
+   sémantiquement proche. */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHybridSearch, type HybridSearch } from '../../src/core/memory/search.js';
 import { createMemoryStore, type MemoryStore } from '../../src/core/memory/store.js';

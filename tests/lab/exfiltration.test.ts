@@ -10,6 +10,12 @@
  * de ce fichier prouve donc que la sentinelle SAIT voir une sortie. Sans lui,
  * tous les autres ne vaudraient rien.
  */
+/* Couvre **C5** (branche C — Internet indisponible) et **C6** (hors ligne
+   prolongé) de `docs/05` : `DATA_EXFILTRATION = 0` établit qu'aucun module
+   du noyau n'ouvre de connexion sortante, donc que rien ne dépend d'un
+   accès réseau. Les branches A, B et D de C5 supposent des fournisseurs
+   cloud et un runtime Ollama qui n'existent pas ici — les simuler ne
+   prouverait que la simulation. */
 import net from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { databaseAvailable } from '../helpers/db.js';

@@ -8,6 +8,8 @@
  * objet connecté compromis, qui ne demande la permission de personne pour
  * scanner un port. Ces tests portent sur les garde-fous, pas sur le confort.
  */
+/* Couvre **B13** de `docs/05` — volet verrouillage : après cinq échecs
+   l'adresse est bloquée, y compris si le bon jeton est présenté ensuite. */
 import { describe, expect, it } from 'vitest';
 import {
   MAX_FAILURES,

@@ -12,6 +12,9 @@
  *   — une réponse d'erreur qui renseigne l'attaquant ;
  *   — un chemin d'exécution propre au web, court-circuitant le Policy Gate.
  */
+/* Couvre **B13** de `docs/05` — appareil hostile sur le réseau local :
+   401 sur toute route de données, y compris un chemin `/api/` inexistant,
+   et aucun message ne distingue « jeton absent » de « jeton faux ». */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { appDb, databaseAvailable } from '../helpers/db.js';
 import { buildRuntime, type Runtime } from '../../src/apps/runtime.js';

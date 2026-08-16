@@ -53,32 +53,44 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 70 %**
+## 2. Profondeur de preuve — **≈ 76 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
 | **Invariants de sécurité S1–S15** (`docs/03`) | 9 des 15 nommément référencés dans les tests | **60 %** |
-| **Tests dorés A·B·C** (`docs/05`) | 16 des 30 scénarios référencés | **53 %** |
+| **Tests dorés A·B·C** (`docs/05`) | **23 des 30** référencés, 7 déclarés bloqués | **77 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 70 %** |
+| **Moyenne** | | **≈ 76 %** |
 
-### Ce que la mesure a révélé sur `docs/05`
+### Ce que la mesure a révélé sur `docs/05` — et qui est CORRIGÉ
 
-**Quatorze scénarios dorés sur trente ne sont référencés par aucun test.**
+La mesure initiale : **quatorze scénarios sur trente sans aucun test**.
 
 ```text
 A2 A4 A5 A7 A8 A9 · B4 B11 B13 B14 · C3 C4 C5 C6
 ```
 
-Certains sont couverts **par comportement** sans porter leur nom — un test qui
-vérifie la même propriété sous un autre libellé. Mais `docs/05` est le **contrat
-de non-régression** du projet : un scénario qu'aucun test ne nomme ne peut pas
-être invoqué le jour où il casse.
+Traités en trois catégories, parce que les confondre aurait produit des tests
+creux :
 
-C'est, avec le Cost Engine, la lacune la plus actionnable du dépôt aujourd'hui.
+| | Scénarios | Ce qui a été fait |
+|---|---|---|
+| **écrits** | A4 · B11 · B14 | la capacité existait, le test manquait |
+| **rattachés** | A5 · B13 · C5 · C6 | la propriété était déjà éprouvée ailleurs sans porter le nom |
+| **déclarés bloqués** | A2 · A7 · A8 · A9 · B4 · C3 · C4 | la capacité n'existe pas — les simuler ne prouverait que la simulation |
+
+**Et surtout, le lien est désormais MÉCANIQUE.**
+`tests/golden/contract.test.ts` lit `docs/05`, en extrait les identifiants, et
+échoue si l'un n'est ni référencé ni déclaré bloqué avec un motif. Écrire les
+tests manquants n'aurait pas suffi : la dérive aurait recommencé au prochain
+scénario ajouté.
+
+Deux contrôles négatifs protègent l'extracteur — dont celui du mode de panne le
+plus dangereux : **rendre zéro identifiant et déclarer la couverture
+parfaite.**
 
 ---
 
@@ -106,7 +118,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | 02 | Plan d'exécution | phases −1→2 franchies ; 3→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **9/15 nommés en test** |
 | 04 | Dépendances et coût | politique tenue ; **0 € réel** ; Cost Engine absent |
-| 05 | Tests dorés | **16/30 référencés** — la lacune |
+| 05 | Tests dorés | **23/30 référencés**, 7 bloqués déclarés — lien mécanique |
 | 06 | Prompt maître | appliqué à chaque session |
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
 | 08·09·10·11 | Audits | faits, conclusions intégrées |
@@ -125,9 +137,10 @@ mesurer contre `docs/02` le fait donc disparaître.
 
 | | Pourquoi celui-là |
 |---|---|
-| **1. Nommer les 14 scénarios dorés manquants** | le contrat de non-régression est à moitié muet. Coût faible, valeur immédiate, et la mesure existe déjà. |
-| **2. Cost Engine + budget** (Phase 4) | `docs/04` pose **0 € récurrent** comme invariant. Il est tenu *par absence de dépense*, pas *par mécanisme* — donc pas tenu. |
-| **3. Les 10 outils restants** (Phase 3) | dont `audit_query`, qui rend le journal interrogeable par un humain — c'est la promesse de `docs/12`. |
+| ~~1. Nommer les scénarios dorés manquants~~ | **FAIT** — 23/30 référencés, 7 bloqués déclarés, lien mécanique |
+| **1. Cost Engine + budget** (Phase 4) | `docs/04` pose **0 € récurrent** comme invariant. Il est tenu *par absence de dépense*, pas *par mécanisme* — donc pas tenu. |
+| **2. Les 10 outils restants** (Phase 3) | dont `audit_query`, qui rend le journal interrogeable par un humain — c'est la promesse de `docs/12`. Il débloque à lui seul **A9**. |
+| **3. Câbler le Context Engine** | débloque **A2**, et tient la promesse de levée d'ambiguïté du `QUICKSTART`. |
 
 La voix, l'iOS et l'Update Engine viennent après : chacun est un chantier
 entier, et aucun ne renforce ce qui existe.
@@ -138,7 +151,7 @@ entier, et aucun ne renforce ce qui existe.
 
 ```text
 ÉTENDUE FONCTIONNELLE   ≈ 49 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 70 %     ce qu'on peut en démontrer
+PROFONDEUR DE PREUVE    ≈ 76 %     ce qu'on peut en démontrer
 ```
 
 Et la phrase qui les relie, qui n'a pas changé depuis le début :
@@ -146,5 +159,5 @@ Et la phrase qui les relie, qui n'a pas changé depuis le début :
 > Une fonctionnalité ne peut jamais être plus autonome que la qualité de la
 > preuve disponible sur son effet.
 
-Un projet à 49 % d'étendue et 70 % de preuve est exactement dans le bon ordre.
+Un projet à 49 % d'étendue et 76 % de preuve est exactement dans le bon ordre.
 L'inverse aurait été inquiétant.
