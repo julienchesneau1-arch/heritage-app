@@ -124,6 +124,9 @@ describe.runIf(enabled)('banc — succès partiel', () => {
         PROBABLE: 'suppose les cinq sans preuve — faux ET non vérifié',
         UNKNOWN: 'nie savoir, alors que trois sont CONFIRMÉS — perte d\'information',
         FAILED: 'affirme que personne n\'a reçu — faux',
+        PROVIDER_CONTRACT_VIOLATION:
+          'accuse la SOURCE, alors que le fournisseur a fait exactement ce ' +
+          "qu'il annonçait — trois sur cinq n'est pas une rupture de contrat",
         NOT_ATTEMPTED: 'affirme qu\'on n\'a rien tenté — faux',
         PARTIAL: 'DÉCRIT LA SITUATION — ajouté par Foundation 4',
       };
@@ -133,7 +136,7 @@ describe.runIf(enabled)('banc — succès partiel', () => {
       );
       // Le constat de Foundation 3 : quatre statuts, tous faux. Foundation 4
       // en a ajouté deux, dont celui qui décrit réellement la situation.
-      expect(Object.keys(descriptions).length).toBe(6);
+      expect(Object.keys(descriptions).length).toBe(7);
       expect(VerificationStatus.options).toContain('PARTIAL');
     },
   );

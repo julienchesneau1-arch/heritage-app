@@ -187,6 +187,12 @@ démontrable »*. **C'est la plus grande zone d'ombre différée du dépôt**, e
 elle bloque : fournisseur byzantin, `PROVIDER_CONTRACT_VIOLATION`, chaîne de
 provenance `intentId → effectId`, invariants I11 à I13.
 
+> **LEVÉE — voir `docs/27`.** Le second monde existe, les couches 04-05 sont
+> faites, `PROVIDER_CONTRACT_VIOLATION` et I11 aussi. Ce paragraphe reste
+> écrit tel qu'il l'était : un registre qu'on réécrit cesse d'être un registre.
+> Ce qui a pris sa place — **I12** (aucune action nouvelle après violation) et
+> **I13** (chaîne de provenance complète) — est nommé en `docs/27 §8`.
+
 ---
 
 ## 5. IRRÉDUCTIBLES — et elles le resteront

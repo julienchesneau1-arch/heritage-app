@@ -26,7 +26,7 @@ import { ok, err, jarvisError, type Result } from '../../src/core/types/result.j
 import { verificationOutcome } from '../../src/core/verification/engine.js';
 import type { AutonomyLevel, EffectContract, PrivacyClass } from '../../src/core/types/domain.js';
 import type { HostileProvider } from './hostile-provider.js';
-import { externalEffectCount } from './world.js';
+import { externalEffectCount, maxEffectsPerTarget } from './world.js';
 
 const HostileInput = z.object({
   payload: z.string().min(1),
@@ -162,15 +162,50 @@ export function createHostileTool(options: HostileToolOptions): RegisteredTool {
         );
       }
 
-      if (count > 1) {
-        // Ne devrait jamais arriver. Si cela arrive, c'est LE défaut que tout
-        // le banc cherche : on ne le maquille pas en succès.
+      /* LA VIOLATION SE MESURE PAR CIBLE, ET LE TEST ME L'A APPRIS.
+         J'avais écrit `count > 1` : trois destinataires servis sur cinq
+         devenaient une « rupture de contrat », alors que c'est le succès
+         partiel le plus banal qui soit. C'est exactement la confusion que
+         `docs/22 §9` nomme comme limite de classe D. */
+      const parCible = await maxEffectsPerTarget(world, ctx.operationId);
+
+      if (parCible > 1) {
+        /* RUPTURE DE CONTRAT, ET NON UN ÉCHEC — `docs/22 §9`, ADR-038.
+
+           Ce chemin rendait `FAILED`, et c'était une faute de modélisation
+           que rien ne signalait : `FAILED` signifie PREUVE POSITIVE
+           D'ABSENCE. Or ici les effets EXISTENT — deux plutôt qu'un. Annoncer
+           « ça n'a pas marché » à propos de deux virements passés est le
+           mensonge le plus coûteux que ce dépôt puisse produire, et il
+           violait I3 au passage.
+
+           Ce qui est constaté n'est pas l'issue de l'action : c'est que LA
+           SOURCE ne tient pas ce qu'elle annonce. */
         return ok(
-          verificationOutcome.failed({
-            observed: `${String(count)} effets pour une opération unique`,
-            conclusiveBecause:
-              'violation mesurée de external_effect_count(clé, cible) ≤ 1',
+          verificationOutcome.contractViolation({
+            promised: "au plus un effet par (identité d'opération, cible)",
+            observed: `${String(parCible)} effets sur une MÊME cible pour ${ctx.operationId}`,
           }),
+        );
+      }
+
+      if (count > 1) {
+        /* Plusieurs cibles servies, aucune deux fois. Ce n'est ni une
+           violation ni un succès : c'est un SUCCÈS PARTIEL, et le verdict
+           global n'a pas de forme pour le dire.
+
+           `PARTIAL` et le modèle par cible existent (`outcome.ts`) mais ne
+           sont pas branchés — le Gateway n'a pas de notion de cible à
+           transmettre (`docs/20 §4`, `docs/26 §4.1`). En attendant, la seule
+           réponse honnête est l'ignorance : affirmer CONFIRMED dirait que les
+           cinq ont reçu, ce qui est faux. */
+        return ok(
+          verificationOutcome.unknown(
+            `${String(count)} cibles servies pour ${ctx.operationId}, aucune ` +
+              'deux fois. Le verdict global ne sait pas dire lesquelles : je ' +
+              "n'affirme donc pas que l'action est complète.",
+            'EXTERNAL_STATE',
+          ),
         );
       }
 

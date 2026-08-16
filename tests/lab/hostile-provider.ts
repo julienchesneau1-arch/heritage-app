@@ -24,7 +24,7 @@
  */
 import type { Db } from '../../src/core/db/client.js';
 import { err, ok, jarvisError, type Result } from '../../src/core/types/result.js';
-import { commitEffect } from './world.js';
+import { commitEffect, providerMark, providerReceived } from './world.js';
 
 /**
  * Quand l'effet se produit, par rapport à la réponse.
@@ -176,6 +176,11 @@ export function createHostileProvider(
     void promise.finally(() => pending.delete(promise));
   }
 
+  /* LA CHRONOLOGIE COURANTE — le second monde, `docs/22 §4`.
+     Ouverte à la réception de la requête, refermée à l'émission de la réponse.
+     Jarvis n'y a jamais accès ; le banc, si. */
+  let timelineId: number | null = null;
+
   /** Écrit dans le monde. Irréversible, par construction. */
   async function effect(operationKey: string, payload: string, target = '-'): Promise<void> {
     if (current.reallyIdempotent === true) {
@@ -189,12 +194,22 @@ export function createHostileProvider(
       );
       if (existing.ok && Number(existing.value.rows[0]?.n ?? '0') > 0) return;
     }
+
+    // t2 — l'effet COMMENCE. Distinct de t3 : entre les deux, un fournisseur
+    // réel peut mourir, et c'est le cas que rien d'autre ne sait mettre en
+    // scène.
+    if (timelineId !== null) await providerMark(db, timelineId, 'effect_started_at');
+
     await commitEffect(db, {
       operationKey,
       providerId: current.id,
       payload,
       target,
     });
+
+    // t3 — l'effet est VALIDÉ. À partir d'ici, le monde a changé, quoi que
+    // Jarvis apprenne ensuite.
+    if (timelineId !== null) await providerMark(db, timelineId, 'effect_committed_at');
   }
 
   async function produceEffect(operationKey: string, payload: string): Promise<void> {
@@ -240,12 +255,62 @@ export function createHostileProvider(
       }
     },
 
+    /**
+     * ENVELOPPE — enregistre t4 en UN SEUL endroit.
+     *
+     * Le corps a treize points de sortie. Marquer la réponse à chacun aurait
+     * garanti qu'on en oublie un, et un instant manquant dans la chronologie
+     * rend le banc muet là où il devrait juger. La distinction qui compte est
+     * portée ici, une fois :
+     *
+     *   pas de réponse du tout   →  response_sent_at reste NULL
+     *   réponse émise et PERDUE  →  response_sent_at rempli, delivered = false
+     *
+     * « Le fournisseur n'a rien dit » et « je n'ai rien entendu » sont deux
+     * mondes différents (`docs/22 §5`).
+     */
     async send(
       operationKey: string,
       payload: string,
     ): Promise<Result<ProviderReceipt>> {
+      const outcome = await dispatch(operationKey, payload);
+
+      const kind = current.behaviour.kind;
+      const silencieux =
+        kind === 'TIMEOUT' ||
+        kind === 'CONNECTION_RESET' ||
+        kind === 'PROCESS_KILLED' ||
+        kind === 'DISAPPEARS';
+      const perdue = kind === 'LOST_RESPONSE';
+
+      if (timelineId !== null && !silencieux) {
+        await providerMark(db, timelineId, 'response_sent_at', {
+          responseClaim: outcome.ok
+            ? String(outcome.value.claims)
+            : `erreur:${outcome.error.kind}`,
+          responseDelivered: !perdue,
+        });
+      }
+      return outcome;
+    },
+  };
+
+  async function dispatch(
+    operationKey: string,
+    payload: string,
+  ): Promise<Result<ProviderReceipt>> {
       calls += 1;
       const behaviour = current.behaviour;
+
+      /* t1 — LA REQUÊTE EST REÇUE.
+         Ouvert AVANT toute latence et toute pathologie : c'est le fait qui
+         distingue « jamais reçue » de « reçue et jamais traitée », et sans
+         lui le banc lui-même serait aveugle (`docs/22 §4`). */
+      timelineId = await providerReceived(db, {
+        operationKey,
+        providerId: current.id,
+        target: (current.targets ?? [])[0] ?? '-',
+      });
 
       if (current.latencyMs !== undefined && current.latencyMs > 0) {
         await sleep(current.latencyMs);
@@ -419,6 +484,5 @@ export function createHostileProvider(
       }
 
       return ok(receipt());
-    },
-  };
+  }
 }

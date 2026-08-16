@@ -57,6 +57,19 @@ export function announce(result: Reportable): string {
       // Le mot est fort, et il ne s'emploie que sur PREUVE d'absence d'effet
       // (ADR-030). Un timeout ou un 500 ne l'autorisent pas.
       return `Ça n'a pas marché.\n  ${result.detail}`;
+
+    case 'PROVIDER_CONTRACT_VIOLATION':
+      /* La formulation la plus difficile du fichier, et elle doit dire DEUX
+         choses sans en mélanger aucune : je ne sais pas ce qui s'est passé,
+         ET le service a fait autre chose que ce qu'il annonçait. Ne dire que
+         la première perdrait l'information la plus importante ; ne dire que
+         la seconde laisserait croire que l'action a échoué. */
+      return (
+        "Je ne sais pas ce qui s'est passé, et le service ne s'est pas " +
+        "comporté comme il l'annonce.\n" +
+        `  ${result.detail}\n` +
+        "  Je n'engagerai plus rien par ce service tant que ce n'est pas levé."
+      );
   }
 }
 
@@ -75,6 +88,10 @@ export function mark(status: VerificationStatus): string {
       return '·';
     case 'FAILED':
       return '✗';
+    // Distinct de tous les autres : le problème n'est pas l'action, c'est
+    // celui qui la rapporte.
+    case 'PROVIDER_CONTRACT_VIOLATION':
+      return '⚠';
   }
 }
 

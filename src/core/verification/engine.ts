@@ -123,6 +123,44 @@ function notAttempted(detail: string): VerificationOutcome {
 }
 
 /**
+ * Ce qui établit qu'un fournisseur a rompu son contrat.
+ *
+ * Exigé en argument, comme `Evidence` et `Absence` : une rupture de confiance
+ * annoncée sans constat serait exactement la faute que la hiérarchie de preuve
+ * a corrigée pour `FAILED`.
+ */
+export interface ContractBreach {
+  /** Ce que le fournisseur ANNONÇAIT tenir. */
+  readonly promised: string;
+  /** Ce qui a été CONSTATÉ, et qui le contredit. */
+  readonly observed: string;
+}
+
+/**
+ * LE FOURNISSEUR A MENTI — `docs/22 §9`.
+ *
+ * Ne qualifie pas l'action mais la SOURCE, et c'est ce qui le rend plus fort
+ * qu'`UNKNOWN` : on ignore l'issue, ET on sait qu'on ne peut plus croire celui
+ * qui la raconte.
+ *
+ * Ce verdict n'est JAMAIS `FAILED`. Le cas canonique — deux effets là où un
+ * seul était promis — a bel et bien produit des effets ; annoncer `FAILED`
+ * serait le mensonge le plus coûteux du système, et violerait I3.
+ */
+function contractViolation(breach: ContractBreach): VerificationOutcome {
+  return {
+    status: 'PROVIDER_CONTRACT_VIOLATION',
+    detail:
+      `Contrat rompu par le fournisseur. Promis : ${breach.promised}. ` +
+      `Constaté : ${breach.observed}. Je ne sais pas ce qui s'est réellement ` +
+      "produit, et je ne peux plus me fier à cette source.",
+    // L'observation est POSITIVE — on a vu la violation. Ce qui reste inconnu
+    // est l'issue de l'action, pas l'existence de la rupture.
+    evidence: 'POSITIVE_PRESENCE',
+  };
+}
+
+/**
  * BRIDE UN VERDICT À CE QUE L'OUTIL PEUT RÉELLEMENT PROUVER — ADR-030.
  *
  * Un outil déclare sa `verifiability`. Comme pour `attemptVerification`, on ne
@@ -150,6 +188,14 @@ function constrainToVerifiability(
   const { verifiability, id } = tool.definition;
 
   if (verifiability === 'VERIFIABLE') return outcome;
+
+  /* UNE RUPTURE DE CONTRAT NE SE DÉGRADE PAS.
+     `constrainToVerifiability` bride ce qu'un outil affirme sur LE MONDE. Une
+     violation porte sur LA SOURCE : elle a été constatée ici, par nous, et la
+     déclaration de vérifiabilité de l'outil n'y change rien. La dégrader en
+     `UNKNOWN` reviendrait à effacer la seule information certaine du
+     scénario. */
+  if (outcome.status === 'PROVIDER_CONTRACT_VIOLATION') return outcome;
 
   if (outcome.status === 'FAILED') {
     return unknown(
@@ -268,6 +314,7 @@ export const verificationOutcome = {
   unknown,
   failed,
   notAttempted,
+  contractViolation,
 } as const;
 
 /**

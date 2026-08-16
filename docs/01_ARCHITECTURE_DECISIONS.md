@@ -1908,3 +1908,102 @@ défaut repasserait avec elle.
 Toute nouvelle colonne d'échéance rejoint `DECISION_TIMESTAMPS` (I16) et le
 périmètre d'I19. Une échéance qui ne serait **jamais** comparée par la base
 peut rester applicative — mais il faudra l'écrire, pas le supposer.
+
+---
+
+## ADR-038 — `PROVIDER_CONTRACT_VIOLATION` : un verdict sur la SOURCE
+
+**Statut :** accepté (Foundation 5, couches 04-05). **Référence :** `docs/22 §9`.
+
+### Le besoin
+
+Un fournisseur byzantin n'est pas exotique : c'est un service qui a un bogue,
+une version qui change sans préavis, ou une documentation optimiste.
+
+Le cas canonique — deux effets pour une identité unique chez un fournisseur
+**déclaré idempotent** — n'entrait dans aucun statut existant, et le
+« meilleur » choix disponible était **faux** :
+
+| Statut | Pourquoi il ment ici |
+|---|---|
+| `CONFIRMED` | masquerait la violation |
+| `FAILED` | affirmerait l'absence alors que **deux** effets existent |
+| `UNKNOWN` | vrai mais insuffisant : on sait quelque chose de plus |
+
+### La faute de modélisation trouvée en chemin
+
+`hostile-tool.ts` rendait `FAILED` sur `count > 1`. Or `FAILED` signifie
+**preuve positive d'absence**. Annoncer « ça n'a pas marché » à propos de deux
+virements passés est le mensonge le plus coûteux que ce dépôt puisse produire —
+et il violait I3 au passage.
+
+### Décision
+
+```text
+PROVIDER_CONTRACT_VIOLATION
+  ne qualifie pas L'ACTION mais LA SOURCE
+  plus fort qu'UNKNOWN : on ignore l'issue, ET on sait qu'on ne peut plus
+  croire celui qui la raconte
+```
+
+La fabrique exige un `ContractBreach { promised, observed }` — comme
+`Evidence` et `Absence`. Une rupture de confiance annoncée sans constat serait
+la faute que la hiérarchie de preuve a corrigée pour `FAILED`.
+
+`constrainToVerifiability` ne la dégrade **jamais** : elle bride ce qu'un outil
+affirme sur *le monde*, or une violation porte sur *la source* et a été
+constatée par nous.
+
+### La mesure se fait PAR CIBLE — et un test me l'a appris
+
+Première version : `count > 1`. Trois destinataires servis sur cinq devenaient
+une « rupture de contrat », alors que c'est le succès partiel le plus banal.
+
+La violation est `maxEffectsPerTarget > 1` — l'inégalité par cible d'ADR-031.
+Trois branches distinctes en découlent :
+
+| Constat | Verdict |
+|---|---|
+| deux effets sur **une même** cible | `PROVIDER_CONTRACT_VIOLATION` |
+| plusieurs cibles, aucune deux fois | `UNKNOWN` — succès partiel que le verdict global ne sait pas dire |
+| un effet, une cible | `CONFIRMED` |
+
+### Classification honnête — et ce qu'il ne faut pas promettre
+
+`docs/22 §9` impose de classer plutôt que promettre :
+
+| Classe | Ce fournisseur |
+|---|---|
+| A — empêchable | **non** |
+| B — impossible à empêcher | **oui** |
+| C — détectable après coup | **oui**, sur cible unique ou ensemble déclaré |
+| D — non détectable | **oui**, dès que l'ensemble des cibles n'est pas déclaré |
+
+> **Ne jamais annoncer A quand seul C est possible.**
+
+La limite de classe D est **mesurée** par un test dédié : deux effets sur deux
+cibles différentes sont indiscernables d'un envoi légitime à deux
+destinataires. Aucune violation n'est détectée, et c'est **correct**.
+
+### Ce que la migration 0009 a révélé
+
+Le `CHECK` de `tool_operations.status` n'autorisait que quatre valeurs alors
+que `VerificationStatus` en déclarait **six** depuis Foundation 3. `PARTIAL` et
+`NOT_ATTEMPTED` auraient été **refusés par la base**.
+
+C'était une seconde raison, indépendante et non documentée, pour laquelle
+`PARTIAL` était inatteignable — `docs/26 §4.1` n'en connaissait qu'une.
+
+`event_ledger.status` portait la **même** contrainte, trouvée en exécutant le
+premier test byzantin : le registre acceptait le verdict, le journal le
+refusait, et l'opération échouait en `INTERNAL` — une rupture de confiance qui
+fait planter au lieu d'être consignée.
+
+**Un type et un schéma qui divergent en silence, c'est la validation aux
+frontières prise en défaut à l'intérieur.**
+
+### Condition de révision
+
+Tout nouveau statut doit être ajouté **aux deux** contraintes en même temps que
+l'énumération TypeScript. Le jour où une seconde forme de rupture de confiance
+existera, `isTrustBreach()` est le seul endroit à changer.

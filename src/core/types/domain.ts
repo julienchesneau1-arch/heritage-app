@@ -132,6 +132,19 @@ export const VerificationStatus = z.enum([
   'UNKNOWN', // aucune preuve suffisante dans un sens ni dans l'autre
   'FAILED', // preuve POSITIVE que l'effet n'a PAS eu lieu
   'NOT_ATTEMPTED', // rien n'a été tenté — distinct d'un échec
+  /**
+   * Le fournisseur a rompu un contrat qu'il annonçait tenir — `docs/22 §9`.
+   *
+   * Ne qualifie PAS l'action : la SOURCE. Et il est plus fort qu'`UNKNOWN` —
+   * on ignore ce qui s'est passé, ET on sait qu'on ne peut plus croire celui
+   * qui le raconte.
+   *
+   * Le cas canonique : deux effets pour une identité d'opération unique chez
+   * un fournisseur déclaré idempotent. Jarvis ne peut pas l'EMPÊCHER (classe
+   * B), il peut le VOIR (classe C). Annoncer A quand seul C est possible
+   * serait la faute que `docs/22 §9` interdit nommément.
+   */
+  'PROVIDER_CONTRACT_VIOLATION',
 ]);
 export type VerificationStatus = z.infer<typeof VerificationStatus>;
 
@@ -347,6 +360,18 @@ export function isExternalEffect(contract: EffectContract): boolean {
  */
 export function hasAnyEffect(status: VerificationStatus): boolean {
   return status === 'CONFIRMED' || status === 'PARTIAL';
+}
+
+/**
+ * Ce verdict porte-t-il sur la SOURCE plutôt que sur l'action ?
+ *
+ * Sert au Gateway à refuser d'engager une action nouvelle sur un fournisseur
+ * dont le contrat est rompu (`docs/22 §9`, invariant I12). Une fonction
+ * plutôt qu'une comparaison littérale : le jour où une seconde rupture de
+ * confiance existera, un seul endroit change.
+ */
+export function isTrustBreach(status: VerificationStatus): boolean {
+  return status === 'PROVIDER_CONTRACT_VIOLATION';
 }
 
 /* -------------------------------------------------------------------------- */
