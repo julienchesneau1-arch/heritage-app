@@ -80,6 +80,28 @@ export interface ToolGateway {
   register(tool: RegisteredTool): Result<void>;
   list(): readonly RegisteredTool[];
   invoke(call: ToolCall): Promise<Result<GatewayResult>>;
+  /**
+   * RÉTABLIT LA CONFIANCE DANS UN OUTIL — `docs/22 §9`, invariant I12.
+   *
+   * Sans ce chemin, une seule violation condamnerait l'outil définitivement :
+   * un bogue de fournisseur, corrigé le lendemain, laisserait Jarvis muet pour
+   * toujours. Ce serait un déni de service offert au premier service qui a un
+   * défaut — et le document demande de DÉGRADER la confiance, pas de la
+   * détruire.
+   *
+   * Réservé à `USER`. Jarvis ne peut pas se rendre à lui-même une confiance
+   * qu'un constat lui a retirée : ce serait exactement « le modèle décide »,
+   * là où la constitution du projet pose que le modèle propose et que le
+   * système — ici l'humain — décide.
+   *
+   * L'acte est JOURNALISÉ. Personne ne doit pouvoir rétablir une confiance en
+   * silence.
+   */
+  restoreTrust(
+    toolId: string,
+    actor: Actor,
+    reason: string,
+  ): Promise<Result<void>>;
 }
 
 function inputDigest(input: unknown): string {
@@ -397,6 +419,54 @@ export function createToolGateway(deps: {
      */
     invoke(call: ToolCall): Promise<Result<GatewayResult>> {
       return guarded(call, () => execute(call));
+    },
+
+    async restoreTrust(
+      toolId: string,
+      actor: Actor,
+      reason: string,
+    ): Promise<Result<void>> {
+      const tool = tools.get(toolId);
+      if (tool === undefined) {
+        return err(jarvisError('NOT_FOUND', `Outil inconnu : ${toolId}`));
+      }
+      if (actor !== 'USER') {
+        /* LA GARDE QUI DONNE SON SENS AU MÉCANISME. Si Jarvis pouvait se
+           rendre sa propre confiance, la rupture ne coûterait rien et le
+           constat n'aurait aucune conséquence. */
+        return err(
+          jarvisError(
+            'POLICY_DENIED',
+            'Seul un humain peut rétablir la confiance dans un service. ' +
+              'Jarvis ne se rend pas à lui-même une confiance qu\'un constat ' +
+              'lui a retirée.',
+            { tool: toolId, actor },
+          ),
+        );
+      }
+      if (reason.trim().length === 0) {
+        // Un rétablissement sans motif ne serait pas auditable.
+        return err(
+          jarvisError('VALIDATION', 'Un rétablissement de confiance exige un motif.', {
+            tool: toolId,
+          }),
+        );
+      }
+
+      const event = await deps.ledger.append({
+        actor,
+        eventType: `${tool.definition.auditEvent}_TRUST_RESTORED`,
+        tool: toolId,
+        policyDecision: 'ALLOW',
+        autonomyLevel: 'L0',
+        // Rien n'est affirmé sur les opérations passées : elles gardent leur
+        // verdict. Seule la question « puis-je agir de nouveau ? » change.
+        status: 'NOT_ATTEMPTED',
+        operationId: null,
+        payloadDigest: digestPayload({ tool: toolId, reason }),
+      });
+      if (!event.ok) return event;
+      return ok(undefined);
     },
   };
 
@@ -1026,6 +1096,81 @@ export function createToolGateway(deps: {
       }
     }
 
+    /* --- 3f. LA CONFIANCE DANS LA SOURCE — `docs/22 §9`, invariant I12 ---
+       « N'engager aucune action nouvelle sur une information compromise. »
+
+       PLACÉ ICI, ET NULLE PART AILLEURS. Tout ce qui précède est de
+       l'OBSERVATION — relire l'état d'une opération existante, constater une
+       reprise, rendre un verdict déjà écrit. Bloquer là-haut empêcherait de
+       LIRE ce qui s'est passé, ce qui est exactement l'inverse du but : après
+       une rupture de confiance, on a plus besoin de comprendre, pas moins.
+
+       Ce qui commence à la ligne suivante, en revanche, est une ACTION
+       NOUVELLE. C'est elle qu'on refuse.
+
+       Ce que ce refus N'EST PAS : une punition du fournisseur, ni une
+       affirmation sur l'action refusée. Rien n'a été tenté, et on le dit.
+
+       L'INTENTION RESTE INSCRITE, en `PLANNED`, `attempts = 0`, sans verdict.
+       C'est délibéré : elle a bien existé, et si la confiance est un jour
+       rétablie, l'opération repart de là plutôt que d'être perdue. L'état
+       porte la preuve qu'aucune barrière de durabilité n'a été franchie. */
+    /* LA QUESTION SE POSE AU JOURNAL, PAS AU REGISTRE — et c'est un test qui
+       me l'a appris. Le registre ne garde que le DERNIER état d'une
+       opération ; or une violation est constatée lors d'une RELECTURE, et le
+       chemin de rejeu ne réécrit pas `tool_operations` (ADR-025 : action et
+       observation ne se confondent pas).
+
+       Le journal, lui, est append-only et chaîné. C'est là qu'une rupture de
+       confiance est inscrite, et c'est donc là qu'il faut la chercher — une
+       garde qui interroge une source effaçable n'est pas une garde. */
+    const trust = await deps.db.query<{
+      operation_id: string | null;
+      event_type: string;
+      status: string;
+    }>(
+      /* LE DERNIER MOT SUR LA CONFIANCE, quel qu'il soit. On ne cherche pas
+         « existe-t-il une violation ? » mais « où en est-on ? » — sinon un
+         rétablissement légitime resterait sans effet et la rupture serait
+         définitive. */
+      `SELECT operation_id, event_type, status FROM event_ledger
+        WHERE tool = $1
+          AND (status = 'PROVIDER_CONTRACT_VIOLATION'
+               OR event_type LIKE '%\\_TRUST\\_RESTORED')
+        ORDER BY seq DESC LIMIT 1`,
+      [def.id],
+    );
+    if (!trust.ok) return trust;
+    const dernier = trust.value.rows[0];
+    const breach =
+      dernier !== undefined && dernier.status === 'PROVIDER_CONTRACT_VIOLATION'
+        ? dernier
+        : undefined;
+    if (breach !== undefined) {
+      await deps.ledger.append({
+        actor: call.actor,
+        eventType: `${def.auditEvent}_TRUST_BLOCKED`,
+        tool: def.id,
+        policyDecision: 'ALLOW',
+        autonomyLevel: policy.effectiveAutonomy,
+        // Rien n'a été tenté : ce n'est ni un échec ni une ignorance sur le
+        // monde, c'est une abstention délibérée.
+        status: 'NOT_ATTEMPTED',
+        operationId: call.operationId,
+        payloadDigest: digest,
+      });
+      return err(
+        jarvisError(
+          'PROVIDER_TRUST_REVOKED',
+          `${def.id} a rompu son contrat lors d'une opération antérieure ` +
+            `(${breach.operation_id ?? 'clé inconnue'}). Je n'engage plus rien par ce service : ` +
+            "il a répondu autre chose que ce qu'il annonce, et je ne peux plus " +
+            "interpréter ses réponses. Rien n'a été tenté.",
+          { tool: def.id, operation: call.operationId },
+        ),
+      );
+    }
+
     /* --- 4. BARRIÈRE DE DURABILITÉ ET D'EXCLUSION (ADR-027, ADR-029) ----
        Deux écritures, et l'ordre est la propriété :
 
@@ -1102,6 +1247,40 @@ export function createToolGateway(deps: {
     if (!acquired.ok) return acquired;
     if (acquired.value === null) return inFlight(call, def.id);
     const lease = acquired.value;
+
+    /* --- 4 ter. LA REQUÊTE ELLE-MÊME EST JOURNALISÉE — `docs/22 §10` ----
+       L'invariant I13 exige une chaîne de provenance complète :
+
+         T0 INTENTION · T1 OPERATION_PLANNED · T2 REQUEST_CREATED
+         T3 REQUEST_SENT · T4..T6 · T7 OUTCOME
+
+       Le document relevait le trou nommément : « le Gateway ne journalise pas
+       l'appel lui-même ». Le registre savait qu'une opération était passée en
+       `EXECUTING` ; le JOURNAL, lui, ne portait aucune trace entre la décision
+       et son issue.
+
+       La différence n'est pas cosmétique. Le registre est mutable et ne garde
+       que le dernier état ; le journal est append-only et chaîné. Sans cet
+       événement, à la question « pourquoi refuses-tu de recommencer ? », la
+       seule réponse lisible était un état terminal — jamais le fait qu'un
+       appel soit RÉELLEMENT PARTI, ni sous quelle génération de bail.
+
+       Émis APRÈS la prise de bail et AVANT l'appel : c'est le seul instant où
+       « la requête part maintenant » est vrai. */
+    const requestEvent = await deps.ledger.append({
+      actor: call.actor,
+      eventType: `${def.auditEvent}_REQUEST_SENT`,
+      tool: def.id,
+      policyDecision: 'ALLOW',
+      autonomyLevel: policy.effectiveAutonomy,
+      /* Rien n'est encore observé. `NOT_ATTEMPTED` serait faux — l'appel PART.
+         `UNKNOWN` est exact : à cet instant, l'issue est inconnue, et c'est
+         précisément l'information que cet événement conserve. */
+      status: 'UNKNOWN',
+      operationId: call.operationId,
+      payloadDigest: digest,
+    });
+    if (!requestEvent.ok) return requestEvent;
 
     /* --- 5. Exécution --------------------------------------------------- */
     const executed = await withTimeout(

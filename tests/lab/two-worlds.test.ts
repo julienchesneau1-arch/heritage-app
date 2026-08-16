@@ -42,6 +42,14 @@ import type { EffectContract } from '../../src/core/types/domain.js';
 
 const enabled = databaseAvailable();
 
+/* OUTIL DÉDIÉ À CE FICHIER, et c'est une conséquence directe d'I12.
+
+   La confiance se perd PAR OUTIL et se consigne dans un journal append-only :
+   une violation mise en scène ici bloquerait durablement tout autre fichier du
+   banc utilisant le même identifiant. Ce n'est pas une gêne de test, c'est la
+   propriété qui fonctionne — et la mise en scène doit donc être cantonnée. */
+const TOOL = 'lab_two_worlds';
+
 describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
   let db: Db;
   let world: Db;
@@ -60,6 +68,20 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
 
   beforeEach(async () => {
     await resetWorld(world);
+
+    /* RÉTABLISSEMENT EXPLICITE ENTRE SCÉNARIOS — et il fallait bien qu'il
+       existe. Le scénario byzantin consigne une rupture de confiance dans un
+       journal append-only ; sans acte humain de rétablissement, tous les
+       scénarios suivants seraient refusés.
+
+       C'est la propriété I12 qui fonctionne, pas une gêne de test. On l'exerce
+       ici plutôt que de la contourner. */
+    const admin = stack({ kind: 'NORMAL' });
+    await admin.gateway.restoreTrust(
+      TOOL,
+      'USER',
+      'réinitialisation du banc entre deux scénarios',
+    );
   });
 
   /** Monte une pile dont le fournisseur a le comportement demandé. */
@@ -85,6 +107,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
     const built = buildLabStack(db);
     built.register(
       createHostileTool({
+        id: TOOL,
         provider,
         world,
         timeoutMs: options.timeoutMs ?? 300,
@@ -110,7 +133,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
       const key = labKey('deux-mondes-perdue');
       const s = stack({ kind: 'LOST_RESPONSE' }, { timing: 'BEFORE_RESPONSE' });
 
-      const result = await s.gateway.invoke(labCall(key));
+      const result = await s.gateway.invoke(labCall(key, { toolId: TOOL }));
       await s.provider.settle();
 
       /* ── CE QUE JARVIS SAIT ────────────────────────────────────────── */
@@ -154,11 +177,11 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
 
       // (a) le fournisseur ne reçoit rien du tout : il est injoignable.
       const a = stack({ kind: 'TIMEOUT' }, { timing: 'NEVER', timeoutMs: 150 });
-      const ra = await a.gateway.invoke(labCall(jamaisRecue));
+      const ra = await a.gateway.invoke(labCall(jamaisRecue, { toolId: TOOL }));
 
       // (b) le fournisseur REÇOIT, puis ne fait rien et ne répond pas.
       const b = stack({ kind: 'TIMEOUT' }, { timing: 'NEVER', timeoutMs: 150 });
-      const rb = await b.gateway.invoke(labCall(recueNonTraitee));
+      const rb = await b.gateway.invoke(labCall(recueNonTraitee, { toolId: TOOL }));
 
       // Jarvis voit la même chose dans les deux cas.
       const vuA = ra.ok ? ra.value.status : ra.error.kind;
@@ -247,7 +270,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
         const key = labKey('matrice');
         const s = stack(ligne.behaviour, { timing: ligne.timing, timeoutMs: 200 });
 
-        const result = await s.gateway.invoke(labCall(key));
+        const result = await s.gateway.invoke(labCall(key, { toolId: TOOL }));
         await s.provider.settle();
 
         const vu = result.ok ? result.value.status : result.error.kind;
@@ -297,7 +320,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
         { contract: 'PROVIDER_IDEMPOTENT', reallyIdempotent: false },
       );
 
-      await s.gateway.invoke(labCall(key));
+      await s.gateway.invoke(labCall(key, { toolId: TOOL }));
 
       // Le monde reçoit un SECOND effet pour la même identité et la même
       // cible — exactement ce que le fournisseur jurait impossible.
@@ -307,7 +330,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
       expect(await externalEffectCount(world, key)).toBe(2);
 
       // Une nouvelle observation de la même opération constate la rupture.
-      const relu = await s.gateway.invoke(labCall(key));
+      const relu = await s.gateway.invoke(labCall(key, { toolId: TOOL }));
       expect(relu.ok).toBe(true);
       if (!relu.ok) return;
 
@@ -332,10 +355,10 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
         { contract: 'PROVIDER_IDEMPOTENT', reallyIdempotent: false },
       );
 
-      await s.gateway.invoke(labCall(key));
+      await s.gateway.invoke(labCall(key, { toolId: TOOL }));
       await s.provider.send(key, 'doublon byzantin');
       await s.provider.settle();
-      await s.gateway.invoke(labCall(key));
+      await s.gateway.invoke(labCall(key, { toolId: TOOL }));
 
       const events = await db.query<{ status: string }>(
         'SELECT status FROM event_ledger WHERE operation_id = $1',
@@ -371,7 +394,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
       const key = labKey('byzantin-classe-d');
       const s = stack({ kind: 'NORMAL' }, { contract: 'PROVIDER_IDEMPOTENT' });
 
-      await s.gateway.invoke(labCall(key));
+      await s.gateway.invoke(labCall(key, { toolId: TOOL }));
 
       /* Un effet supplémentaire sur une cible DIFFÉRENTE, injecté par le banc.
          `provider.send` réutiliserait la cible par défaut — donc la même — et
@@ -389,7 +412,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
       // envoi légitime à deux destinataires.
       expect(await externalEffectCount(world, key)).toBe(2);
 
-      const relu = await s.gateway.invoke(labCall(key));
+      const relu = await s.gateway.invoke(labCall(key, { toolId: TOOL }));
       expect(relu.ok).toBe(true);
       if (!relu.ok) return;
 
@@ -422,7 +445,7 @@ describe.runIf(enabled)('couches 04-05 — les deux mondes', () => {
         { contract: 'PROVIDER_IDEMPOTENT', reallyIdempotent: false },
       );
 
-      await s.gateway.invoke(labCall(key));
+      await s.gateway.invoke(labCall(key, { toolId: TOOL }));
       await s.provider.send(key, 'doublon imposé par le banc');
       await s.provider.settle();
       expect(await externalEffectCount(world, key)).toBe(2);

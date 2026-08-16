@@ -227,11 +227,12 @@ sixième et la septième fois dans ce projet.
 | | État |
 |---|---|
 | Couches 01-05 | **faites** |
-| I12 — aucune action nouvelle après violation détectée | **non implémenté** — le Gateway n'interroge pas encore l'historique de confiance avant d'agir |
-| I13 — chaîne de provenance complète | **non implémenté** — `intentId`, `attemptId`, `requestId`, `effectId` n'existent pas |
+| I12 — aucune action nouvelle après violation détectée | **FAIT** — ADR-039, avec rétablissement réservé à l'humain |
+| I13 — chaîne de provenance complète | **PARTIEL** — la chaîne se reconstruit par lecture (ADR-039) ; les identifiants typés `intentId`…`effectId` n'existent pas |
 | Couche 06 Observation · 07 Verdict | partielles |
 | `PARTIAL` branché au Gateway | toujours pas — il faut un outil multi-cibles |
 
-I12 et I13 sont désormais les deux plus grandes zones d'ombre différées, et
-elles ont pris la place qu'occupait le second monde. Elles sont, elles aussi,
-nommées plutôt que tues.
+I12 et I13 ont été traités dans la foulée (ADR-039). Ce qui reste différé est
+désormais énuméré et chiffré dans `docs/28` : la lacune la plus actionnable
+n'est plus dans le banc, elle est dans `docs/05` — **quatorze scénarios dorés
+sur trente ne sont référencés par aucun test**.

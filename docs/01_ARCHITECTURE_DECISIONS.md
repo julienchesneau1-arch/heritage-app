@@ -2007,3 +2007,100 @@ frontières prise en défaut à l'intérieur.**
 Tout nouveau statut doit être ajouté **aux deux** contraintes en même temps que
 l'énumération TypeScript. Le jour où une seconde forme de rupture de confiance
 existera, `isTrustBreach()` est le seul endroit à changer.
+
+---
+
+## ADR-039 — Cycle de vie de la confiance, et provenance de l'appel
+
+**Statut :** accepté (Foundation 5). **Référence :** `docs/22 §9`, §10.
+**Implémente I12 et I13.**
+
+### I12 — aucune action nouvelle sur une information compromise
+
+Quand un fournisseur a rompu son contrat, le Gateway refuse d'engager une
+action nouvelle par ce service. Erreur dédiée `PROVIDER_TRUST_REVOKED`,
+distincte de `PROVIDER_UNAVAILABLE` : le premier ne répond pas, le second **a
+répondu**, et a fait autre chose que ce qu'il annonçait.
+
+**Où la garde est posée, et pourquoi c'est le point délicat.** Tout ce qui
+précède l'engagement est de l'**observation** — relire un état, constater une
+reprise, rendre un verdict déjà écrit. Une garde placée trop haut aurait fermé
+la lecture au moment précis où l'on a besoin d'auditer. Un système qui se
+verrouille quand il faut le comprendre est pire qu'un système sans garde.
+
+Elle est donc posée **juste avant la barrière de durabilité** : après tous les
+chemins d'observation, avant toute action nouvelle. Un test dédié vérifie que
+la relecture reste possible.
+
+**La question se pose au JOURNAL, pas au registre** — et c'est un test qui l'a
+appris. Le registre ne garde que le dernier état d'une opération, et une
+violation est constatée lors d'une *relecture*, qui ne le réécrit pas
+(ADR-025). Le journal, lui, est append-only et chaîné : une garde qui
+interroge une source effaçable n'est pas une garde.
+
+**L'intention reste inscrite** — `PLANNED`, `attempts = 0`, sans verdict.
+Elle a bien existé, et si la confiance est rétablie, l'opération repart de là
+plutôt que d'être perdue.
+
+### Le rétablissement — la lacune que l'exécution a révélée
+
+Une violation consignée dans un journal append-only condamnait l'outil
+**définitivement**. Un bogue de fournisseur, corrigé le lendemain, laissait
+Jarvis muet pour toujours : un déni de service offert au premier service qui a
+un défaut. Or le mandat demande de **dégrader** la confiance, pas de la
+détruire.
+
+`restoreTrust(toolId, actor, reason)` :
+
+| Règle | Pourquoi |
+|---|---|
+| réservé à `USER` | Jarvis ne se rend pas à lui-même une confiance qu'un constat lui a retirée |
+| motif obligatoire | un rétablissement sans motif n'est pas auditable |
+| journalisé | personne ne doit pouvoir rendre une confiance en silence |
+
+La garde `actor === 'USER'` est ce qui donne son sens au mécanisme : si le
+système pouvait se rétablir seul, la rupture ne coûterait rien et le constat
+n'aurait aucune conséquence.
+
+La confiance se perd **par source**, jamais globalement — sinon un seul
+fournisseur fautif arrêterait tout le système.
+
+### I13 — la chaîne de provenance
+
+`docs/22 §10` relevait le trou nommément : *« le Gateway ne journalise pas
+l'appel lui-même »*. Le registre savait qu'une opération était passée en
+`EXECUTING` ; le journal ne portait rien entre la décision et son issue.
+
+Un événement `…_REQUEST_SENT` est désormais émis **après la prise de bail et
+avant l'appel** — le seul instant où « la requête part maintenant » est vrai.
+Statut `UNKNOWN` : `NOT_ATTEMPTED` serait faux, l'appel PART.
+
+Sans lui, à la question *« pourquoi refuses-tu de recommencer ? »*, la seule
+réponse lisible était un état terminal — jamais le fait qu'un appel ait
+réellement quitté le processus.
+
+**Conséquence sur `findByOperationId`.** Une opération a maintenant plusieurs
+événements ; rendre le *premier* rendait le moins informatif. La fonction rend
+désormais le **dernier** : qui pose la question veut savoir ce qui s'est passé.
+
+### La limite, mesurée et assumée
+
+> La provenance prouve **le raisonnement**, jamais **le monde**.
+
+Un fournisseur qui répond `200` sans rien faire produit une chaîne complète,
+cohérente — et un verdict qui serait faux si rien d'autre ne le retenait. Ce
+qui sauve n'est pas la traçabilité : c'est la relecture indépendante du monde.
+
+Un test le mesure explicitement, pour que la provenance ne soit jamais
+présentée comme une garantie sur la réalité.
+
+### Ce qui n'est PAS fait
+
+Les identifiants typés `intentId`, `attemptId`, `requestId`,
+`providerRequestId`, `effectId` de `docs/22 §10` **n'existent pas**. La chaîne
+est reconstructible par lecture — monde → opération → journal → intention — et
+un test la reconstruit sans rien déduire. Mais chaque maillon est identifié par
+la clé d'opération, pas par un identifiant propre.
+
+Suffisant pour les deux questions posées. Insuffisant le jour où une opération
+portera plusieurs tentatives adressant plusieurs fournisseurs.

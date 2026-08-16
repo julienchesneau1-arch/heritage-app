@@ -52,6 +52,17 @@ export type ErrorKind =
    * surtout pas en conclure un échec : son effet, lui, existe peut-être.
    */
   | 'STALE_EXECUTOR'
+  /**
+   * La confiance dans ce fournisseur est ROMPUE — `docs/22 §9`, invariant I12.
+   *
+   * Distinct de `PROVIDER_UNAVAILABLE` : celui-là ne répond pas, celui-ci a
+   * répondu — et a fait autre chose que ce qu'il annonçait. Le premier peut
+   * revenir tout seul ; le second exige une décision humaine.
+   *
+   * Rien n'a été tenté. C'est le point : on n'engage aucune action nouvelle
+   * sur une information compromise.
+   */
+  | 'PROVIDER_TRUST_REVOKED'
   | 'PROVIDER_UNAVAILABLE'
   | 'TIMEOUT'
   | 'VERIFICATION_FAILED'

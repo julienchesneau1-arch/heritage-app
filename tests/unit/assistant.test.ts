@@ -45,6 +45,9 @@ function gatewayRequiringConfirmation(calls: ToolCall[]): ToolGateway {
   return {
     register: () => ok(undefined),
     list: () => [],
+    /* Double : le rétablissement de confiance n'est pas éprouvé ici.
+       Sa sémantique l'est dans `tests/lab/provenance.test.ts`. */
+    restoreTrust: () => Promise.resolve(ok(undefined)),
     invoke: (call: ToolCall): Promise<Result<GatewayResult>> => {
       calls.push(call);
       if (!call.context.userConfirmed) {
@@ -160,6 +163,9 @@ describe('Assistant', () => {
       gateway: {
         register: () => ok(undefined),
         list: () => [],
+        /* Double : le rétablissement de confiance n'est pas éprouvé ici.
+           Sa sémantique l'est dans `tests/lab/provenance.test.ts`. */
+        restoreTrust: () => Promise.resolve(ok(undefined)),
         invoke: () => Promise.resolve(ok(success())),
       },
       setGuardConfirmed: (value: boolean) => states.push(value),
@@ -176,6 +182,9 @@ describe('Assistant', () => {
       gateway: {
         register: () => ok(undefined),
         list: () => [],
+        /* Double : le rétablissement de confiance n'est pas éprouvé ici.
+           Sa sémantique l'est dans `tests/lab/provenance.test.ts`. */
+        restoreTrust: () => Promise.resolve(ok(undefined)),
         invoke: () => Promise.reject(new Error('base injoignable')),
       },
       setGuardConfirmed: (value: boolean) => states.push(value),
@@ -191,6 +200,9 @@ describe('Assistant', () => {
       gateway: {
         register: () => ok(undefined),
         list: () => [],
+        /* Double : le rétablissement de confiance n'est pas éprouvé ici.
+           Sa sémantique l'est dans `tests/lab/provenance.test.ts`. */
+        restoreTrust: () => Promise.resolve(ok(undefined)),
         invoke: () =>
           Promise.resolve(err(jarvisError('POLICY_DENIED', 'Interdit par politique dure.'))),
       },
@@ -210,6 +222,9 @@ describe('Assistant', () => {
       gateway: {
         register: () => ok(undefined),
         list: () => [],
+        /* Double : le rétablissement de confiance n'est pas éprouvé ici.
+           Sa sémantique l'est dans `tests/lab/provenance.test.ts`. */
+        restoreTrust: () => Promise.resolve(ok(undefined)),
         invoke: () => Promise.resolve(ok(success())),
       },
       setGuardConfirmed: (value: boolean) => states.push(value),

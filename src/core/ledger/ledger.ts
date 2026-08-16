@@ -87,6 +87,19 @@ export interface Ledger {
   append(event: unknown): Promise<Result<SealedEvent>>;
   verifyChain(): Promise<Result<ChainReport>>;
   recent(limit?: number): Promise<Result<readonly SealedEvent[]>>;
+  /**
+   * L'événement qui porte l'ISSUE d'une opération — le DERNIER, pas le premier.
+   *
+   * Une opération n'a plus un seul événement depuis qu'I13 fait journaliser
+   * l'appel lui-même (`…_REQUEST_SENT`, `docs/22 §10`). « Trouver l'événement
+   * d'une opération » est donc devenu ambigu, et le premier — celui qui dit
+   * « la requête part, l'issue est inconnue » — est précisément le moins
+   * informatif.
+   *
+   * Qui pose cette question veut savoir CE QUI S'EST PASSÉ. On rend donc le
+   * dernier maillon. La chaîne complète se lit par `verifyChain` ou
+   * directement au journal.
+   */
   findByOperationId(operationId: string): Promise<Result<SealedEvent | null>>;
 }
 
@@ -232,7 +245,7 @@ export function createLedger(db: Db): Ledger {
       operationId: string,
     ): Promise<Result<SealedEvent | null>> {
       const rows = await db.query<LedgerRow>(
-        'SELECT * FROM event_ledger WHERE operation_id = $1 ORDER BY seq ASC LIMIT 1',
+        'SELECT * FROM event_ledger WHERE operation_id = $1 ORDER BY seq DESC LIMIT 1',
         [operationId],
       );
       if (!rows.ok) return rows;
