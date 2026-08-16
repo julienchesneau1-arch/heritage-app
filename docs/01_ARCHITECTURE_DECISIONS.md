@@ -2220,3 +2220,112 @@ Si un jour un appel cloud doit être engagé **sans** estimation préalable, tou
 le mécanisme tombe : le blocage dur repose entièrement sur le fait qu'on sait
 estimer avant d'appeler. Ce serait une décision d'architecture, pas un
 ajustement.
+
+---
+
+## ADR-041 — L'audit lit le JOURNAL, et l'interdit est structurel
+
+**Statut :** accepté (Phase 3). **Référence :** `docs/12`, `docs/05 §A9`,
+`docs/14 §2`.
+
+### Le problème, qui n'était pas « afficher une liste »
+
+`docs/05 §A9` pose la question la plus banale qu'on puisse adresser à un
+assistant — « qu'as-tu fait aujourd'hui ? » — et l'assortit d'une clause qui
+n'est pas banale du tout :
+
+> réponse construite **depuis l'Event Ledger**.
+> **Interdit :** réponse reconstruite par le modèle de mémoire.
+
+Les deux implémentations rendent le même écran. Elles ne prouvent pas la même
+chose.
+
+| | Ce que ça rapporte |
+|---|---|
+| depuis la mémoire ou `tool_operations` | ce que le système **croit** avoir fait, dans son état **courant** |
+| depuis `event_ledger` | ce qui a **été écrit** au moment où ça s'est produit |
+
+L'écart entre les deux est exactement l'espace où un audit cesse de servir : une
+source révisable ne prouve rien. `tool_operations` est un registre mutable qui
+ne garde que le dernier état — c'est son rôle, et c'est ce qui le disqualifie
+ici. Le journal est append-only et chaîné ; c'est sa seule raison d'exister.
+
+### La décision
+
+> **`audit_query` lit `event_ledger`, et rien d'autre.**
+> Pas de jointure, pas de mémoire, pas de résumé de modèle.
+
+Et surtout : **l'interdit est vérifié sur le TEXTE de la source**, pas sur le
+comportement.
+
+```ts
+expect(source).toContain('FROM event_ledger');
+for (const interdite of ['FROM tool_operations', 'FROM memories',
+                         'FROM notes', 'FROM tasks', 'JOIN']) { … }
+for (const interdit of ['provider', 'complete(', 'chat(', 'embed(', 'summar']) { … }
+```
+
+C'est délibéré, et c'est le point de l'ADR. Une garantie comportementale
+resterait verte le jour où quelqu'un ajoute une jointure « pour enrichir
+l'affichage » — le résultat serait toujours plausible. Une garantie
+structurelle échoue à la ligne ajoutée. **L'outil ne reçoit aucun fournisseur de
+modèle et n'en importe aucun : ce n'est pas une discipline, c'est une
+impossibilité de construction.**
+
+### Un trou dans le journal se RAPPORTE, il ne se comble pas
+
+Corollaire direct : `truncated` est rendu explicitement. Montrer cinquante
+lignes sur trois cents sans le dire est la seule façon dont une lecture honnête
+peut mentir — et elle mentirait d'autant mieux qu'elle n'invente rien.
+
+### La fenêtre est calculée par la base
+
+`date_trunc($1, clock_timestamp())`. ADR-036 et ADR-037 appliqués d'emblée : un
+appelant dont l'horloge dérive verrait « aujourd'hui » ailleurs qu'aujourd'hui.
+**Un audit qui montre le mauvais jour est pire qu'un audit absent, parce qu'il
+inspire confiance.**
+
+### Les deux classifications qui ne vont pas de soi
+
+**`ORANGE`, pas `GREEN`.** Le journal ne contient aucune charge utile — que des
+empreintes. Mais l'**enchaînement** des actions est en soi une information sur
+la vie de l'utilisateur. Classer `GREEN` reviendrait à affirmer que la liste de
+ce qu'on a fait ne dit rien de soi.
+
+**`reversible: false`.** Non pas « irréversible » mais « **rien à défaire** ».
+Le validateur de contrat refuse `true` sans procédure d'annulation décrite, et
+il a raison : promettre une annulation qui ne peut pas exister est pire que de
+ne rien promettre. Même valeur que `task_list`, pour la même raison.
+
+### L'audit s'audite
+
+L'interrogation émet `AUDIT_QUERIED`. Un audit qui ne se journalise pas laisse
+un angle mort exactement là où il ne devrait pas y en avoir : **qui a consulté
+le journal, et quand.**
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| lecture sur `tool_operations` au lieu du journal | **4 / 7** |
+| fenêtre calculée par l'horloge du processus | **1 / 7** |
+| `truncated` toujours `false` | **1 / 7** |
+
+Les trois discriminent : « l'audit n'appelle aucun modèle » et « l'audit est
+journalisé » restent verts dans les trois cas, ce qui est correct — ils
+éprouvent autre chose.
+
+### Effet de bord assumé sur la porte de sortie Phase 2
+
+G2.7 vérifiait `ids.length === 5`. Cette formulation devenait fausse au premier
+outil de Phase 3 — or `docs/02` en prévoit dix. Reformulée en : **les cinq
+premiers sont présents ET tout outil enregistré passe `validateDefinition`.**
+La garantie est plus forte, pas plus faible : elle porte désormais sur la
+conformité de chaque outil, pas sur un décompte.
+
+### Condition de révision
+
+Si le journal devait un jour être élagué pour tenir en volume, cette ADR ne
+tomberait pas — mais l'outil devrait alors **rapporter la borne d'élagage** dans
+sa réponse. Un audit qui ne dit pas où commence sa mémoire laisse croire que
+rien ne s'est passé avant.

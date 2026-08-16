@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { mint, type OperationIdentity } from '../../src/core/tools/identity.js';
 import { createDb } from '../../src/core/db/client.js';
 import { createLedger } from '../../src/core/ledger/ledger.js';
+import { validateDefinition } from '../../src/core/tools/contract.js';
 import { createPolicyGate } from '../../src/core/policy/gate.js';
 import { createMemoryGuard } from '../../src/core/memory/guard.js';
 import { createMemoryInbox } from '../../src/core/memory/inbox.js';
@@ -299,12 +300,33 @@ const checks: readonly Check[] = [
       const connection = db();
       try {
         const { gateway } = stack(connection);
-        const ids = gateway.list().map((t) => t.definition.id).sort();
-        return (
-          ids.length === 5 &&
-          ids.join(',') ===
-            'memory_add,memory_search,note_create,task_create,task_list'
-        );
+        /* CE QUE CETTE PORTE GARANTIT — reformulé quand le premier outil de
+           Phase 3 est arrivé.
+
+           Elle exigeait `ids.length === 5`. Ce décompte figé garantissait deux
+           choses à la fois : que les cinq sont là, et qu'aucun outil non prévu
+           ne s'est glissé. La première reste due ; la seconde bloquait une
+           croissance que `docs/02` planifie explicitement (dix outils de plus
+           en Phase 3).
+
+           On garde donc les DEUX garanties, séparées : les cinq sont présents,
+           ET tout outil enregistré — quel qu'il soit — passe la validation de
+           contrat. Un outil non conforme échoue au `register()`, donc
+           n'apparaîtrait pas dans la liste ; on le vérifie explicitement
+           plutôt que de s'en remettre à cet effet de bord. */
+        const ids = gateway.list().map((t) => t.definition.id);
+        const cinq = [
+          'memory_add',
+          'memory_search',
+          'note_create',
+          'task_create',
+          'task_list',
+        ];
+        const tousPresents = cinq.every((id) => ids.includes(id));
+        const tousConformes = gateway
+          .list()
+          .every((t) => validateDefinition(t.definition, t.verifyAttempt !== undefined).length === 0);
+        return tousPresents && tousConformes;
       } finally {
         void connection.close();
       }

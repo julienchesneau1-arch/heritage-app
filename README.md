@@ -6,7 +6,8 @@
 > humaine en action vérifiable.**
 
 Statut : **Jarvis fonctionne.** Interface texte, passerelle web pour le téléphone,
-cinq outils, mémoire — sans Internet et sans aucun modèle installé.
+six outils, mémoire, journal interrogeable — sans Internet et sans aucun modèle
+installé.
 
 ---
 
@@ -78,7 +79,7 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 552 tests
+pnpm test                   # 559 tests
 pnpm test:redteam           # les 97 tests d'audit et de red team
 pnpm test:lab               # les 149 tests du banc (chaos, bail, deux mondes, byzantin, provenance)
 JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
@@ -140,8 +141,9 @@ registre des dérivés, interfaces fournisseurs avec test de contrat bloquant,
 coffre à secrets, banc de mesure, CI. **154 tests passent.**
 
 S'y ajoutent le Tool Gateway et ses contrats, le Verification Engine, la
-séparation Privileged/Quarantined (ADR-004), les cinq premiers outils —
-`memory_add`, `memory_search`, `task_create`, `task_list`, `note_create` — et
+séparation Privileged/Quarantined (ADR-004), les six outils écrits —
+`memory_add`, `memory_search`, `task_create`, `task_list`, `note_create` et
+`audit_query`, qui rend le journal interrogeable (ADR-041) — et
 une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
 aucun modèle requis).
 
@@ -149,7 +151,7 @@ Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**552 tests passent**, dont 97 écrits pour l'audit et la red team.
+**559 tests passent**, dont 97 écrits pour l'audit et la red team.
 
 Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
 Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit
@@ -161,8 +163,13 @@ Restent ouverts et documentés : la mémoire de travail, la contradiction, et le
 outils d'oubli et de correction. Lire `docs/11` avant de se fier à ce dépôt.
 
 Ce qui n'existe pas encore : Undo Engine (la capture existe, pas l'exécution),
-Data Firewall complet, Model Router, Cost Engine, modes cognitifs, voix,
-application iOS native. Voir `docs/02` et l'analyse d'écarts en `docs/09`.
+Data Firewall complet, Model Router, modes cognitifs, voix, application iOS
+native. Le **CostGate** est écrit et testé (ADR-040) mais **n'a encore aucun
+appelant** — aucun fournisseur cloud n'existe pour l'appeler. C'est le bon
+ordre : le mécanisme existe avant le premier appel payant, et
+`tests/redteam/wiring.test.ts` signalera l'oubli de branchement le jour venu.
+
+Voir `docs/02` et l'analyse d'écarts en `docs/09`.
 
 Le document 08 conclut qu'environ **80 % de la machinerie** peut être assemblée à partir
 de briques open source matures, et identifie les **20 %** — la couche de confiance — qui

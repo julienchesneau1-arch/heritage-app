@@ -15,6 +15,7 @@ import { ok, type Result } from '../core/types/result.js';
 import { memoryAddTool, memorySearchTool } from './memory.js';
 import { taskCreateTool, taskListTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
+import { createAuditQueryTool } from './audit.js';
 
 export interface ToolDeps {
   readonly guard: MemoryGuard;
@@ -43,6 +44,10 @@ export function registerCoreTools(
     taskCreateTool(),
     taskListTool(),
     noteCreateTool(),
+    /* Premier outil de Phase 3, et celui qui tient la promesse de `docs/12` :
+       le journal devient interrogeable par un humain. Il ne dépend d'aucune
+       autre dépendance — il lit `event_ledger` par le contexte d'outil. */
+    createAuditQueryTool(),
   ];
 
   for (const tool of tools) {
