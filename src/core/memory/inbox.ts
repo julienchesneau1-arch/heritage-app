@@ -102,9 +102,9 @@ export function createMemoryInbox(db: Db): MemoryInbox {
       proposal: CandidateProposal,
     ): Promise<Result<MemoryCandidate>> {
       const digest = contentDigest(proposal.memoryType, proposal.content);
-      const expiresAt = new Date(
-        Date.now() + CANDIDATE_TTL_DAYS * 24 * 60 * 60 * 1000,
-      ).toISOString();
+      /* Frappée par la base, jamais par le processus — ADR-037. Même défaut
+         que pour les instantanés : l'échéance était écrite avec l'horloge
+         applicative et relue avec celle de la base (ligne 163). */
 
       // `ON CONFLICT DO NOTHING` sur l'index partiel des candidats PENDING :
       // la même observation répétée dix fois ne remplit pas la file de dix
@@ -114,7 +114,8 @@ export function createMemoryInbox(db: Db): MemoryInbox {
            content, memory_type, source_type, source, provenance,
            privacy_class, data_category, suggested_confidence,
            subject_entity_id, content_digest, expires_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+                   clock_timestamp() + ($11 || ' days')::interval)
          ON CONFLICT (content_digest, memory_type)
            WHERE state = 'PENDING' DO NOTHING
          RETURNING ${SELECT_COLUMNS}`,
@@ -129,7 +130,7 @@ export function createMemoryInbox(db: Db): MemoryInbox {
           proposal.suggestedConfidence,
           proposal.subjectEntityId,
           digest,
-          expiresAt,
+          String(CANDIDATE_TTL_DAYS),
         ],
       );
       if (!inserted.ok) return inserted;

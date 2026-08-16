@@ -139,15 +139,24 @@ export function createSnapshotStore(db: Db): SnapshotStore {
         );
       }
 
-      const expiresAt = new Date(
-        Date.now() + SNAPSHOT_TTL_DAYS * 24 * 60 * 60 * 1000,
-      ).toISOString();
+      /* L'ÉCHÉANCE EST FRAPPÉE PAR LA BASE — ADR-037.
+
+         Elle l'était par `Date.now()`, puis comparée à `now()` côté base
+         (`expires_at > now()`, ligne 182). Deux horloges différentes pour un
+         même fait. Mesuré : une dérive applicative d'un an donnait une
+         rétention de 371 jours au lieu de 7 — donc un ÉTAT ANTÉRIEUR classé
+         jusqu'à `ORANGE` conservé un an de trop (`docs/14`). En sens inverse,
+         l'instantané naissait déjà périmé et l'annulation devenait
+         silencieusement impossible.
+
+         La règle est celle d'I14, élargie : qui compare doit estampiller. */
 
       const inserted = await db.query<SnapshotRow>(
         `INSERT INTO action_snapshots (
            operation_id, resource_kind, resource_id, undo_kind,
            inverse_tool_id, inverse_input, prior_state, privacy_class, expires_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                   clock_timestamp() + ($9 || ' days')::interval)
          RETURNING ${SELECT_COLUMNS}`,
         [
           input.operationId,
@@ -162,7 +171,7 @@ export function createSnapshotStore(db: Db): SnapshotStore {
             ? null
             : JSON.stringify(input.priorState),
           input.privacyClass ?? 'ORANGE',
-          expiresAt,
+          String(SNAPSHOT_TTL_DAYS),
         ],
       );
       if (!inserted.ok) return inserted;

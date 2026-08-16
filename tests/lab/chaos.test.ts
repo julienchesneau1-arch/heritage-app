@@ -56,12 +56,17 @@ describe.runIf(enabled)('banc — chaos', () => {
 
   it('les invariants sont déclarés et évaluables', async () => {
     /* Dix depuis Foundation 4 ; I16 (estampille) et I17 (cloisonnement)
-       depuis F5.1 ; I18 (échéance lue, jamais recalculée) depuis F5.2. */
+       depuis F5.1 ; I18 (échéance lue, jamais recalculée) et I19 (échéance
+       frappée par la base) depuis F5.2.
+
+       Les modules orphelins ne sont PAS un invariant d'ici : `wiring.test.ts`
+       en fait déjà une analyse d'atteignabilité transitive depuis les points
+       d'entrée, strictement plus forte qu'un contrôle d'importation. */
     const report = await checkInvariants(db, world);
-    expect(report.checked).toHaveLength(13);
+    expect(report.checked).toHaveLength(14);
     for (const id of [
       'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9', 'I10',
-      'I16', 'I17', 'I18',
+      'I16', 'I17', 'I18', 'I19',
     ]) {
       expect(report.checked.some((c) => c.startsWith(`${id} —`))).toBe(true);
     }

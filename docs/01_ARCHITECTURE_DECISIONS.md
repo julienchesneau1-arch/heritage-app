@@ -1837,3 +1837,74 @@ Si un mécanisme de renouvellement est un jour introduit, `lease_expires_at`
 devra être repoussé **par le détenteur du bail courant uniquement** — donc via
 `writeAuthoritative`, sous cloisonnement. Un renouvellement non cloisonné
 ressusciterait exactement le défaut qu'ADR-035 a fermé.
+
+---
+
+## ADR-037 — Qui compare doit estampiller
+
+**Statut :** accepté (balayage « zones d'ombre »). **Corrige un défaut MESURÉ.**
+**Élargit I14 au-delà du bail.**
+
+### Le défaut
+
+`docs/23 §4` avait établi I14 : *le verdict de bail est indépendant de
+l'horloge du processus*. **Elle ne valait que pour le bail.**
+
+Deux autres tables portaient des échéances, écrites avec `Date.now()` et
+comparées avec `now()` côté base. Deux horloges pour un même fait.
+
+| Table | TTL | Avec +1 an de dérive applicative |
+|---|---|---|
+| `action_snapshots` | 7 j | **371 jours** |
+| `memory_candidates` | 30 j | **394 jours** |
+
+`action_snapshots` conserve l'**état antérieur** d'une ressource, classé
+jusqu'à `ORANGE`. Une rétention de 371 jours est une violation de `docs/14`,
+pas une gêne d'exploitation. En dérive inverse, l'instantané naissait **déjà
+expiré** : l'annulation devenait silencieusement impossible.
+
+### Ce qui distingue ce défaut d'ADR-036
+
+Il en est le **voisin**, et c'est pour cela qu'il était resté invisible :
+
+```text
+ADR-036   l'observateur RECALCULE une échéance qu'il n'a pas fixée
+ADR-037   l'échéance est bien fixée UNE fois — mais par la mauvaise horloge
+```
+
+### Décision
+
+> **Qui compare doit estampiller.**
+
+Toute échéance destinée à être comparée par la base est **frappée par la
+base** :
+
+```sql
+clock_timestamp() + ($n || ' days')::interval
+```
+
+`Date.now()` reste libre partout où il mesure une durée, horodate un journal ou
+verrouille **en mémoire** — `auth.ts` compare son verrou à `Date.now()` des
+deux côtés, donc reste cohérent.
+
+### Invariant I19
+
+> Une échéance persistée est frappée par la base, jamais par l'horloge du
+> processus.
+
+Contrôle volontairement **grossier et fermé par défaut** : un fichier qui écrit
+`expires_at` et manipule `Date.now() +` est signalé. Suivre un paramètre `$11`
+jusqu'à sa valeur demanderait une analyse de flot que la moindre
+refactorisation casserait ; la cohabitation des deux suffit à exiger une
+relecture, et c'est ce qu'on attend d'une garde.
+
+Quatre contrôles, dont le défaut exact mesuré et une vérification que
+`Date.now()` **n'est pas** signalé là où il chronomètre — une garde qui
+interdirait `Date.now()` partout serait désactivée dans la semaine, et le vrai
+défaut repasserait avec elle.
+
+### Condition de révision
+
+Toute nouvelle colonne d'échéance rejoint `DECISION_TIMESTAMPS` (I16) et le
+périmètre d'I19. Une échéance qui ne serait **jamais** comparée par la base
+peut rester applicative — mais il faudra l'écrire, pas le supposer.

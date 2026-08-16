@@ -28,9 +28,27 @@ import { createHostileTool } from '../hostile-tool.js';
 import { worldDb } from '../world.js';
 import { fromStorage } from '../../../src/core/tools/identity.js';
 
-const [key = 'sonde', rawCount = '10', rawLatency = '25'] = process.argv.slice(2);
+const [key = 'sonde', rawCount = '10', rawLatency = '25', rawSkew = '0'] =
+  process.argv.slice(2);
 const count = Number(rawCount);
 const latencyMs = Number(rawLatency);
+
+/* DÉCALAGE D'HORLOGE PROPRE À CE PROCESSUS.
+ *
+ * C'est ce qui restait de « deux machines » et qui n'était pas mesuré. Le
+ * multi-processus prouvait déjà que le goulot est en base et non en mémoire ;
+ * il ne prouvait rien sur des hôtes dont les horloges DIVERGENT, parce que
+ * tous les processus partageaient celle de la machine.
+ *
+ * Un décalage par processus reproduit la seule différence qui reste entre
+ * « deux processus » et « deux machines ». Le reste — pool distinct, mémoire
+ * distincte, ordonnancement distinct — est déjà là.
+ */
+const skewMs = Number(rawSkew);
+if (skewMs !== 0) {
+  const real = Date.now.bind(Date);
+  Date.now = () => real() + skewMs;
+}
 
 async function main(): Promise<void> {
   const db = labDb(15);

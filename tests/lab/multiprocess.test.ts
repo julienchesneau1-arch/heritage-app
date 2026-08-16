@@ -50,8 +50,16 @@ describe.runIf(enabled)('banc — concurrence multi-processus', () => {
     processes: number,
     each: number,
     latencyMs = 40,
+    /**
+     * Décalage d'horloge par processus, en millisecondes.
+     *
+     * `skews[i]` s'applique à la i-ème sonde. C'est ce qui distingue « deux
+     * processus » de « deux machines » : le reste — pool, mémoire,
+     * ordonnancement — diffère déjà.
+     */
+    skews: readonly number[] = [],
   ): Promise<readonly WorkerReport[]> {
-    const spawned = Array.from({ length: processes }, () =>
+    const spawned = Array.from({ length: processes }, (_unused, index) =>
       run(
         'npx',
         [
@@ -60,6 +68,7 @@ describe.runIf(enabled)('banc — concurrence multi-processus', () => {
           key,
           String(each),
           String(latencyMs),
+          String(skews[index] ?? 0),
         ],
         { cwd: process.cwd(), env: process.env },
       ),
@@ -143,6 +152,58 @@ describe.runIf(enabled)('banc — concurrence multi-processus', () => {
       if (!row.ok) return;
 
       expect(row.value.rows[0]?.attempts ?? 0).toBeLessThanOrEqual(1);
+    },
+    120_000,
+  );
+
+  /* ================================================================== *
+   * « DEUX MACHINES », DÉCOMPOSÉ
+   *
+   * `docs/24` et `docs/25` classaient le comportement multi-hôtes en
+   * NON TESTABLE. C'était une SUPPOSITION, pas une mesure — et elle était
+   * trop pessimiste.
+   *
+   * « Deux machines » se décompose en quatre différences observables :
+   *
+   *   pool de connexions distinct   déjà couvert par ce fichier
+   *   mémoire distincte            déjà couvert
+   *   ordonnancement distinct      déjà couvert
+   *   HORLOGES DIVERGENTES         ← la seule qui manquait
+   *
+   * Ce test ferme la quatrième. Ce qui reste hors de portée est nommé dans
+   * `docs/26`, et c'est beaucoup plus étroit qu'« un second hôte ».
+   * ================================================================== */
+
+  it(
+    'quatre processus aux horloges DIVERGENTES — toujours un seul effet',
+    async () => {
+      const key = labKey('mp-derive');
+
+      /* Deux ans d'écart entre le processus le plus en avance et le plus en
+         retard. Si une seule décision de sûreté dépendait de l'horloge d'un
+         appelant, ce test la ferait tomber. */
+      const UN_AN = 365 * 24 * 3_600 * 1_000;
+      const reports = await stampede(key, 4, 20, 40, [
+        +UN_AN,
+        -UN_AN,
+        +UN_AN / 2,
+        0,
+      ]);
+
+      const sum = (pick: (r: WorkerReport) => number): number =>
+        reports.reduce((total, r) => total + pick(r), 0);
+
+      // La propriété fondamentale, inchangée sous deux ans de divergence.
+      expect(await externalEffectCount(world, key)).toBeLessThanOrEqual(1);
+      expect(sum((r) => r.engaged)).toBeLessThanOrEqual(1);
+      expect(sum((r) => r.failed)).toBe(0);
+
+      const row = await db.query<{ attempts: number }>(
+        'SELECT attempts FROM tool_operations WHERE operation_id = $1',
+        [key],
+      );
+      expect(row.ok).toBe(true);
+      if (row.ok) expect(row.value.rows[0]?.attempts ?? 0).toBeLessThanOrEqual(1);
     },
     120_000,
   );

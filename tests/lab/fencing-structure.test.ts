@@ -21,6 +21,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   checkStructuralInvariants,
+  classifyDeadlineWrites,
   classifyLeaseReads,
   classifyOperationWrites,
   classifyStamps,
@@ -243,6 +244,52 @@ describe('I17 — cloisonnement des écritures autoritaires', () => {
         'const q = `UPDATE t SET executing_at = clock_timestamp()`;',
       );
       expect(reads).toEqual([]);
+    });
+  });
+
+  /* ================================================================== *
+   * I19 — une échéance persistée est frappée par la base
+   * ================================================================== */
+
+  describe("I19 — aucune échéance persistée frappée par le processus", () => {
+    it('le dépôt courant ne frappe aucune échéance avec Date.now()', () => {
+      const i19 = checkStructuralInvariants().violations.filter(
+        (v) => v.invariant === 'I19',
+      );
+      if (i19.length > 0) {
+        throw new Error(`échéances frappées par le processus :\n${renderViolations(i19)}`);
+      }
+      expect(i19).toEqual([]);
+    });
+
+    it('DÉTECTE : le défaut exact mesuré — 371 jours au lieu de 7', () => {
+      const writes = classifyDeadlineWrites(
+        'attaque.ts',
+        'const expiresAt = new Date(Date.now() + TTL * 86400000).toISOString();\n' +
+          'await db.query(`INSERT INTO t (expires_at) VALUES ($1)`, [expiresAt]);',
+      );
+      expect(writes).toHaveLength(1);
+      expect(writes[0]?.databaseClock).toBe(false);
+    });
+
+    it("accepte une échéance frappée par l'horloge de la base", () => {
+      const writes = classifyDeadlineWrites(
+        'ok.ts',
+        "await db.query(`INSERT INTO t (expires_at) " +
+          "VALUES (clock_timestamp() + ($1 || ' days')::interval)`, [jours]);",
+      );
+      expect(writes[0]?.databaseClock).toBe(true);
+    });
+
+    it("IGNORE Date.now() dans un fichier qui n'écrit aucune échéance", () => {
+      /* `Date.now()` reste libre là où il mesure une durée ou verrouille en
+         mémoire. Une garde qui l'interdirait partout serait désactivée dans
+         la semaine — et le vrai défaut repasserait avec elle. */
+      const writes = classifyDeadlineWrites(
+        'chrono.ts',
+        'const debut = Date.now();\nconst ecoule = Date.now() - debut;',
+      );
+      expect(writes).toEqual([]);
     });
   });
 

@@ -481,6 +481,72 @@ const I16: StructuralInvariant = {
 };
 
 /* ========================================================================== *
+ * I19 — une échéance PERSISTÉE est frappée par la base, jamais par le processus
+ *
+ * Le voisin du motif d'ADR-036, et il est resté invisible pour cette raison :
+ * l'échéance était bien fixée UNE fois, mais par l'horloge du PROCESSUS, puis
+ * comparée à celle de LA BASE.
+ *
+ * Mesuré avant correction : une dérive applicative d'un an donnait 371 jours
+ * de rétention au lieu de 7 sur un état antérieur classé `ORANGE`.
+ * ========================================================================== */
+
+export interface DeadlineWrite {
+  readonly file: string;
+  /** Vrai si la valeur écrite vient d'une expression SQL, pas d'un paramètre. */
+  readonly databaseClock: boolean;
+  readonly detail: string;
+}
+
+/**
+ * Un fichier qui écrit une échéance ET manipule `Date.now()` est suspect.
+ *
+ * Contrôle volontairement GROSSIER et FERMÉ PAR DÉFAUT : suivre un paramètre
+ * `$11` jusqu'à sa valeur demanderait une analyse de flot que la moindre
+ * refactorisation casserait. La cohabitation des deux dans un même fichier
+ * suffit à exiger une relecture, et c'est ce qu'on veut d'une garde.
+ *
+ * `Date.now()` reste libre partout ailleurs — mesurer une durée, horodater un
+ * journal, verrouiller EN MÉMOIRE. Ce qui est interdit, c'est de FRAPPER une
+ * échéance que la base comparera.
+ */
+export function classifyDeadlineWrites(
+  file: string,
+  source: string,
+): readonly DeadlineWrite[] {
+  const content = stripComments(source);
+  // On ne s'intéresse qu'aux fichiers qui écrivent réellement une échéance.
+  if (!/expires_at/.test(content)) return [];
+  if (!/INSERT INTO|UPDATE /.test(content)) return [];
+
+  const mintsInProcess = /Date\.now\(\)\s*\+/.test(content);
+  return [
+    {
+      file,
+      databaseClock: !mintsInProcess,
+      detail: mintsInProcess
+        ? 'calcule une échéance avec Date.now() alors que le fichier écrit expires_at'
+        : 'aucune échéance frappée par le processus',
+    },
+  ];
+}
+
+const I19: StructuralInvariant = {
+  id: 'I19',
+  claim:
+    'une échéance persistée est frappée par la base, jamais par ' +
+    "l'horloge du processus — qui compare doit estampiller",
+  check() {
+    return sourcesUnder('src')
+      .flatMap((file) => classifyDeadlineWrites(file, readFileSync(file, 'utf8')))
+      .filter((write) => !write.databaseClock)
+      .map((write) =>
+        violation('I19', write.detail, { fichier: write.file }),
+      );
+  },
+};
+
+/* ========================================================================== *
  * I18 — l'échéance d'un bail est LUE, jamais recalculée
  *
  * Quatrième occurrence d'un même motif, et c'est ce qui justifie un invariant
@@ -698,7 +764,7 @@ const I17: StructuralInvariant = {
 /* ========================================================================== */
 
 const STATEFUL: readonly StatefulInvariant[] = [I1, I2, I3, I4, I7, I8];
-const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10, I16, I17, I18];
+const STRUCTURAL: readonly StructuralInvariant[] = [I5, I6, I9, I10, I16, I17, I18, I19];
 
 /** Évalue les dix invariants sur l'état courant. */
 export async function checkInvariants(db: Db, world: Db): Promise<InvariantReport> {
