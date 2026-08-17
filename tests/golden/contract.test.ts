@@ -97,6 +97,34 @@ const BLOQUES: Readonly<Record<string, Blocage>> = {
 /** Le registre réel des outils : ce qui est ENREGISTRÉ, pas ce qui est écrit. */
 const REGISTRE = readFileSync('src/tools/index.ts', 'utf8');
 
+/**
+ * Un identifiant est-il RATTACHÉ à `docs/05`, ou seulement présent ?
+ *
+ * ⚠ LA VERSION LÂCHE (`\bC2\b`) A COMPTÉ UN SCÉNARIO CRITIQUE COMME COUVERT
+ *   POUR UNE COLLISION DE CHAÎNE.
+ *
+ * `docs/05 §C2` est **l'arrêt d'urgence**. Le seul « C2 » du dépôt était dans
+ * `intent-journal.test.ts` : « matrice adversariale **ligne C2** » — la ligne
+ * d'un TOUT AUTRE tableau. Aucune capacité d'arrêt d'urgence n'existe, et le
+ * compteur affichait pourtant C2 comme référencé.
+ *
+ * Un identifiant de deux caractères est trop court pour valoir preuve tout
+ * seul. Trois formes le rattachent sans ambiguïté :
+ *
+ *   `05/C2` ou `docs/05 … C2`   les listes « 05/B1, B2, B3 » comptent, d'où
+ *                               la fenêtre de 60 caractères
+ *   `**C2**`                    gras markdown, la forme des en-têtes de fichier
+ *   `'C2 — …`                   titre de test
+ *
+ * ⚠ ET LA PREMIÈRE RÉDACTION DE CETTE RÈGLE ÉTAIT TROP STRICTE : elle exigeait
+ *   `05/` collé à l'identifiant, et perdait `B3` — cité dans « scénarios
+ *   05/B1, B2, B3, B10 », où seul B1 porte le préfixe. Un filtre qui resserre
+ *   trop invente des trous et fait perdre confiance dans les vrais.
+ */
+export function rattacheADocs05(id: string): RegExp {
+  return new RegExp(`((05/|docs/05)[^\\n]{0,60}?\\b${id}\\b|\\*\\*${id}\\*\\*|['"\`]${id} —)`);
+}
+
 describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
   const markdown = readFileSync('docs/05_GOLDEN_TESTS.md', 'utf8');
   const ids = scenarioIds(markdown);
@@ -115,9 +143,7 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
   it('AUCUN scénario doré n\'est orphelin', () => {
     const orphelins = ids.filter((id) => {
       if (BLOQUES[id] !== undefined) return false;
-      // Référencé = cité entre accents graves ou en toutes lettres dans un test.
-      const motif = new RegExp(`\\b${id}\\b`);
-      return !sources.some((s) => motif.test(s.content));
+      return !sources.some((s) => rattacheADocs05(id).test(s.content));
     });
 
     if (orphelins.length > 0) {
@@ -181,7 +207,13 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
        ⚠ CES DEUX LIGNES NE LISENT QUE LA TABLE, et il faut le dire ici plutôt
          que de laisser croire le contraire : c'est le test au-dessus — « chaque
          blocage prouve que ce qui manque manque encore » — qui rattache la
-         table au code. Seul, ce compteur n'a jamais rien garanti. */
+         table au code. Seul, ce compteur n'a jamais rien garanti.
+
+       ET IL EST RESTÉ À 27 PENDANT QU'ON RÉPARAIT CE QU'IL COMPTE. `C2` y
+       entrait par une collision de chaîne (`\bC2\b` trouvait « matrice
+       adversariale ligne C2 ») ; il y entre désormais par seize tests
+       d'arrêt d'urgence. Même nombre, autre vérité — la démonstration qu'un
+       compteur ne vaut que par la règle de reconnaissance qui l'alimente. */
     expect(couverts).toBe(27);
     expect(bloques).toBe(3);
     expect(bloques / ids.length).toBeLessThan(0.25);

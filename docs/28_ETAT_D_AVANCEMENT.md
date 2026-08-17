@@ -135,6 +135,30 @@ Deux contrôles négatifs protègent l'extracteur — dont celui du mode de pann
 plus dangereux : **rendre zéro identifiant et déclarer la couverture
 parfaite.**
 
+### TROISIÈME dérive de la même famille : un CRITIQUE compté par collision
+
+`docs/05 §C2` — **Arrêt d'urgence**, `CRITIQUE` — figurait dans les 27/30.
+Aucune capacité de ce genre n'existait.
+
+Le compteur cherchait `\bC2\b`. Le seul « C2 » du dépôt vivait dans
+`intent-journal.test.ts` : « matrice adversariale **ligne C2** », la ligne d'un
+tout autre tableau. **Un identifiant de deux caractères est trop court pour
+valoir preuve.**
+
+La reconnaissance exige désormais un rattachement (`05/C2`, `**C2**`, titre de
+test). Et la première version de la règle était **trop stricte** — elle perdait
+`B3`, cité dans « scénarios 05/B1, B2, B3, B10 » : un filtre qui resserre trop
+invente des trous et fait perdre confiance dans les vrais.
+
+**C2 est désormais ÉCRIT**, pas déclaré bloqué (ADR-057) : l'arrêt d'urgence ne
+dépend d'aucun fournisseur, donc rien ne justifiait de le différer.
+
+> ⚠ **Le chiffre n'a pas bougé — sa VÉRITÉ, si.** Avant comme après, ce
+> document affiche 27/30. Avant, C2 y entrait par une collision de chaîne ;
+> après, par un fichier de seize tests. Un compteur peut rester identique
+> pendant qu'on répare ce qu'il compte, et c'est précisément pour ça qu'un
+> chiffre seul ne dit rien — il faut savoir ce qu'il mesure.
+
 ### Ce document a affirmé une garantie que le test ne donnait PAS
 
 Il écrivait, à propos de ce compteur : « il aurait échoué si on avait livré
@@ -185,7 +209,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **56 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **57 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |

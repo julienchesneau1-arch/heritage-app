@@ -27,6 +27,7 @@ import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
 import { floorFor } from '../privacy/classify.js';
 import { sealExternal } from '../quarantine/processor.js';
+import { createEmergencyHalt } from '../safety/halt.js';
 import type { OperationIdentity } from './identity.js';
 import type { UnknownReason, VerificationEngine } from '../verification/engine.js';
 import { verificationOutcome } from '../verification/engine.js';
@@ -307,6 +308,15 @@ export function createToolGateway(deps: {
 }): ToolGateway {
   const tools = new Map<string, RegisteredTool>();
   const snapshots = createSnapshotStore(deps.db);
+  /* CONSTRUIT ICI, PAS INJECTÉ — et c'est une décision de sûreté.
+
+     Un `EmergencyHalt` passé en dépendance serait remplaçable par une doublure
+     qui répond toujours « pas arrêté », et la protection ne serait plus jamais
+     éprouvée dans les tests de bout en bout. `stack.ts` pose la règle :
+     « aucun composant simulé côté sécurité — un test adossé à un Policy Engine
+     factice ne prouverait que notre intention ». Même raisonnement, même
+     traitement que `snapshots`. */
+  const haltState = createEmergencyHalt(deps.db);
 
   /* ══════════════════════════════════════════════════════════════════════
      LA PRIMITIVE UNIQUE D'ÉCRITURE AUTORITAIRE — ADR-035.
@@ -1133,6 +1143,65 @@ export function createToolGateway(deps: {
           provenance: def.outputProvenance,
           suspectedInjection: false,
         });
+      }
+    }
+
+    /* --- 3e-bis. L'ARRÊT D'URGENCE — `docs/05 §C2`, ADR-057 ---------------
+       PLACÉ ICI POUR LA RAISON EXACTE DE 3f, CI-DESSOUS : tout ce qui précède
+       est de l'OBSERVATION — relire une opération, constater une reprise,
+       rendre un verdict déjà écrit. Après un arrêt d'urgence on a PLUS besoin
+       de comprendre, pas moins. Bloquer plus haut rendrait l'arrêt
+       indiagnosticable.
+
+       CE QUE L'ARRÊT BLOQUE — et l'arbitrage est plus large que la lettre.
+       `docs/05` dit « actions **externes** bloquées ». S'en tenir là
+       laisserait Jarvis écrire dans la mémoire de l'utilisateur après qu'il a
+       dit « stop », ce qui contredit l'intention de la phrase. On bloque donc
+       tout ce qui n'est pas une **lecture locale** : `L1` ET `networkRequired
+       === false`. `audit_query`, `system_status` et `egress_review` restent
+       disponibles — ce sont précisément les outils dont on a besoin après
+       avoir appuyé sur le bouton.
+
+       LE VERROU EST LU, JAMAIS REÇU. Comme `egress` (ADR-052), l'état d'arrêt
+       est établi ici par une lecture de la base, pas fourni dans
+       `call.context` : sinon il suffirait de mentir sur un champ pour
+       traverser l'arrêt d'urgence. */
+    const lectureLocale = def.autonomy === 'L1' && !def.networkRequired;
+    if (!lectureLocale) {
+      const halt = await haltState.state();
+      /* AUCUN REPLI SUR « PAS ARRÊTÉ ». Si la base ne répond pas, on ignore
+         s'il y a un arrêt actif — et une panne de lecture ne peut pas valoir
+         autorisation d'agir. La sécurité gagne (CLAUDE.md). */
+      if (!halt.ok) {
+        return err(
+          jarvisError(
+            'POLICY_DENIED',
+            'État d’arrêt d’urgence illisible : aucune action engagée tant ' +
+              `qu’on ne sait pas si Jarvis est arrêté (${halt.error.message}).`,
+            { tool: def.id },
+          ),
+        );
+      }
+      if (halt.value.halted) {
+        await deps.ledger.append({
+          actor: call.actor,
+          eventType: `${def.auditEvent}_HALTED`,
+          tool: def.id,
+          policyDecision: 'DENY',
+          autonomyLevel: def.autonomy,
+          status: 'FAILED',
+          operationId: call.operationId,
+          payloadDigest: digest,
+        });
+        return err(
+          jarvisError(
+            'POLICY_DENIED',
+            `Arrêt d’urgence actif depuis ${halt.value.since ?? 'un instant inconnu'} ` +
+              `(${halt.value.reason ?? 'motif non enregistré'}). Aucune action ` +
+              'nouvelle. Les lectures locales restent disponibles.',
+            { tool: def.id },
+          ),
+        );
       }
     }
 

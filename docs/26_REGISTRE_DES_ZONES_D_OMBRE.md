@@ -134,7 +134,36 @@ défaut.
 retrait fait rougir le test concerné. Les deux sabotages reproduisent l'état
 antérieur du dépôt.
 
-### 2.4 Deux fichiers à 0 % de couverture — faux positif
+### 2.4 Un scénario CRITIQUE compté couvert par collision de chaîne
+
+**Trouvé en contestant ma propre recommandation, pas en cherchant un défaut.**
+
+Avant d'écrire le Model Router, j'ai vérifié que « référencé » voulait dire
+quelque chose. Mesure sur les trente scénarios de `docs/05` : **16 cités dans du
+code**, **11 en commentaire seul**.
+
+Première conclusion, et elle était **fausse** : les commentaires ne sont pas un
+défaut. `A3`, `A5`, `A10`, `B6` sont attachés à des fichiers entièrement
+consacrés à leur propriété — la citation en tête est une forme légitime.
+
+En resserrant sur un rattachement non ambigu (`05/C2`, `**C2**`, titre de test),
+**un seul scénario tombe** : `C2` — **Arrêt d'urgence**, marqué `CRITIQUE`. Le
+seul « C2 » du dépôt vivait dans « matrice adversariale **ligne C2** », la ligne
+d'un tout autre tableau. Aucune capacité d'arrêt d'urgence n'existait.
+
+> Un identifiant de deux caractères est trop court pour valoir preuve.
+
+Et le premier filtre strict était **trop strict** : il perdait `B3`, cité dans
+« scénarios 05/B1, B2, B3, B10 » où seul B1 porte le préfixe. Un filtre qui
+resserre trop invente des trous et fait perdre confiance dans les vrais.
+
+**Corrigé** : reconnaissance rattachée (ADR-057), et **C2 écrit** plutôt que
+déclaré bloqué — l'arrêt d'urgence ne dépend d'aucun fournisseur, donc rien ne
+justifiait de le différer.
+
+**Le chiffre publié n'a pas bougé** — 27/30 avant, 27/30 après. Sa vérité, si.
+
+### 2.5 Deux fichiers à 0 % de couverture — faux positif
 
 `src/core/policy/evaluator.ts` et `src/providers/contract.ts` : **types purs**,
 zéro code émis. Vérifié, pas supposé.

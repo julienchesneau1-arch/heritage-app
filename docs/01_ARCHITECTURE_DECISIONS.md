@@ -3729,3 +3729,119 @@ moment qu'on ne contrôle pas.
 Si la suite passait à une base par fichier de test, l'exclusion deviendrait
 inutile — mais la **restauration** resterait exigible : elle protège aussi les
 `it()` du même fichier les uns des autres.
+
+---
+
+## ADR-057 — L'arrêt d'urgence, et un scénario CRITIQUE compté par collision de chaîne
+
+**Statut :** accepté (`docs/05 §C2`).
+**Référence :** `docs/05 §C2`, `docs/26 §5`, ADR-035 (I17), ADR-055, ADR-056.
+
+### Le fait, d'abord
+
+`docs/05 §C2` — **Arrêt d'urgence**, marqué `CRITIQUE` — était compté parmi les
+27/30 scénarios couverts. Aucune capacité de ce genre n'existait.
+
+Le compteur cherchait `\bC2\b`. Le seul « C2 » du dépôt vivait dans
+`intent-journal.test.ts` : « matrice adversariale **ligne C2** » — la ligne d'un
+tout autre tableau.
+
+**Un identifiant de deux caractères est trop court pour valoir preuve.** La
+reconnaissance exige désormais un rattachement : `05/C2`, `docs/05 … C2`,
+`**C2**`, ou un titre de test `'C2 — …`.
+
+> Et la première version de cette règle était **trop stricte** : elle exigeait
+> `05/` collé à l'identifiant et perdait `B3`, cité dans « scénarios 05/B1, B2,
+> B3, B10 ». Un filtre qui resserre trop invente des trous et fait perdre
+> confiance dans les vrais.
+
+C'est la **troisième** dérive de la même famille en trois sprints — après le
+« 9 des 15 » (ADR-054) et le compteur doré creux (ADR-055).
+
+### Ce n'est pas un outil, et c'est la première décision
+
+Un outil franchit le Policy Gate, qui peut le refuser. **Un arrêt d'urgence que
+la politique peut refuser n'est pas un arrêt d'urgence** — et le moment où l'on
+appuie sur le bouton est précisément celui où quelque chose ne va pas.
+
+`engage()` est donc une primitive du noyau, appelable directement.
+
+### En base, parce qu'un arrêt que le redémarrage efface n'en est pas un
+
+Le cas visé est celui où le processus peut tomber. Une histoire (une ligne par
+engagement) plutôt qu'un booléen : les questions qui comptent après coup sont
+« qui, quand, pourquoi, et qui a levé ». L'état courant est **dérivé** — arrêté
+⇔ il existe une ligne non relevée — et un index partiel unique interdit deux
+arrêts actifs.
+
+### La dissymétrie engager / lever
+
+| | |
+|---|---|
+| **ENGAGER** | sens sûr. Un modèle manipulé qui déclenche un arrêt n'obtient qu'un Jarvis arrêté : bruyant, visible, sans dommage. Non contraint, et **idempotent** — « stop » tapé trois fois par quelqu'un qui panique ne doit pas échouer sur une violation d'unicité. |
+| **LEVER** | sens dangereux. Seul `USER` y est autorisé. Sans cette règle, une injection indirecte enchaînerait arrêt → levée et n'aurait fait que du bruit. |
+
+Lever un arrêt inexistant est une **erreur**, pas un succès silencieux : rendre
+`ok` laisserait croire qu'on vient de rétablir quelque chose.
+
+### Ce que l'arrêt bloque — plus large que la lettre, et assumé
+
+`docs/05` dit « actions **externes** bloquées ». S'y tenir laisserait Jarvis
+écrire dans la mémoire de l'utilisateur après qu'il a dit « stop ».
+
+On bloque donc tout ce qui n'est pas une **lecture locale** (`L1` ET
+`networkRequired === false`). `audit_query`, `system_status` et `egress_review`
+restent disponibles — après avoir appuyé sur le bouton, on a **plus** besoin de
+comprendre, pas moins. C'est le raisonnement de l'invariant I12, qui place déjà
+sa garde après l'observation et non avant.
+
+### Ce que l'arrêt NE fait PAS, et qui est écrit plutôt que tu
+
+Il n'annule pas une requête déjà partie. `docs/26 §5` l'établit comme
+irréductible. Une opération `COMMITTED_TO_EXECUTION` a peut-être produit son
+effet ; la marquer annulée effacerait la seule trace qu'une requête est partie.
+
+`engage()` rend donc **deux compteurs séparés** — `cancelledPending` et
+`inFlightUntouched` — jamais fondus en un chiffre rassurant. `docs/05 §C2` dit
+« actions **en attente** annulées », pas « en vol » : le document et la limite
+disent la même chose.
+
+### L'état s'appelle `PLANNED`, et j'avais supposé `PENDING`
+
+Avec la mauvaise valeur, l'`UPDATE` aurait trouvé **zéro ligne** : aucune
+erreur, aucun test rouge, et un arrêt d'urgence qui n'annule rien. Le nom est
+désormais éprouvé sur des lignes réelles.
+
+L'invariant **I17** classe cette écriture `PRE_LEASE` — la catégorie prévue pour
+un compare-and-swap sur un état d'où aucun effet externe n'est possible. Vérifié
+en exécutant le classifieur, pas en le supposant.
+
+### Le sabotage qui n'a rien attrapé
+
+Remplacer `if (!rows.ok) return rows;` par `return ok({ halted: false })`
+laissait **les treize tests verts**. C'est pourtant le mode de panne le plus
+coûteux du fichier : une panne de lecture transformée en autorisation d'agir.
+
+Deux tests ajoutés — un `Db` en échec pour la primitive, un `REVOKE SELECT` réel
+pour le Gateway (restauré dans un `finally`, discipline d'ADR-056).
+
+> **Troisième fois qu'un sabotage révèle un test manquant plutôt qu'un défaut
+> de code.** Le motif est stable : *un chemin d'erreur que rien ne provoque
+> n'est pas éprouvé, il est seulement écrit.*
+
+### Le verrou est LU, jamais reçu
+
+Comme `egress` (ADR-052), l'état d'arrêt est établi par une lecture de la base
+dans le Gateway, pas fourni dans `call.context` — sinon il suffirait de mentir
+sur un champ pour traverser l'arrêt d'urgence.
+
+Et l'`EmergencyHalt` est **construit** par le Gateway, jamais injecté : une
+doublure répondant toujours « pas arrêté » rendrait la protection invisible dans
+tous les tests de bout en bout. `stack.ts` pose la règle — « aucun composant
+simulé côté sécurité ».
+
+### Condition de révision
+
+Le jour où une sortie en flux existera, « sorties interrompues » deviendra
+exigible et cette ADR devra être reprise : aujourd'hui rien ne stream, et le
+prétendre serait un mensonge porté par un nom.
