@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 62 %**
+## 1. Étendue fonctionnelle — **≈ 64 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -31,12 +31,12 @@ nombre de cases à cocher.
 | 0 Fondations | 12 % | **100 %** | 12,0 | `gate:phase0` ✅ |
 | 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
-| 3 Les 10 outils restants | 12 % | **90 %** | 10,8 | **14 outils sur 15** ; +`file_search` (ADR-046) · `briefing_generate` (ADR-047, **A7**) · `reminder_create` (ADR-048) · `system_status` (ADR-049) — **`web_search` seul restant, bloqué par le Data Firewall** |
-| 4 Confidentialité, coût, indépendance | 13 % | **65 %** | 8,5 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F2/4** (ADR-050/051 — la classification est BRANCHÉE ; `docs/14 §6.4` passe) · journal d'égression ✗ · migration ✗ · **Model Router ✗** |
+| 3 Les 10 outils restants | 12 % | **90 %** | 10,8 | **14 outils sur 15** (+`egress_review`, hors liste, en Phase 4) — **`web_search` seul restant, et le Data Firewall qui le bloquait existe désormais** |
+| 4 Confidentialité, coût, indépendance | 13 % | **80 %** | 10,4 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router ✗** |
 | 5 Voix | 10 % | **0 %** | 0,0 | rien |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 62 %** | |
+| **TOTAL** | 100 % | | **≈ 64 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -53,17 +53,17 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 78 %**
+## 2. Profondeur de preuve — **≈ 80 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
 | **Invariants de sécurité S1–S15** (`docs/03`) | 9 des 15 nommément référencés dans les tests | **60 %** |
-| **Tests dorés A·B·C** (`docs/05`) | **25 des 30** référencés, 5 déclarés bloqués | **83 %** |
+| **Tests dorés A·B·C** (`docs/05`) | **26 des 30** référencés, 4 déclarés bloqués | **87 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 78 %** |
+| **Moyenne** | | **≈ 80 %** |
 
 ### Ce que la mesure a révélé sur `docs/05` — et qui est CORRIGÉ
 
@@ -80,14 +80,14 @@ creux :
 |---|---|---|
 | **écrits** | A4 · B11 · B14 | la capacité existait, le test manquait |
 | **rattachés** | A5 · B13 · C5 · C6 | la propriété était déjà éprouvée ailleurs sans porter le nom |
-| **déclarés bloqués** | A2 · ~~A7~~ · A8 · ~~A9~~ · B4 · C3 · C4 | la capacité n'existe pas — les simuler ne prouverait que la simulation |
+| **déclarés bloqués** | A2 · ~~A7~~ · A8 · ~~A9~~ · B4 · C3 · ~~C4~~ | la capacité n'existe pas — les simuler ne prouverait que la simulation |
 
 **A9 a quitté cette liste**, et c'est le mouvement qu'on attendait : `audit_query`
 existe (ADR-041), donc le blocage n'a plus de motif, donc le test l'exige. Une
 dette datée qui ne peut pas être oubliée quand elle est payée — le compteur
 `couverts/bloqués` du test est passé de 23/7 à **24/6**, et il aurait échoué si
 on avait livré l'outil sans retirer l'entrée. **A7 a suivi** avec
-`briefing_generate` : **25/5**.
+`briefing_generate` : **25/5**. Puis **C4** avec `egress_review` : **26/4**.
 
 **Et surtout, le lien est désormais MÉCANIQUE.**
 `tests/golden/contract.test.ts` lit `docs/05`, en extrait les identifiants, et
@@ -105,9 +105,9 @@ parfaite.**
 
 | | |
 |---|---|
-| **La qualité de ce qui est fait** | 62 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
+| **La qualité de ce qui est fait** | 64 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
 | **La difficulté restante** | la Phase 5 (voix) est plus longue que la Phase 3, à poids presque égal. |
-| **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 38 %. |
+| **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 36 %. |
 | **Ce qui est irréductible** | `docs/26 §5` — six limites qu'aucun pourcentage ne fera bouger. |
 
 Le troisième point mérite d'être lu deux fois : **le plan d'exécution n'a jamais
@@ -121,17 +121,17 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **51 ADR**, chacune avec sa condition de révision |
-| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 aux 9/10** — `web_search` seul restant, et il attend le Data Firewall de Phase 4 ; 4→7 ouvertes |
+| 01 | ADR | **53 ADR**, chacune avec sa condition de révision |
+| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 aux 9/10** — `web_search` seul restant, et **il n'est plus bloqué** : le Data Firewall existe ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **9/15 nommés en test** |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
-| 05 | Tests dorés | **25/30 référencés**, 5 bloqués déclarés — lien mécanique |
+| 05 | Tests dorés | **26/30 référencés**, 4 bloqués déclarés — lien mécanique |
 | 06 | Prompt maître | appliqué à chaque session |
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
 | 08·09·10·11 | Audits | faits, conclusions intégrées |
 | 12 | Vérité et traçabilité | **le journal est interrogeable** (`audit_query`, ADR-041) — la promesse est tenue, pas seulement écrite |
 | 13·15 | Menace, fournisseurs | posés et appliqués |
-| 14 | Classification des données | **F2 livrée** : la classification est branchée au Policy Gate, et **§6.4 — le test que le document désigne comme le plus important — passe**. `DataLevel` n'a encore remplacé aucune colonne, délibérément (ADR-050) |
+| 14 | Classification des données | **F1 à F3 livrées** : classification branchée, **§6.4 passe**, console d'égression écrite. **F4 — la migration des colonnes — est écrite, testée, et NON appliquée** : c'est la seule du dépôt dont l'erreur expose une donnée, et `§5` exige une relecture humaine ligne par ligne (ADR-053, marche à suivre en `docs/29`) |
 | 16 | Capacités de vérification | appliqué, **sauf §3 périmé** : sa règle « aucun EXTERNAL avec `attemptVerification: NONE` » a été remplacée par ADR-030 (`docs/26 §4.6`) |
 | 17·18 | Défaillances réelles | **banc complet**, mesures publiées |
 | 19 | `PARTIAL` et routage | **spécifié, non branché** |
@@ -140,6 +140,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | 23·24·25 | Horloge, cloisonnement, bail | faits, avec sabotage |
 | 26 | Registre des zones d'ombre | tenu à jour ; **§4.5 LEVÉE** (ADR-051), **§4.9 créée** par cette levée — `capabilities.local` est cru, pas vérifié ; §4.6 à §4.8 ouvertes — `egress` est un booléen là où il y a deux questions ; `CalendarProvider` ne peut pas vérifier une tentative ; la fenêtre lecture↔écriture chez un fournisseur ne se ferme pas ; la composition d'outils n'est pas éprouvée |
 | 27 | Deux mondes | fait |
+| 29 | Migration `DataLevel` | **marche à suivre écrite** — une décision humaine attendue, et une seule |
 
 ---
 
@@ -158,8 +159,10 @@ mesurer contre `docs/02` le fait donc disparaître.
 | ~~1. `briefing_generate`~~ | **FAIT** — ADR-047. **A7 débloqué** (25/5). Un briefing partiel se déclare partiel ; et la suite complète a trouvé un tri **non déterministe** que le test isolé ne voyait pas. |
 | ~~1. `reminder_create` + `system_status`~~ | **FAIT** — ADR-048, ADR-049. Rien ne sonne dans ce dépôt : le rappel le DIT et se présente dans le briefing. Et `system_status` se comptait lui-même comme opération en suspens — l'observateur dans ce qu'il observe, trouvé par son premier test. |
 | ~~1. Data Firewall F2~~ | **FAIT** — ADR-051. `docs/14 §6.4` passe. A levé `docs/26 §4.5` et créé `§4.9` : le solde est positif, pas nul. |
-| **2. Data Firewall F3** — journal d'égression consultable | Porte de sortie Phase 4 : « l'utilisateur peut voir ce qui est parti sur Internet, sans lire un log ». Débloque **C4**. |
-| **3. Data Firewall F4** — migration des colonnes | **Le seul pas qui ÉLARGIT.** `docs/14 §5` exige une vérification ligne par ligne : ce n'est pas une décision d'agent. Écrit et testé, passé sur décision humaine. |
+| ~~2. Data Firewall F3~~ | **FAIT** — ADR-052. **C4 débloqué** (26/4). Un sabotage y a révélé que la couverture de l'égression par le hachage n'était testée par rien. |
+| **1. `web_search`** (Phase 3, dernier outil) | Le Data Firewall existe désormais : le seul outil restant de Phase 3 n'est plus bloqué. |
+| **2. Model Router** (Phase 4) | Choisir le moins cher **parmi les éligibles**. `docs/14 §4` en fixe l'ordre, et le CostGate l'attend depuis ADR-040. |
+| **3. Câbler le Context Engine** | débloque **A2**, dernier blocage qui ne dépende d'aucun outil manquant. |
 | **2. Câbler le Context Engine** | débloque **A2**, et tient la promesse de levée d'ambiguïté du `QUICKSTART`. |
 | **3. Model Router** (Phase 4) | choisir le moins cher **parmi les éligibles** — l'ordre de `docs/14 §4` devra y être respecté, et c'est le point à ne pas manquer. |
 
@@ -171,8 +174,8 @@ entier, et aucun ne renforce ce qui existe.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 62 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 78 %     ce qu'on peut en démontrer
+ÉTENDUE FONCTIONNELLE   ≈ 64 %     ce que Jarvis sait faire
+PROFONDEUR DE PREUVE    ≈ 80 %     ce qu'on peut en démontrer
 ```
 
 Et la phrase qui les relie, qui n'a pas changé depuis le début :
@@ -180,5 +183,5 @@ Et la phrase qui les relie, qui n'a pas changé depuis le début :
 > Une fonctionnalité ne peut jamais être plus autonome que la qualité de la
 > preuve disponible sur son effet.
 
-Un projet à 62 % d'étendue et 78 % de preuve est exactement dans le bon ordre.
+Un projet à 64 % d'étendue et 80 % de preuve est exactement dans le bon ordre.
 L'inverse aurait été inquiétant.

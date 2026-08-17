@@ -140,6 +140,10 @@ export function calendarReadTool(
       if (!events.ok) return events;
 
       return ok({
+        /* La destination pour la console d'égression (`docs/05 §C4`). Rendue
+           même quand le fournisseur est local : le Gateway ne la journalise
+           que si l'outil sort réellement, et c'est lui qui le sait. */
+        egress: { destination: provider.capabilities.id },
         output: {
           from: input.fromIso,
           to: input.toIso,
@@ -303,6 +307,7 @@ export function calendarCreateTool(
       if (!created.ok) return created;
 
       return ok({
+        egress: { destination: provider.capabilities.id },
         output: {
           eventId: created.value.id,
           title: created.value.title,
@@ -510,6 +515,7 @@ export function calendarUpdateTool(
       }
 
       return ok({
+        egress: { destination: provider.capabilities.id },
         output: {
           eventId: updated.id,
           title: updated.title,

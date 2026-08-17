@@ -119,6 +119,66 @@ describe.skipIf(skip)('détection d\'altération du journal', () => {
     }
   });
 
+  it("une DESTINATION d'égression réécrite est détectée — ADR-052", async () => {
+    /* CE TEST EXISTE PARCE QUE SON ABSENCE A ÉTÉ MESURÉE.
+
+       Sabotage de F3 : en retirant les trois champs d'égression du calcul du
+       hachage, **aucun test du dépôt ne rougissait.** La console C4 aurait
+       affiché des destinations réécrivables sans trace — une console d'audit
+       falsifiable, c'est-à-dire pire qu'aucune console.
+
+       Les champs sont ajoutés EN QUEUE de la liste hachée et seulement s'ils
+       existent (ADR-052) : une ligne sans égression produit exactement la même
+       liste qu'avant leur introduction, donc le même hachage, donc une chaîne
+       intacte. Ce test prouve l'autre moitié — qu'une ligne AVEC égression est
+       bien couverte. */
+    const marqueur = `EGRESS_CHAIN_${String(Date.now())}`;
+    const ecrit = await ledger.append({
+      actor: 'JARVIS',
+      eventType: marqueur,
+      status: 'CONFIRMED',
+      payloadDigest: digestPayload({ marqueur }),
+      egress: {
+        destination: 'destination-honnete',
+        dataLevel: 'PUBLIC',
+        reason: 'autorisée par la politique',
+      },
+    });
+    expect(ecrit.ok).toBe(true);
+
+    const avant = await ledger.verifyChain();
+    expect(avant.ok && avant.value.valid).toBe(true);
+
+    const disable = await root.query('ALTER TABLE event_ledger DISABLE TRIGGER USER');
+    expect(disable.ok).toBe(true);
+    try {
+      /* L'attaquant maquille OÙ la donnée est partie. C'est précisément ce
+         qu'une console d'égression est censée rendre incontestable. */
+      const falsifie = await root.query(
+        `UPDATE event_ledger SET egress_destination = 'destination-anodine'
+          WHERE event_type = $1`,
+        [marqueur],
+      );
+      expect(falsifie.ok).toBe(true);
+
+      const apres = await ledger.verifyChain();
+      expect(apres.ok).toBe(true);
+      if (apres.ok) {
+        expect(apres.value.valid).toBe(false);
+        expect(apres.value.brokenAt?.reason).toMatch(/altéré/i);
+      }
+    } finally {
+      // Remettre la valeur honnête AVANT de réarmer : sinon la chaîne reste
+      // rompue pour tous les tests suivants du fichier.
+      await root.query(
+        `UPDATE event_ledger SET egress_destination = 'destination-honnete'
+          WHERE event_type = $1`,
+        [marqueur],
+      );
+      await root.query('ALTER TABLE event_ledger ENABLE TRIGGER USER');
+    }
+  });
+
   it('une modification de contenu est détectée, triggers désactivés', async () => {
     // On simule la chute des deux premières barrières.
     const disable = await root.query(

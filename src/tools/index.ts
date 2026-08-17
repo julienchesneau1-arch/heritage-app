@@ -22,6 +22,7 @@ import { fileSearchTool } from './files.js';
 import { briefingGenerateTool } from './briefing.js';
 import { reminderCreateTool } from './reminders.js';
 import { systemStatusTool } from './status.js';
+import { egressReviewTool } from './egress.js';
 import {
   calendarCreateTool,
   calendarReadTool,
@@ -107,6 +108,9 @@ export function registerCoreTools(
     /* Phase 3, point 9 — le dernier des dix accessibles. Un état qui ne peut
        pas dire « ça ne va pas » ne dit rien quand ça va (ADR-049). */
     systemStatusTool(deps.ledger),
+    /* Phase 4, étape F3 — scénario doré C4. « Montre-moi ce qui est parti sur
+       Internet » : où, quelle classe, pourquoi (ADR-052). */
+    egressReviewTool(),
   ];
 
   for (const tool of tools) {
@@ -130,4 +134,5 @@ export {
   briefingGenerateTool,
   reminderCreateTool,
   systemStatusTool,
+  egressReviewTool,
 };

@@ -1,3 +1,4 @@
+import type { DataLevel } from '../types/domain.js';
 /**
  * Event Ledger — écriture et vérification.
  *
@@ -43,6 +44,9 @@ interface LedgerRow {
   cost_eur: string;
   operation_id: string | null;
   payload_digest: string;
+  egress_destination: string | null;
+  egress_data_level: string | null;
+  egress_reason: string | null;
   prev_hash: string;
   hash: string;
 }
@@ -63,6 +67,18 @@ function toSealed(row: LedgerRow): Result<SealedEvent> {
     costEur: Number(row.cost_eur),
     operationId: row.operation_id,
     payloadDigest: row.payload_digest,
+    /* RECONSTITUÉ À LA RELECTURE, et ce n'est pas cosmétique : `verifyChain`
+       recalcule le hachage à partir de ce qu'elle relit. Oublier ce champ
+       ferait échouer la vérification de toute ligne portant une égression —
+       une chaîne déclarée rompue alors qu'elle est intacte. */
+    egress:
+      row.egress_destination === null || row.egress_destination === undefined
+        ? null
+        : {
+            destination: row.egress_destination,
+            dataLevel: row.egress_data_level as DataLevel,
+            reason: row.egress_reason ?? '',
+          },
     prevHash: row.prev_hash,
     hash: row.hash,
   });
@@ -142,8 +158,10 @@ export function createLedger(db: Db): Ledger {
           `INSERT INTO event_ledger (
              event_id, occurred_at, actor, event_type, intent, tool,
              policy_decision, autonomy_level, status, proof, model, cost_eur,
-             operation_id, payload_digest, prev_hash, hash
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+             operation_id, payload_digest, prev_hash, hash,
+             egress_destination, egress_data_level, egress_reason
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+                     $17,$18,$19)
            RETURNING *`,
           [
             eventId,
@@ -162,6 +180,13 @@ export function createLedger(db: Db): Ledger {
             candidate.payloadDigest,
             prevHash,
             hash,
+            /* Les trois vont ensemble ou pas du tout — la base impose la même
+               règle (`egress_fields_together`). Une destination sans niveau
+               serait une ligne d'audit qui pose une question au lieu d'y
+               répondre. */
+            candidate.egress?.destination ?? null,
+            candidate.egress?.dataLevel ?? null,
+            candidate.egress?.reason ?? null,
           ],
         );
         if (!inserted.ok) return inserted;

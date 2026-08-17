@@ -659,7 +659,7 @@ export interface WritePath {
  * Erre du bon côté : une chaîne mal suivie fait tomber un `//` en commentaire
  * et amputer la fin de ligne, donc perdre un `WHERE` — donc `UNGUARDED`.
  */
-function stripComments(source: string): string {
+export function stripComments(source: string): string {
   let out = '';
   let mode: 'code' | 'line' | 'block' | 'string' = 'code';
   let delimiter = '';

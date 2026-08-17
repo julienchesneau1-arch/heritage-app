@@ -214,6 +214,15 @@ export interface ToolExecution {
    * sans capture est définitivement non annulable (ADR-019).
    */
   readonly undo?: UndoCapture;
+  /**
+   * OÙ C'EST PARTI — `docs/05 §C4`, ADR-052.
+   *
+   * Renseigné par les seuls outils qui sortent de la machine. Le Gateway ne
+   * peut pas le déduire : il connaît le contrat, pas le fournisseur branché.
+   * Prétendre le contraire produirait une console d'égression qui invente sa
+   * colonne la plus utile.
+   */
+  readonly egress?: { readonly destination: string };
 }
 
 export interface VerificationOutcome {

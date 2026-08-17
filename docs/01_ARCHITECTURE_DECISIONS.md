@@ -3276,3 +3276,159 @@ Si un fournisseur devait un jour être à la fois local ET distant — un cache
 local d'un service cloud, par exemple — `capabilities.local` deviendrait
 insuffisant : la question se poserait par requête, pas par fournisseur. Ce
 serait une décision d'architecture, et elle passerait par ici.
+
+---
+
+## ADR-052 — Ce qui est parti s'écrit au moment où ça part
+
+**Statut :** accepté (Phase 4, étape F3). **Référence :** `docs/05 §C4`,
+`docs/02 §Phase 4`, ADR-041, ADR-051.
+
+### Trois colonnes, et aucune n'est décorative
+
+`docs/05 §C4` : « Montre-moi ce qui est parti sur Internet » → **destination,
+classe de données, raison.** Aucune n'était enregistrée : le journal savait dire
+qui a fait quoi avec quel verdict, pas **où c'est allé**.
+
+« Trois requêtes sont sorties » ne répond à rien. La question porte sur ce qu'on
+ne peut pas reconstituer soi-même.
+
+### La source est le journal, et elle ne se déduit pas
+
+Une console alimentée par une seconde table pourrait diverger — et le jour où
+elles divergent, aucune ne fait autorité (ADR-041).
+
+**Et surtout, rien n'est reconstitué après coup.** Déduire l'égression d'un
+`networkRequired` relu plus tard serait « l'observateur redéfinit le passé »
+appliqué à l'audit : depuis ADR-051 ce champ dépend du fournisseur branché, donc
+un rebranchement réécrirait l'histoire. Les trois faits sont écrits **au moment
+où la sortie a lieu**.
+
+La destination vient de l'**outil** — le Gateway connaît le contrat, pas le
+fournisseur. Prétendre le contraire produirait une console qui invente sa colonne
+la plus utile.
+
+### Le hachage : en queue, et seulement s'il existe
+
+C'était le point délicat. La chaîne couvre une liste **ordonnée** de champs ; y
+insérer trois positions changerait le hachage de toutes les lignes déjà écrites.
+**Le seul mécanisme de preuve du dépôt deviendrait faux au moment précis où on en
+ajoute un.**
+
+```ts
+const fields = [ …quinze champs…, prevHash ];
+if (event.egress) fields.push(destination, dataLevel, reason);
+```
+
+Une ligne sans égression produit une liste byte-identique à l'ancienne — donc le
+même hachage, donc une chaîne intacte. Une ligne avec égression étend la liste,
+donc les trois faits sont couverts comme le reste. `JSON.stringify` d'un tableau
+reste non ambigu : deux listes de longueurs différentes ne peuvent pas produire
+la même sérialisation.
+
+### Un sabotage qui n'a rien cassé — et ce qu'il a révélé
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| l'égression n'est plus journalisée | **1 / 15** |
+| la console avale la raison | **1 / 15** |
+| **l'égression sort du hachage** | **0 / 15** ⚠ puis **1 / 15** |
+
+La troisième ligne est le résultat du point. **Retirer les champs du hachage ne
+cassait aucun test** : la console C4 aurait affiché des destinations
+réécrivables sans trace — une console d'audit falsifiable, c'est-à-dire pire
+qu'aucune console.
+
+Un test a été ajouté (`ledger-chain.test.ts`) : il écrit une ligne avec
+égression, réécrit sa destination triggers désactivés, et exige que
+`verifyChain` la déclare rompue. Le sabotage rejoué le trouve.
+
+C'est la **troisième fois** de ce chantier qu'un sabotage révèle un test
+manquant plutôt qu'un défaut de code. Le motif est stable : une barrière
+redondante n'est pas testée par la barrière qu'elle double.
+
+### Deux erreurs dans MES tests, dites plutôt que corrigées en silence
+
+**Un test structurel interdisait un mot, pas un comportement.** Il proscrivait
+`networkRequired` dans la console — et le trouvait dans le commentaire
+expliquant pourquoi on ne s'en sert pas, puis, une fois les commentaires
+dépouillés, dans la déclaration légitime de la console elle-même. La propriété
+visée n'a jamais été « ce mot n'apparaît pas » mais « la console ne lit pas les
+contrats des autres outils ».
+
+**Un test était creux** : il assertait `count >= 0`. Le corriger a révélé un
+fait notable — **aucun outil du dépôt ne peut produire une égression** : les
+quatre qui sortent manipulent tous de l'agenda, donc `SENSITIVE`, donc refusés
+par F2. La console C4 est livrée sans producteur en production, et le test
+enregistre une sonde `WEATHER` — seule catégorie dont le plancher est `PUBLIC`.
+Ce n'est pas un défaut : c'est la protection qui fonctionne.
+
+### Condition de révision
+
+Le jour où plusieurs sorties partagent une même opération, une ligne de journal
+par opération ne suffira plus. Ce serait une table dédiée — et il faudra alors
+répondre à la question que cette ADR évite : comment garder deux sources
+d'accord.
+
+---
+
+## ADR-053 — La migration qui élargit ne s'applique pas toute seule
+
+**Statut :** accepté (Phase 4, étape F4 — **écrite, non appliquée**).
+**Référence :** `docs/14 §5`, `docs/29`, ADR-050.
+
+### La seule migration du dépôt dont l'erreur expose
+
+Toutes les autres rétrécissent. Un défaut y bloque une action légitime :
+ennuyeux, visible, corrigible. Celle-ci **élargit** — une ligne `GREEN` mal
+convertie devient `PUBLIC`, c'est-à-dire *envoyable*. Le défaut ne bloque rien,
+il expose en silence, et rien ne le signale.
+
+`docs/14 §5` exige une vérification **ligne par ligne** portant sur des données
+réelles. **Ce n'est pas une décision d'agent.**
+
+### La décision est portée par la STRUCTURE, pas par une note
+
+Les fichiers vivent dans `migrations-en-attente/`, que `ops/db/migrate.ts` ne lit
+pas. Une note « ne pas appliquer » dans un répertoire scanné serait une
+discipline ; un répertoire hors chemin est un fait. Le jour où quelqu'un les
+déplace, c'est un geste délibéré — pas un oubli.
+
+Deux tests le vérifient : aucun fichier `data_level` dans `migrations/`, et
+aucune colonne `data_level` en base.
+
+### Elle refuse en NOMMANT ce qui bloque
+
+Un refus qu'on ne peut pas instruire ne sert qu'à bloquer. La migration liste les
+identifiants et leurs catégories, et rappelle la règle. `notes` n'ayant aucune
+colonne de catégorie, **aucune** de ses lignes `GREEN` ne peut être confirmée :
+leur seule présence bloque, par construction plutôt que par vigilance.
+
+### Le test qui a failli appliquer ce qu'il devait empêcher
+
+Première rédaction : `db.query('BEGIN')`, semis, migration, `db.query('ROLLBACK')`.
+Sur un **pool**, ces quatre appels empruntent des connexions différentes. Le
+`BEGIN` n'englobe rien, la migration s'auto-valide, le `ROLLBACK` annule une
+transaction vide.
+
+Mesuré : **la colonne `data_level` s'était réellement créée en base.** Un test
+censé prouver que la migration n'est pas appliquée l'appliquait. Corrigé par
+`db.transaction`, qui donne un client dédié.
+
+> Le danger d'une migration n'est pas seulement dans son SQL. Il est aussi dans
+> l'outillage qui prétend l'essayer sans l'appliquer.
+
+### Ce qui reste vrai si elle n'est jamais appliquée
+
+**La protection est déjà là.** F2 est livrée : une donnée `SENSITIVE` n'atteint
+aucun palier cloud, même cloud activé. F4 n'ajoute pas de protection — elle rend
+la classification plus fine en base, et conditionne le Model Router de
+`docs/04 §10`.
+
+Rien ne presse, et c'est exactement pour ça qu'elle attend. Marche à suivre en
+`docs/29`.
+
+### Condition de révision
+
+Si `notes` gagnait une colonne de catégorie, son blocage inconditionnel
+deviendrait excessif et cette ADR devrait être reprise — pas contournée.

@@ -1452,6 +1452,25 @@ export function createToolGateway(deps: {
       proof: verification.proof ?? null,
       operationId: call.operationId,
       payloadDigest: digest,
+      /* CE QUI EST PARTI — enregistré au moment où ça part, jamais déduit
+         après coup.
+
+         Déduire l'égression d'un `networkRequired` relu plus tard serait le
+         motif « l'observateur redéfinit le passé » appliqué à l'audit :
+         ce champ dépend désormais du fournisseur branché (ADR-051), donc un
+         rebranchement réécrirait l'histoire.
+
+         La destination vient de l'OUTIL, seul à connaître son fournisseur ;
+         le niveau et la raison viennent de la décision qui vient d'être
+         prise. */
+      egress:
+        def.networkRequired && executed.value.egress !== undefined
+          ? {
+              destination: executed.value.egress.destination,
+              dataLevel: floorFor(def.dataCategory),
+              reason: policy.reasons.join(' ') || 'sortie autorisée par la politique',
+            }
+          : null,
     });
     if (!event.ok) return event;
 

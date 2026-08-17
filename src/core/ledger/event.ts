@@ -7,7 +7,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { Actor, AutonomyLevel, VerificationStatus } from '../types/domain.js';
+import { Actor, AutonomyLevel, DataLevel, VerificationStatus } from '../types/domain.js';
 
 export const GENESIS_HASH = '0'.repeat(64);
 
@@ -30,6 +30,23 @@ export const NewEvent = z.object({
   costEur: z.number().min(0).default(0),
   operationId: z.string().nullable().default(null),
   payloadDigest: Sha256Hex,
+  /**
+   * CE QUI EST PARTI DE LA MACHINE — `docs/05 §C4`, ADR-052.
+   *
+   * Absent quand rien n'est sorti, ce qui est le cas ordinaire. Présent, il
+   * porte les trois faits que C4 exige : **destination, classe, raison**.
+   */
+  egress: z
+    .object({
+      /** Identifiant du fournisseur. Jamais une URL (`docs/03 §12`). */
+      destination: z.string().min(1),
+      /** Le niveau `docs/14` AU MOMENT de la décision, pas recalculé après. */
+      dataLevel: DataLevel,
+      /** Ce que le Policy Gate a répondu, en clair. */
+      reason: z.string().min(1),
+    })
+    .nullable()
+    .default(null),
 });
 export type NewEvent = z.infer<typeof NewEvent>;
 
@@ -65,10 +82,11 @@ export function digestPayload(payload: unknown): string {
  * par `prevHash`, pas par le numéro de séquence.
  */
 export function computeHash(
-  event: NewEvent & { eventId: string; occurredAt: string },
+  event: Omit<NewEvent, 'egress'> &
+    Partial<Pick<NewEvent, 'egress'>> & { eventId: string; occurredAt: string },
   prevHash: string,
 ): string {
-  const fields: readonly string[] = [
+  const fields: string[] = [
     event.eventId,
     event.occurredAt,
     event.actor,
@@ -85,6 +103,29 @@ export function computeHash(
     event.payloadDigest,
     prevHash,
   ];
+
+  /* L'ÉGRESSION EST AJOUTÉE EN QUEUE, ET SEULEMENT SI ELLE EXISTE.
+
+     Insérer trois positions dans la liste changerait le hachage de TOUTES les
+     lignes déjà écrites : leur vérification échouerait, et le seul mécanisme
+     de preuve du dépôt deviendrait faux au moment précis où on en ajoute un.
+
+     En queue et conditionnel, une ligne sans égression produit une liste
+     byte-identique à l'ancienne — donc le même hachage, donc une chaîne
+     intacte. Une ligne avec égression étend la liste, donc les trois faits
+     sont couverts comme le reste.
+
+     Le prix est que la POSITION cesse d'être fixe. C'est acceptable ici parce
+     que `JSON.stringify` d'un tableau reste non ambigu : deux listes de
+     longueurs différentes ne peuvent pas produire la même sérialisation. */
+  if (event.egress !== null && event.egress !== undefined) {
+    fields.push(
+      event.egress.destination,
+      event.egress.dataLevel,
+      event.egress.reason,
+    );
+  }
+
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
 }
 

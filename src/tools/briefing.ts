@@ -277,6 +277,9 @@ export function briefingGenerateTool(
       const sections = [agenda, sectionTaches, sectionRappels, sectionAttente];
 
       return ok({
+        ...(calendar === null
+          ? {}
+          : { egress: { destination: calendar.capabilities.id } }),
         output: {
           jour: bornes.debut.toISOString(),
           agenda,
