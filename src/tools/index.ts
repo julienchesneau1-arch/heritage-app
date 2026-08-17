@@ -17,6 +17,7 @@ import { memoryAddTool, memorySearchTool } from './memory.js';
 import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
+import { fileSearchTool } from './files.js';
 import {
   calendarCreateTool,
   calendarReadTool,
@@ -42,6 +43,14 @@ export interface ToolDeps {
    * où l'absence d'outil n'en serait pas une.
    */
   readonly calendar?: CalendarProvider | null;
+  /**
+   * Racines de fichiers explicitement autorisées.
+   *
+   * Vide par défaut, et c'est l'état normal : `CLAUDE.md` interdit un accès
+   * non contraint, donc il n'y a pas de racine « raisonnable » à supposer.
+   * Sans racine, `file_search` REFUSE — il ne cherche pas dans le vide.
+   */
+  readonly fileRoots?: readonly string[];
 }
 
 /**
@@ -79,6 +88,9 @@ export function registerCoreTools(
     /* Phase 3, point 4. ADR-042 appliqué là où l'état antérieur vit chez
        quelqu'un d'autre — ADR-045. */
     calendarUpdateTool(deps.calendar ?? null),
+    /* Phase 3, point 5. Premier outil qui touche le disque : une racine
+       explicitement autorisée, ou rien — ADR-046. */
+    fileSearchTool(deps.fileRoots ?? []),
   ];
 
   for (const tool of tools) {
@@ -98,4 +110,5 @@ export {
   calendarReadTool,
   calendarCreateTool,
   calendarUpdateTool,
+  fileSearchTool,
 };

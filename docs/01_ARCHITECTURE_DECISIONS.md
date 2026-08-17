@@ -2724,3 +2724,100 @@ Au premier adaptateur réel : si le fournisseur expose un jeton de version,
 `updateEvent` doit le prendre et le renvoyer, et `docs/26 §4.7` disparaît. S'il ne
 l'expose pas, ce résidu devient irréductible pour ce fournisseur et remonte en
 `docs/26 §5`.
+
+---
+
+## ADR-046 — Le disque se lit sous racine autorisée, ou pas du tout
+
+**Statut :** accepté (Phase 3). **Référence :** `CLAUDE.md`, `docs/03 §106`,
+`docs/05 §B2`, `docs/14 §2`, ADR-043.
+
+### La borne est posée par `CLAUDE.md`, pas par moi
+
+> Ne jamais donner un accès shell non contraint à un modèle.
+
+`file_search` est le premier outil qui touche autre chose que PostgreSQL et un
+fournisseur déclaré. La forme en découle : **une racine explicitement autorisée,
+ou rien.** Pas de chemin libre, pas de valeur par défaut commode, pas de
+« juste le répertoire personnel » — une racine par défaut serait exactement
+l'accès non contraint, avec un nom rassurant.
+
+Aucune racine n'est configurée aujourd'hui. L'outil s'enregistre quand même et
+**refuse** (`CONFIGURATION`), pour la raison d'ADR-043 : « aucun fichier trouvé »
+quand on n'a regardé nulle part est un mensonge sans erreur.
+
+### Le confinement se fait sur le DISQUE, pas sur la chaîne
+
+C'est le piège de cet outil, et il est facile à manquer :
+
+```ts
+resolve(racine, sousChemin)   // travaille sur le TEXTE
+realpath(candidat)            // suit les liens
+```
+
+Un lien symbolique placé **dans** la racine et pointant dehors produit un chemin
+qui commence par la racine et désigne autre chose. `resolve()` le laisse passer.
+Seul `realpath` le démasque — et il faut l'appliquer à **chaque entrée
+rencontrée**, pas seulement au point de départ : un lien posé au fond de
+l'arborescence est découvert pendant la descente.
+
+Un chemin absolu est refusé **avant** toute résolution : `resolve(racine, '/etc')`
+rend `/etc`, l'argument absolu gagne silencieusement.
+
+### Deux citations du pack, qui ne se devinent pas
+
+**`docs/03 §106` nomme littéralement « chemin de fichier »** dans la liste des
+paramètres sensibles. `sensitive: true` n'est donc pas une précaution, c'est une
+citation — et le scénario réel est celui de `docs/05 §B10` transposé : un PDF
+contient un chemin, le modèle le recopie, l'outil irait le lire. La confirmation
+doit porter sur la valeur concrète.
+
+**`docs/05 §B2`** fait du contenu d'un document une donnée possiblement hostile.
+Ce que l'outil rend est étiqueté `EXTERNAL_UNTRUSTED` : de la donnée, jamais une
+instruction.
+
+### « Pas trouvé » ≠ « pas pu regarder »
+
+Le mode de panne qui structure l'outil, et il est plus discret que celui de
+l'agenda :
+
+> Un fichier illisible **omis** transforme « je n'ai pas pu regarder partout » en
+> « je n'ai pas trouvé ».
+
+Et il est plus facile à commettre, parce qu'**ignorer une erreur de lecture
+ressemble à de la robustesse**. D'où le champ `gaps` — `unreadable`,
+`outsideRoot`, `depthLimited` — rendu explicitement. Une réponse honnête dit ce
+qu'elle n'a pas pu voir.
+
+Le chemin rendu est **relatif**. L'absolu révélerait l'arborescence de la machine
+à quiconque lit la réponse, ou le journal, qui la conserve.
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| confinement par chaînes (`resolve`) au lieu de `realpath` | **2 / 14** |
+| erreurs de lecture avalées au lieu d'être comptées | **1 / 14** |
+| aucune racine ⇒ résultat vide au lieu d'un refus | **1 / 14** |
+| chemin absolu non refusé en amont | **1 / 14** |
+
+### Une leçon sur les TESTS, pas sur le code
+
+Le cas « répertoire illisible » a d'abord été écrit avec un `chmod 000`. Il est
+resté **muet** : la suite tourne en root dans le conteneur, et root lit tout. Le
+test aurait été vert ailleurs et sans effet ici — sans rien signaler.
+
+Remplacé par un **lien symbolique cassé**, dont `realpath` échoue pour tout le
+monde, root compris. Et l'assertion « le fichier caché n'apparaît pas » a été
+retirée : elle n'est vraie que sous un utilisateur ordinaire.
+
+> Une assertion vraie seulement sur certaines machines n'est pas une preuve.
+> C'est un test qui ment la moitié du temps, et il ment du côté rassurant.
+
+### Condition de révision
+
+Le jour où une racine est réellement configurée, deux questions s'ouvrent et ne
+sont pas traitées ici : la **lecture de contenu** (`readWithinRoot` existe, aucun
+outil ne l'expose) et la **classification par racine** — `docs/14` place les
+documents en `SENSITIVE`, ce que `PrivacyClass` à trois valeurs ne sait pas
+exprimer. Même limite que l'agenda, même chantier (`docs/14 §5`).

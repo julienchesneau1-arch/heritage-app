@@ -45,6 +45,8 @@ export function buildStack(
     embeddings?: EmbeddingProvider | null;
     /** `undefined` reproduit le dépôt tel qu'il est : aucun adaptateur d'agenda. */
     calendar?: CalendarProvider | null;
+    /** Vide par défaut : l'état réel du dépôt, aucune racine autorisée. */
+    fileRoots?: readonly string[];
   } = {},
 ): Stack {
   const source = loadPolicySource(join(process.cwd(), 'policies'));
@@ -73,6 +75,7 @@ export function buildStack(
     search,
     isUserConfirmed: () => userConfirmed,
     calendar: options.calendar ?? null,
+    fileRoots: options.fileRoots ?? [],
   });
   if (!registered.ok) throw new Error(registered.error.message);
 
