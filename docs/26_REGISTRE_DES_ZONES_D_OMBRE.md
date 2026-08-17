@@ -118,7 +118,7 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Cinq modules de logique hors circuit
+### 4.1 Six modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
@@ -128,7 +128,14 @@ jamais atteints par le produit**.
 | `quarantine/processor.ts` | rien n'ingère de contenu externe | dès la première source externe branchée |
 | `context/packet.ts` · `resolver.ts` | la boucle réelle ne résout pas les entités | `QUICKSTART` promet la levée d'ambiguïté — dette visible |
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
+| `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
 | `tools/outcome.ts` | le Gateway n'a pas de notion de cible | dès qu'un outil multi-cibles existe |
+
+> **Ce titre a dit « Cinq » plus longtemps qu'il n'était vrai.** `cost/gate.ts`
+> a rejoint la liste avec ADR-040 et le compte est passé à six ; `wiring.test.ts`
+> l'affirmait déjà (`toHaveLength(6)`), ce document non. Le test avait raison
+> contre le registre — c'est l'ordre qu'on veut, mais l'écart aurait dû être
+> rattrapé le jour même.
 
 **Conséquence à énoncer sans détour :** `PARTIAL` est spécifié (`docs/19`),
 implémenté et testé — et **aucune opération réelle ne peut aujourd'hui le
@@ -150,16 +157,32 @@ sur la sûreté.
 
 **Condition :** à couvrir avant toute promesse de disponibilité produit.
 
-### 4.3 Couverture globale — 80,97 % des lignes
+### 4.3 Couverture globale — 83,28 % des lignes
 
-Nombre mesuré, non commenté ailleurs. Zones les plus basses hors CLI :
+Remesuré après les Phases 3 et 4 (l'ancien relevé disait 80,97 %) :
+
+| | Taux | Fraction |
+|---|---|---|
+| Lignes · instructions | **83,28 %** | 5122 / 6150 |
+| Branches | **78,91 %** | 977 / 1238 |
+| Fonctions | **91,25 %** | 240 / 263 |
+
+Zones les plus basses hors CLI :
 
 | Fichier | Lignes | Ce que ça signifie |
 |---|---|---|
+| `providers/contract.ts` | 0 % | fichier de **types purs** — il n'y a rien à exécuter |
 | `tools/outcome.ts` | 55 % | orphelin déclaré (§4.1) |
 | `tools/identity.ts` | 65 % | `sameOperation` / `isSameOperation` jamais appelés en production |
-| `config/load.ts` | 74 % | chemins d'erreur de configuration |
-| `providers/policy/cedar.ts` | 74 % | chemins d'échec du chargeur |
+| `tools/files.ts` | 74 % | chemins de refus de `readWithinRoot` |
+| `providers/policy/cedar.ts` | 75 % | chemins d'échec du chargeur |
+
+**Le taux de BRANCHES est le seul qui mérite de l'inquiétude** : 78,91 % contre
+91,25 % de fonctions. L'écart dit ce qu'on attend de lui — les fonctions sont
+appelées, mais leurs **chemins de refus** le sont moins que leurs chemins
+nominaux. Or dans ce dépôt, le chemin de refus *est* la fonctionnalité.
+Plusieurs outils sont sous les 55 % de branches (`audit.ts` 60 %,
+`memory.ts` 50 %, `status.ts` 50 %, `reminders.ts` 54 %, `tasks.ts` 54 %).
 
 `identity.ts` mérite un mot : les deux fonctions non couvertes sont les
 **garde-fous anti-repli**. Leur non-usage est cohérent — aucun routeur de repli
@@ -412,6 +435,54 @@ dépôt est une doublure de test, dont le `local` est fixé par le test lui-mêm
 fournisseur, pas cru sur parole. C'est la même discipline que
 `PROVIDER_CONTRACT_VIOLATION` : un fournisseur qui ment sur lui-même est un
 problème de SOURCE, et il se constate.
+
+### 4.10 S12 — la capture existe, l'exécution du défaire n'existe pas
+
+**Trouvée en rendant `docs/03` mécanique (ADR-054).** L'invariant S12 dit « le
+rollback reste possible ». Mesure :
+
+| | |
+|---|---|
+| `src/core/undo/` | **un seul fichier** — `snapshots.ts`, la capture |
+| Outils inverses déclarés | `task_cancel` · `note_delete` · `memory_forget` · `calendar_delete` · `reminder_cancel` |
+| Outils inverses **écrits** | **zéro** |
+| Moteur qui rejoue une capture | **aucun** |
+
+L'invariant est donc vrai au sens des **données** — on sait quoi défaire, et
+`ADR-019` garantit 7 jours de rétention — et faux au sens de l'**action** :
+rien ne peut défaire.
+
+**Pourquoi ce n'est pas classé « fait » :** parce que l'écart est exactement du
+type que `docs/12` proscrit. « Le rollback est possible » lu par un humain
+signifie « je peux revenir en arrière », pas « la donnée nécessaire est
+conservée quelque part ».
+
+**Condition de levée :** le premier outil inverse écrit et éprouvé de bout en
+bout — capture, rejeu, vérification. La réserve est chiffrée dans
+`invariants-contract.test.ts` et ne peut plus disparaître silencieusement.
+
+### 4.11 S13 — le cloud est éteint EN DUR, il n'y a pas d'interrupteur
+
+**Le motif « CostGate » une deuxième fois : tenu par ABSENCE, pas par mécanisme.**
+
+`config/default.json` expose `cloud.enabled`. Le runtime écrit
+`cloudEnabled: false` en littéral, et l'Assistant aussi. **La clé de
+configuration n'a aucun effet** — c'est `wiring.test.ts` qui le démontre, pas
+qui le corrige.
+
+Le résultat va dans le bon sens aujourd'hui. Le piège est ailleurs : une clé
+exposée laisse croire qu'un interrupteur existe. Or l'invariant S13 ne dit pas
+« le cloud est éteint », il dit **« l'utilisateur peut désactiver le cloud »** —
+ce qui suppose qu'il puisse aussi l'activer, donc que la clé pilote quelque
+chose.
+
+**Ce qui le borne :** aucun fournisseur cloud n'existe. L'interrupteur n'aurait
+aujourd'hui rien à commander, et le brancher avant serait un interrupteur qui
+ment dans l'autre sens.
+
+**Condition de levée :** au premier fournisseur cloud branché, `cloud.enabled`
+doit piloter `cloudEnabled` — au même moment que le branchement du CostGate
+(§4.1), et pour la même raison.
 
 ---
 

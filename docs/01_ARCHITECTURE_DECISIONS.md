@@ -3432,3 +3432,105 @@ Rien ne presse, et c'est exactement pour ça qu'elle attend. Marche à suivre en
 
 Si `notes` gagnait une colonne de catégorie, son blocage inconditionnel
 deviendrait excessif et cette ADR devrait être reprise — pas contournée.
+
+---
+
+## ADR-054 — Un chiffre qui n'est pas dans un test finit par mentir
+
+**Statut :** accepté (correction de mesure — aucune fonctionnalité).
+**Référence :** `docs/03 §2`, `docs/28 §2`, `tests/security/invariants-contract.test.ts`,
+ADR-041 (une seule source qui fait autorité).
+
+### Le fait
+
+`docs/28` a publié pendant plusieurs sprints : « **9 des 15** invariants de
+sécurité nommément référencés dans les tests ». La mesure — `\bS\d+\b` sur
+`tests/` — en donne **sept** :
+
+```text
+référencés   S1 · S2 · S3 · S6 · S7 · S14 · S15
+absents      S4 · S5 · S8 · S9 · S10 · S11 · S12 · S13
+```
+
+Le neuf avait été hérité d'un rapport antérieur et recopié sans être revérifié.
+La moyenne de profondeur de preuve passe de **≈ 80 %** à **≈ 75 %**.
+
+### Ce qui compte n'est pas l'écart, c'est sa direction
+
+Il penchait du côté flatteur — le sens dans lequel une erreur survit le plus
+longtemps, parce que rien ne pousse à la vérifier. Une erreur pessimiste se
+fait corriger par le premier lecteur qui se sent lésé ; une erreur optimiste
+attend qu'on la cherche.
+
+C'est la deuxième fois exactement. `docs/05` avait déjà connu la même dérive :
+quatorze scénarios dorés sans aucun test, invisibles parce que rien ne les
+comptait. La réponse d'alors n'avait pas été d'écrire les tests manquants —
+c'avait été de **lier le document à la suite** (`tests/golden/contract.test.ts`).
+
+**On avait tiré la leçon sur un document et pas sur l'autre.** La règle
+généralisée : *tout chiffre publié sur l'état du système vit dans un test, ou
+il dérive.*
+
+### La décision
+
+`tests/security/invariants-contract.test.ts` fait pour `docs/03` ce que le test
+doré fait pour `docs/05`. Trois états, et le deuxième est une dette :
+
+| | | |
+|---|---|---|
+| **NOMMÉ** | un test cite `Sn` | rien à dire |
+| **TRACÉ** | la propriété est éprouvée ailleurs | la preuve est **désignée** |
+| **NON EXIGIBLE** | le sous-système n'existe pas | l'absence est **vérifiée** |
+
+### « Non nommé » n'est pas « non prouvé »
+
+Distinction essentielle, et c'est elle qui rend le chiffre lisible. S8 — *toute
+sortie réseau est contrôlée par la politique* — est tenu par le Data Firewall
+depuis F2 : la propriété est éprouvée, seul le nom manque.
+
+Compter les noms mesure la **traçabilité** de la preuve, pas son existence.
+Fondre les deux donnerait un nombre qu'on ne saurait plus interpréter — et
+c'est probablement ainsi qu'un « 7 » est devenu « 9 ».
+
+### Ce qui empêche le registre d'être une liste d'excuses
+
+Chaque déclaration est **falsifiable** :
+
+- un **TRACÉ** désigne des fichiers qui doivent exister **et porter un marqueur
+  précis**. Effacer l'assertion qui porte l'invariant suffit à faire rougir le
+  test — pas seulement supprimer le fichier ;
+- un **NON EXIGIBLE** désigne un chemin qui doit rester **absent**. Le jour où
+  `src/core/update` existe, l'exemption de S11 tombe d'elle-même.
+
+Trois sabotages le confirment : retirer `S8` du registre → 2 tests rouges ;
+fausser un marqueur → rouge en nommant l'invariant ; créer `src/core/update` →
+l'exemption S11 rouge.
+
+### Deux réserves sont chiffrées plutôt que fondues
+
+| | Ce que la preuve ne couvre pas |
+|---|---|
+| **S12** | la **capture** de quoi défaire est prouvée, pas l'**exécution** : cinq outils inverses déclarés, **zéro écrit**, aucun moteur ne rejoue une capture |
+| **S13** | le cloud est éteint **en dur** — `config/default.json` expose `cloud.enabled`, le runtime écrit `false` en littéral. L'invariant dit que l'**utilisateur** peut l'éteindre ; ce n'est pas la même phrase |
+
+S13 est le motif « CostGate » une deuxième fois : **tenu par absence, pas par
+mécanisme**. Le compter comme acquis aurait produit un registre plus flatteur
+et moins vrai.
+
+### Le correctif qui a rougi deux fois pour rien
+
+Le marqueur cherchait `l'appel` dans un source où il est écrit `l\'appel`. Le
+test signalait une preuve manquante là où seule la syntaxe différait. Corrigé
+par `sansEchappement`, avec son contrôle négatif — une normalisation trop large
+rendrait *tout* marqueur trouvable, donc le test vert quoi qu'il arrive.
+
+> Un test structurel doit viser la propriété, jamais l'encodage. Même
+> raisonnement que `stripComments`, qui existe déjà pour empêcher un test de
+> proscrire un vocabulaire au lieu d'un comportement.
+
+### Condition de révision
+
+Si un invariant devenait vérifiable par exécution plutôt que par citation, sa
+ligne devrait quitter ce registre pour un vrai test. Ce fichier mesure la
+traçabilité ; **il ne prouve aucun invariant, et ne doit jamais être invoqué
+comme s'il le faisait.**

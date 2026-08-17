@@ -53,17 +53,54 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 80 %**
+## 2. Profondeur de preuve — **≈ 75 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
-| **Invariants de sécurité S1–S15** (`docs/03`) | 9 des 15 nommément référencés dans les tests | **60 %** |
+| **Invariants de sécurité S1–S15** (`docs/03`) | **7 des 15** nommément référencés dans les tests | **47 %** |
 | **Tests dorés A·B·C** (`docs/05`) | **26 des 30** référencés, 4 déclarés bloqués | **87 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 80 %** |
+| **Moyenne** | | **≈ 75 %** |
+
+### Le chiffre des invariants était FAUX, et dans le sens qui flatte
+
+Ce document affirmait « **9 des 15** ». La mesure — `grep -E "\bS[0-9]+\b"` sur
+`tests/`, frontières de mot comprises — en donne **sept** :
+
+```text
+référencés   S1 · S2 · S3 · S6 · S7 · S14 · S15
+absents      S4 · S5 · S8 · S9 · S10 · S11 · S12 · S13
+```
+
+Le neuf avait été hérité d'un rapport antérieur et recopié sans être revérifié —
+exactement la dérive que `tests/golden/contract.test.ts` a été écrit pour rendre
+impossible sur `docs/05`. **Aucun mécanisme équivalent ne protégeait `docs/03`.**
+
+Et il faut le dire dans les deux sens : « non nommé » n'est pas « non prouvé ».
+S8 (*toute sortie réseau est contrôlée par la politique*) est aujourd'hui tenu
+par le Data Firewall F2 — la propriété est éprouvée, le nom manque. Un chiffre
+qui compte les noms mesure la **traçabilité** de la preuve, pas son existence.
+C'est précisément pour ça qu'il doit être mécanique : sinon, on ne sait plus
+lequel des deux on lit.
+
+**Le lien est désormais mécanique là aussi** (ADR-054).
+`tests/security/invariants-contract.test.ts` lit `docs/03 §2`, en extrait les
+quinze identifiants, et échoue si l'un n'est ni nommé, ni rattaché à une preuve
+désignée, ni exempté par une absence **vérifiée**. Le taux de 47 % y est écrit
+en dur : il ne peut plus dériver sans passer par ce fichier.
+
+Deux réserves y sont chiffrées plutôt que fondues dans « tracé » :
+
+| | Ce que la preuve ne couvre pas |
+|---|---|
+| **S12** | la **capture** de quoi défaire est prouvée, pas l'**exécution** — cinq outils inverses déclarés, **zéro écrit** |
+| **S13** | le cloud est éteint **en dur** ; `cloud.enabled` n'a aucun effet. L'invariant dit que l'**utilisateur** peut l'éteindre |
+
+S13 est le motif « CostGate » une deuxième fois : **tenu par absence, pas par
+mécanisme.**
 
 ### Ce que la mesure a révélé sur `docs/05` — et qui est CORRIGÉ
 
@@ -121,9 +158,9 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **53 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **54 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 aux 9/10** — `web_search` seul restant, et **il n'est plus bloqué** : le Data Firewall existe ; 4→7 ouvertes |
-| 03 | Sécurité et confidentialité | invariants posés ; **9/15 nommés en test** |
+| 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
 | 05 | Tests dorés | **26/30 référencés**, 4 bloqués déclarés — lien mécanique |
 | 06 | Prompt maître | appliqué à chaque session |
