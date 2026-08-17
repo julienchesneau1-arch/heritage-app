@@ -26,6 +26,7 @@ import { isExternalEffect, mayReplayAfterUnknown } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
 import { floorFor } from '../privacy/classify.js';
+import { sealExternal } from '../quarantine/processor.js';
 import type { OperationIdentity } from './identity.js';
 import type { UnknownReason, VerificationEngine } from '../verification/engine.js';
 import { verificationOutcome } from '../verification/engine.js';
@@ -75,6 +76,29 @@ export interface GatewayResult {
   readonly eventId: string;
   /** Vrai si l'opération existait déjà : rien n'a été réexécuté. */
   readonly replayed: boolean;
+
+  /**
+   * CE QUE VAUT `output` — ADR-055.
+   *
+   * Toujours renseignée, et c'est délibéré : un champ optionnel serait un
+   * champ oublié. Un appelant qui reçoit `EXTERNAL_UNTRUSTED` tient du contenu
+   * écrit par un tiers, qui ne peut jamais devenir une instruction.
+   *
+   * Recopiée du CONTRAT de l'outil, jamais de son exécution : sinon la valeur
+   * potentiellement hostile choisirait sa propre étiquette.
+   */
+  readonly provenance: Provenance;
+
+  /**
+   * Le contenu externe semblait-il porter une tentative d'instruction ?
+   *
+   * **Indicatif, jamais une barrière** — même discipline que
+   * `QuarantineReading`. Une injection non détectée reste inoffensive :
+   * l'étiquette, elle, n'est pas conditionnelle. Vaut toujours `false` pour un
+   * outil dont la sortie est `TOOL_OUTPUT` : il n'y a rien à soupçonner dans
+   * notre propre code.
+   */
+  readonly suspectedInjection: boolean;
 }
 
 export interface ToolGateway {
@@ -587,6 +611,13 @@ export function createToolGateway(deps: {
         policy,
         eventId: event.value.eventId,
         replayed: true,
+        /* La provenance reste celle du CONTRAT, même sans sortie : elle décrit
+           ce que cet outil produit, pas ce qu'on vient d'obtenir. */
+        provenance: def.outputProvenance,
+        // Rien n'a été rapporté, donc rien n'a été balayé. Annoncer `false`
+        // sur du contenu inexistant est exact ; l'annoncer sur du contenu non
+        // regardé ne le serait pas.
+        suspectedInjection: false,
       });
     };
 
@@ -1099,6 +1130,8 @@ export function createToolGateway(deps: {
           policy,
           eventId: event.value.eventId,
           replayed: true,
+          provenance: def.outputProvenance,
+          suspectedInjection: false,
         });
       }
     }
@@ -1435,6 +1468,37 @@ export function createToolGateway(deps: {
       return staleExecutor(call, def.id, lease);
     }
 
+    /* --- 7-bis. SCELLEMENT DU CONTENU EXTERNE — ADR-004, ADR-055 ---------
+       Le point où la séparation Privileged/Quarantined cesse d'être hors
+       circuit. `docs/26 §4.1` recensait `quarantine/processor.ts` comme
+       « implémenté, testé, JAMAIS APPELÉ ». Il est appelé ici.
+
+       L'étiquetage vient du CONTRAT, pas de l'exécution : une valeur
+       potentiellement hostile ne choisit pas sa propre étiquette. Un outil
+       qui rend du contenu de tiers l'a déclaré à l'enregistrement, et le
+       validateur lui interdit par ailleurs de muter (contract.ts). */
+    const sealed =
+      def.outputProvenance === 'EXTERNAL_UNTRUSTED'
+        ? sealExternal(executed.value.output, def.id)
+        : null;
+
+    /* Une tentative d'instruction dans du contenu rapporté est un FAIT à
+       journaliser, pas une alarme à lever : l'étiquette protège déjà. Sans
+       cette ligne, `audit_query` ne pourrait jamais répondre à « quelqu'un
+       a-t-il essayé ? » — et c'est la question que B1 et B3 posent. */
+    if (sealed?.suspectedInjection === true) {
+      await deps.ledger.append({
+        actor: call.actor,
+        eventType: `${def.auditEvent}_INJECTION_SUSPECTED`,
+        tool: def.id,
+        policyDecision: 'ALLOW',
+        autonomyLevel: policy.effectiveAutonomy,
+        status: verification.status,
+        operationId: call.operationId,
+        payloadDigest: digest,
+      });
+    }
+
     // Le suffixe ne s'applique qu'à une MUTATION restée sans capture. Une
     // lecture n'a rien à annuler : la suffixer polluerait le journal d'audit
     // d'un signal d'alerte permanent et sans objet.
@@ -1481,6 +1545,8 @@ export function createToolGateway(deps: {
       policy,
       eventId: event.value.eventId,
       replayed: false,
+      provenance: def.outputProvenance,
+      suspectedInjection: sealed?.suspectedInjection ?? false,
     });
   }
 }

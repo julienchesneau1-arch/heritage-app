@@ -9,7 +9,7 @@
  * garde un contrôle négatif pour que l'alerte ne soit pas permanente.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { appDb, databaseAvailable } from '../helpers/db.js';
+import { appDb, databaseAvailable, withLedgerExclusive } from '../helpers/db.js';
 import { buildStack, callContext, operationId, type Stack } from '../helpers/stack.js';
 import type { Db } from '../../src/core/db/client.js';
 
@@ -130,7 +130,10 @@ describe.runIf(enabled)('system_status — Phase 3 point 9', () => {
           AND expires_at < clock_timestamp() + interval '24 hours'`,
     );
 
-    const sortie = await etat();
+    /* ACCÈS EXCLUSIF : `system_status` vérifie la chaîne, et
+       `ledger-chain.test.ts` la corrompt volontairement — sur le même journal
+       partagé. Voir `withLedgerExclusive`. */
+    const sortie = await withLedgerExclusive(db, () => etat());
     expect(sortie.controles.operations.verdict).toBe('OK');
     expect(sortie.controles.annulations.verdict).toBe('OK');
     expect(sortie.controles.journal.verdict).toBe('OK');

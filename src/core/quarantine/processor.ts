@@ -131,6 +131,56 @@ export function looksLikeInjection(content: string): boolean {
   return INJECTION_HINTS.some((pattern) => pattern.test(content));
 }
 
+/**
+ * Contenu externe DÉJÀ STRUCTURÉ, scellé sans passer par un modèle.
+ *
+ * POURQUOI CE CHEMIN EXISTE, ET POURQUOI IL N'AFFAIBLIT RIEN
+ * -----------------------------------------------------------
+ * `createQuarantine` suppose qu'il faut un modèle pour tirer une donnée typée
+ * d'un texte libre — c'est le cas d'un email ou d'un PDF. Ce n'est PAS le cas
+ * d'un fournisseur qui rend déjà `{ title, url }` : la structure existe, seuls
+ * les CONTENUS sont écrits par des tiers.
+ *
+ * Exiger un modèle là où il n'y a rien à extraire aurait un coût et un seul
+ * effet : décourager l'ingestion, donc laisser la séparation hors circuit —
+ * ce qu'elle est depuis le début (`docs/26 §4.1`).
+ *
+ * **Ce qui est scellé est identique dans les deux chemins :** l'étiquetage
+ * `EXTERNAL_UNTRUSTED` n'est pas conditionnel, et la détection d'injection est
+ * la même fonction. Le modèle n'a jamais été la protection — il est l'outil
+ * d'extraction. La protection est l'étiquette et l'absence d'outils.
+ */
+export function sealExternal(
+  value: unknown,
+  sourceId: string,
+): QuarantineReading<unknown> {
+  return {
+    data: tainted(value, 'EXTERNAL_UNTRUSTED', sourceId),
+    /* On balaie la sérialisation, pas seulement les chaînes de premier niveau :
+       un titre de résultat imbriqué à trois niveaux reste du texte écrit par
+       un tiers, et c'est exactement là qu'on le cacherait. */
+    suspectedInjection: looksLikeInjection(serializeForScan(value)),
+  };
+}
+
+/**
+ * Rend une valeur quelconque en texte, pour la DÉTECTION seulement.
+ *
+ * `JSON.stringify` peut rendre `undefined` (valeur non sérialisable, cycle) —
+ * auquel cas on ne sait pas ce qu'on regarde. On rend alors une chaîne vide,
+ * et `suspectedInjection` vaut `false` : c'est le comportement honnête, parce
+ * que ce drapeau est une OBSERVATION, jamais une barrière. Un faux négatif y
+ * est inoffensif — la valeur reste étiquetée non fiable de toute façon.
+ */
+function serializeForScan(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export interface Quarantine {
   /**
    * Lit un contenu non fiable et en extrait une donnée typée.

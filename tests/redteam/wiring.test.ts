@@ -104,11 +104,17 @@ describe('RED TEAM — code mort en production', () => {
 
         // ---- Ci-dessous : de la LOGIQUE, pas des types. Le problème. ----
 
-        // Séparation Privileged/Quarantined (ADR-004), défense principale
-        // contre T1. Implémentée, testée, JAMAIS APPELÉE : rien n'ingère
-        // aujourd'hui de contenu externe. La défense n'est pas fausse, elle
-        // est hors circuit.
-        'src/core/quarantine/processor.ts',
+        /* `src/core/quarantine/processor.ts` A QUITTÉ CETTE LISTE — ADR-055.
+
+           Il y figurait avec ce motif : « Implémentée, testée, JAMAIS
+           APPELÉE : rien n'ingère aujourd'hui de contenu externe. » Ce n'est
+           plus vrai. `web_search` est la première ingestion du dépôt, et le
+           Tool Gateway appelle `sealExternal` sur toute sortie déclarée
+           `EXTERNAL_UNTRUSTED`.
+
+           C'est le mouvement qu'on attend d'une dette datée : elle sort de la
+           liste quand elle est payée, et ce test l'aurait signalé si on avait
+           oublié de l'en retirer. */
 
         // Context Engine — résolution d'entités et détection d'ambiguïté.
         // `QUICKSTART.md` promet « il ne devine pas : deux homonymes → il
@@ -147,7 +153,7 @@ describe('RED TEAM — code mort en production', () => {
     );
   });
 
-  it('six modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('cinq modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
     /* Le chiffre est asserté, pas seulement la liste : c'est ce qui force à
        PASSER ICI quand un module cesse d'être atteint — ou le devient.
@@ -155,8 +161,13 @@ describe('RED TEAM — code mort en production', () => {
        Il est monté de six à sept avec `privacy/classify.ts` à l'étape F1, où
        la classification était délibérément branchée à rien. Il est redescendu
        à six à F2, quand le Policy Gate a commencé à l'appeler — exactement le
-       mouvement annoncé, et ce test l'aurait signalé si on l'avait oublié. */
-    expect(deadLogic).toHaveLength(6);
+       mouvement annoncé, et ce test l'aurait signalé si on l'avait oublié.
+
+       **À cinq avec ADR-055** : `quarantine/processor.ts` est appelé par le
+       Tool Gateway depuis que `web_search` existe. C'est la défense principale
+       contre T1 (ADR-004) qui entre en circuit, après y avoir été absente
+       depuis le début du dépôt. */
+    expect(deadLogic).toHaveLength(5);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

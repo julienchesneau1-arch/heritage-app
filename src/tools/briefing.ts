@@ -125,6 +125,7 @@ export function briefingGenerateTool(
          base, ni chez le fournisseur. C'est la seule déclaration honnête. */
       effect: 'NO_EXTERNAL_EFFECT',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: BriefingInput,

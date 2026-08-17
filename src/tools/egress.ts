@@ -87,6 +87,7 @@ export function egressReviewTool(): RegisteredTool {
       attemptVerification: 'NONE',
       effect: 'NO_EXTERNAL_EFFECT',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: EgressReviewInput,

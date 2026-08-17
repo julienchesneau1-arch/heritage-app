@@ -131,6 +131,7 @@ function createGatedTool(options: {
          soit l'écriture la plus affirmative que le système sache produire.
          Éprouver le cloisonnement sur un verdict tiède ne prouverait rien. */
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: GatedInput,
@@ -206,6 +207,7 @@ function createRaceyVerifyTool(db: Db): RegisteredTool {
          ne serait jamais atteint — le test ne prouverait rien. */
       effect: 'PROVIDER_IDEMPOTENT',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: GatedInput,

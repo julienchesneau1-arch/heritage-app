@@ -104,6 +104,7 @@ export function calendarReadTool(
          `networkRequired` qui porte la seconde. */
       effect: 'NO_EXTERNAL_EFFECT',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: CalendarReadInput,
@@ -269,6 +270,7 @@ export function calendarCreateTool(
          tout `FAILED` en `UNKNOWN` pour un outil OBSERVABLE (`engine.ts:200`),
          ce qui fait de cette ligne une seconde barrière et non l'unique. */
       verifiability: 'OBSERVABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: CalendarCreateInput,
@@ -446,6 +448,7 @@ export function calendarUpdateTool(
       attemptVerification: 'NONE',
       effect: 'EXTERNALLY_VERIFIABLE',
       verifiability: 'OBSERVABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: CalendarUpdateInput,

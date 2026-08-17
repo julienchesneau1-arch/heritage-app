@@ -208,6 +208,7 @@ function verifiableTool(verdict: () => AttemptVerdict) {
       attemptVerification: 'BY_OPERATION_KEY',
       effect: 'LOCAL_TRANSACTIONAL',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
     inputSchema: z.object({ marker: z.string() }),
     execute(input, ctx: ToolContext): Promise<Result<ToolExecution>> {
@@ -294,6 +295,7 @@ describe.skipIf(skip)('RED TEAM — vérification idempotente auprès du fournis
         attemptVerification: 'BY_OPERATION_KEY',
       effect: 'LOCAL_TRANSACTIONAL',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),

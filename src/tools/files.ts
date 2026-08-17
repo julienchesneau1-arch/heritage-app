@@ -124,6 +124,7 @@ export function fileSearchTool(roots: readonly string[]): RegisteredTool {
       attemptVerification: 'NONE',
       effect: 'NO_EXTERNAL_EFFECT',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: FileSearchInput,

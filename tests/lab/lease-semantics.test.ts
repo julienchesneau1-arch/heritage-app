@@ -80,6 +80,7 @@ function leaseProbe(options: {
       attemptVerification: 'NONE',
       effect: 'EXTERNALLY_VERIFIABLE',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: Input,

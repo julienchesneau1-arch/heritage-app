@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 64 %**
+## 1. Étendue fonctionnelle — **≈ 65 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -31,12 +31,12 @@ nombre de cases à cocher.
 | 0 Fondations | 12 % | **100 %** | 12,0 | `gate:phase0` ✅ |
 | 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
-| 3 Les 10 outils restants | 12 % | **90 %** | 10,8 | **14 outils sur 15** (+`egress_review`, hors liste, en Phase 4) — **`web_search` seul restant, et le Data Firewall qui le bloquait existe désormais** |
+| 3 Les 10 outils restants | 12 % | **100 %** | 12,0 | **15 outils sur 15** (+`egress_review`, hors liste, en Phase 4). `web_search` livré (ADR-055) — et il met en circuit la séparation Privileged/Quarantined, hors circuit depuis ADR-004 |
 | 4 Confidentialité, coût, indépendance | 13 % | **80 %** | 10,4 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router ✗** |
 | 5 Voix | 10 % | **0 %** | 0,0 | rien |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 64 %** | |
+| **TOTAL** | 100 % | | **≈ 65 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -45,7 +45,7 @@ elle n'est donc pas un dû.
 
 | Affirmation | Mesure |
 |---|---|
-| 14 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status` |
+| 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ `egress_review`, hors liste) |
 | Model Router absent | aucun fichier de `src/` ne contient « router » |
 | Voix absente | aucun module STT/TTS/VAD |
 | Update Engine absent | aucun module canary/rollback/twin |
@@ -53,17 +53,17 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 75 %**
+## 2. Profondeur de preuve — **≈ 76 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
 | **Invariants de sécurité S1–S15** (`docs/03`) | **7 des 15** nommément référencés dans les tests | **47 %** |
-| **Tests dorés A·B·C** (`docs/05`) | **26 des 30** référencés, 4 déclarés bloqués | **87 %** |
+| **Tests dorés A·B·C** (`docs/05`) | **27 des 30** référencés, 3 déclarés bloqués | **90 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 75 %** |
+| **Moyenne** | | **≈ 76 %** |
 
 ### Le chiffre des invariants était FAUX, et dans le sens qui flatte
 
@@ -120,11 +120,10 @@ creux :
 | **déclarés bloqués** | A2 · ~~A7~~ · A8 · ~~A9~~ · B4 · C3 · ~~C4~~ | la capacité n'existe pas — les simuler ne prouverait que la simulation |
 
 **A9 a quitté cette liste**, et c'est le mouvement qu'on attendait : `audit_query`
-existe (ADR-041), donc le blocage n'a plus de motif, donc le test l'exige. Une
-dette datée qui ne peut pas être oubliée quand elle est payée — le compteur
-`couverts/bloqués` du test est passé de 23/7 à **24/6**, et il aurait échoué si
-on avait livré l'outil sans retirer l'entrée. **A7 a suivi** avec
-`briefing_generate` : **25/5**. Puis **C4** avec `egress_review` : **26/4**.
+existe (ADR-041), donc le blocage n'a plus de motif, donc le test l'exige. Le
+compteur `couverts/bloqués` est passé de 23/7 à **24/6**, puis **25/5** avec
+`briefing_generate`, **26/4** avec `egress_review`, et **27/3** avec
+`web_search` (ADR-055).
 
 **Et surtout, le lien est désormais MÉCANIQUE.**
 `tests/golden/contract.test.ts` lit `docs/05`, en extrait les identifiants, et
@@ -136,13 +135,41 @@ Deux contrôles négatifs protègent l'extracteur — dont celui du mode de pann
 plus dangereux : **rendre zéro identifiant et déclarer la couverture
 parfaite.**
 
+### Ce document a affirmé une garantie que le test ne donnait PAS
+
+Il écrivait, à propos de ce compteur : « il aurait échoué si on avait livré
+l'outil sans retirer l'entrée ». **C'était faux, et mesuré comme tel** en
+livrant `web_search` :
+
+```text
+couverts = ids.length - bloques          ← ne lit pas le code
+bloques  = Object.keys(BLOQUES).length   ← ne lit pas le code
+```
+
+Les deux assertions se calculent uniquement à partir de la table des blocages.
+Laisser `B4` déclaré bloqué après avoir écrit l'outil laissait le test **vert**.
+
+C'est la **même classe de défaut que le « 9 des 15 »** — une affirmation sur un
+mécanisme que le mécanisme ne fournit pas — et la deuxième occurrence en deux
+sprints, sur deux documents différents. Le motif mérite d'être nommé :
+
+> Quand on écrit qu'un test garantit quelque chose, il faut **saboter le code**
+> pour le vérifier. Lire le test ne suffit pas : on y lit ce qu'on croit y avoir
+> mis.
+
+**Corrigé** (ADR-055) : chaque entrée bloquée déclare ce qui doit rester
+**absent** — la capacité n'est pas dans le registre des outils, ou le module
+figure encore parmi les orphelins de `wiring.test.ts` — et le test le vérifie.
+Un sabotage le confirme : réintroduire `B4` alors que `webSearchTool` est
+enregistré fait rougir le test **en le nommant**.
+
 ---
 
 ## 3. Ce que le chiffre ne mesure pas
 
 | | |
 |---|---|
-| **La qualité de ce qui est fait** | 64 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
+| **La qualité de ce qui est fait** | 65 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
 | **La difficulté restante** | la Phase 5 (voix) est plus longue que la Phase 3, à poids presque égal. |
 | **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 36 %. |
 | **Ce qui est irréductible** | `docs/26 §5` — six limites qu'aucun pourcentage ne fera bouger. |
@@ -158,11 +185,11 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **54 ADR**, chacune avec sa condition de révision |
-| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 aux 9/10** — `web_search` seul restant, et **il n'est plus bloqué** : le Data Firewall existe ; 4→7 ouvertes |
+| 01 | ADR | **56 ADR**, chacune avec sa condition de révision |
+| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
-| 05 | Tests dorés | **26/30 référencés**, 4 bloqués déclarés — lien mécanique |
+| 05 | Tests dorés | **27/30 référencés**, 3 bloqués déclarés — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |
 | 06 | Prompt maître | appliqué à chaque session |
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
 | 08·09·10·11 | Audits | faits, conclusions intégrées |

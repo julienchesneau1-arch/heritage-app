@@ -106,6 +106,7 @@ export function createAuditQueryTool(): RegisteredTool {
          qui peut honnêtement le déclarer. */
       effect: 'NO_EXTERNAL_EFFECT',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: AuditQueryInput,

@@ -89,7 +89,52 @@ aucune erreur inattendue.
 > Deux ans de divergence entre les hôtes ne déplacent aucune décision de
 > sûreté — parce qu'aucune n'est prise par l'horloge d'un appelant.
 
-### 2.3 Deux fichiers à 0 % de couverture — faux positif
+### 2.3 Un test d'intégrité laissait la chaîne ROMPUE pour toute la suite
+
+**Trouvé en ajoutant un fichier de test, pas en cherchant.** Le défaut était
+latent depuis toujours, masqué par l'ordre d'exécution.
+
+`ledger-chain.test.ts` corrompt **délibérément** le journal — triggers
+désactivés, ligne réécrite — pour prouver que le chaînage par hash détecte
+l'altération quand les deux premières barrières tombent. C'est un bon test.
+Deux de ses cas ne remettaient pourtant pas l'état :
+
+| Cas | Ce qui restait après |
+|---|---|
+| modification de contenu | `status = 'FAILED'` sur un maillon — chaîne rompue |
+| **suppression de maillon** | **le maillon manquant, définitivement** |
+
+Le second se « réparait » incidemment parce que le test suivant, dans le même
+fichier, remettait le statut du premier. **Une dépendance d'ordre entre deux
+`it()` n'est pas un mécanisme** — c'est une coïncidence qu'on remarque le jour
+où elle cesse.
+
+Et le journal est **partagé par toute la suite** : quatre fichiers y appellent
+`verifyChain()`, plus `system_status` qui le fait en production.
+
+**Mesuré :** `intent/flow.test.ts` — « la chaîne d'audit reste intacte après
+une session complète » — **vert seul, rouge en suite complète**. Ajouter
+`web-search.test.ts` a suffi à déplacer l'ordonnancement et à révéler le
+défaut.
+
+> L'assertion avait raison. La tentation était de l'affaiblir — elle est la
+> seule vérification d'intégrité de bout en bout du dépôt.
+
+**Corrigé** sur les deux fronts :
+
+- le maillon supprimé est **sauvegardé puis réinséré** (`CREATE TABLE … AS
+  SELECT *`, pour ne pas énumérer des colonnes qui se périmeraient à la
+  prochaine migration — ce qui est exactement arrivé aux champs d'égression) ;
+  le statut altéré est restauré dans son propre `finally` ;
+- la fenêtre de corruption est protégée par `withLedgerExclusive`, un verrou
+  consultatif **côté tests uniquement** : on ne peut pas vérifier globalement
+  l'intégrité d'un objet pendant qu'on le corrompt volontairement ailleurs.
+
+**Sabotage :** retirer la réinsertion, puis la restauration du statut — chaque
+retrait fait rougir le test concerné. Les deux sabotages reproduisent l'état
+antérieur du dépôt.
+
+### 2.4 Deux fichiers à 0 % de couverture — faux positif
 
 `src/core/policy/evaluator.ts` et `src/providers/contract.ts` : **types purs**,
 zéro code émis. Vérifié, pas supposé.
@@ -118,29 +163,45 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Six modules de logique hors circuit
+### 4.1 Cinq modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
 
 | Module | Ce qui manque | Condition de réouverture |
 |---|---|---|
-| `quarantine/processor.ts` | rien n'ingère de contenu externe | dès la première source externe branchée |
+| ~~`quarantine/processor.ts`~~ | **LEVÉE (ADR-055)** — `web_search` est la première ingestion du dépôt, et le Tool Gateway appelle `sealExternal` | — |
 | `context/packet.ts` · `resolver.ts` | la boucle réelle ne résout pas les entités | `QUICKSTART` promet la levée d'ambiguïté — dette visible |
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
 | `tools/outcome.ts` | le Gateway n'a pas de notion de cible | dès qu'un outil multi-cibles existe |
 
-> **Ce titre a dit « Cinq » plus longtemps qu'il n'était vrai.** `cost/gate.ts`
-> a rejoint la liste avec ADR-040 et le compte est passé à six ; `wiring.test.ts`
-> l'affirmait déjà (`toHaveLength(6)`), ce document non. Le test avait raison
-> contre le registre — c'est l'ordre qu'on veut, mais l'écart aurait dû être
-> rattrapé le jour même.
+**Ce compteur a une histoire, et elle vaut d'être lue :**
+
+```text
+5   état initial
+6   + cost/gate.ts (ADR-040) — écrit avant d'avoir un appelant, délibérément
+7   + privacy/classify.ts (F1) — classification branchée à rien, délibérément
+6   − privacy/classify.ts (F2) — le Policy Gate l'appelle
+5   − quarantine/processor.ts (ADR-055) — web_search ingère, le Gateway scelle
+```
+
+> **Le titre a dit « Cinq » pendant toute la période où il valait six.**
+> `wiring.test.ts` l'affirmait pourtant (`toHaveLength(6)`) ; ce document non.
+> Le test avait raison contre le registre — c'est l'ordre qu'on veut, mais
+> l'écart aurait dû être rattrapé le jour même. Il revient à cinq pour une
+> raison entièrement différente de celle qui l'y avait mis.
 
 **Conséquence à énoncer sans détour :** `PARTIAL` est spécifié (`docs/19`),
 implémenté et testé — et **aucune opération réelle ne peut aujourd'hui le
-produire**. La séparation Privileged/Quarantined (ADR-004), défense principale
-contre T1, est **hors circuit** faute d'ingestion externe.
+produire**.
+
+La deuxième moitié de cette phrase disait : « La séparation
+Privileged/Quarantined (ADR-004), défense principale contre T1, est hors circuit
+faute d'ingestion externe. » **Ce n'est plus vrai depuis ADR-055.** Elle est
+appelée par le Tool Gateway sur toute sortie déclarée `EXTERNAL_UNTRUSTED`, et
+`web_search` en produit. Ce qui reste vrai : **un seul outil l'emprunte**, et
+la protection ne vaut donc que pour ce qu'il rapporte.
 
 Ce n'est pas un défaut : c'est une capacité **déclarée non disponible**. Elle
 serait un défaut le jour où quelqu'un croirait qu'elle protège.

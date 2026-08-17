@@ -47,17 +47,55 @@ function testSources(): readonly { file: string; content: string }[] {
 }
 
 /**
- * SCÉNARIOS BLOQUÉS — chacun nomme ce qui manque et QUI le livrera.
+ * SCÉNARIOS BLOQUÉS — chacun nomme ce qui manque, et l'ABSENCE EST VÉRIFIÉE.
  *
- * Une entrée ici est une dette datée, pas une dérogation. Elle disparaît le
- * jour où la capacité existe, et le test le signalera si on l'oublie.
+ * ⚠ CE REGISTRE A ÉTÉ UN ALIBI PENDANT PLUSIEURS SPRINTS, ET `docs/28` LE
+ *   PRÉSENTAIT COMME UNE GARANTIE.
+ *
+ * Il ne portait qu'un motif en texte libre. `docs/28` en tirait pourtant :
+ * « le compteur aurait échoué si on avait livré l'outil sans retirer
+ * l'entrée ». **C'était faux.** Les deux assertions chiffrées ci-dessous se
+ * calculent uniquement à partir de cette table :
+ *
+ *     couverts = ids.length - bloques        ← ne lit pas le code
+ *     bloques  = Object.keys(BLOQUES).length ← ne lit pas le code
+ *
+ * Écrire `web_search` sans toucher cette table laissait donc le test vert.
+ * Mesuré, pas supposé : la reproduction est dans le message de commit d'ADR-055.
+ *
+ * DEPUIS, CHAQUE ENTRÉE EST FALSIFIABLE
+ * --------------------------------------
+ * Elle déclare ce qui doit rester ABSENT, et le test le vérifie. Le jour où la
+ * capacité existe, l'entrée tombe d'elle-même — personne n'a à s'en souvenir.
+ * C'est la discipline d'ADR-054, appliquée là où elle manquait aussi.
  */
-const BLOQUES: Readonly<Record<string, string>> = {
-  A2: "Context Engine hors circuit — `resolver.ts` n'est atteint par aucun point d'entrée (docs/26 §4.1)",
-  A8: "aucun outil d'email n'existe — Phase 3",
-  B4: 'web_search non écrit — Phase 3 ; la propriété RED↛sortie est couverte par exfiltration.test.ts',
-  C3: "memory_forget non écrit — il n'existe qu'en tant qu'outil inverse déclaré (src/tools/memory.ts) ; Undo Engine",
+type Blocage =
+  | { readonly motif: string; readonly absentDuRegistre: string }
+  | { readonly motif: string; readonly moduleOrphelin: string };
+
+const BLOQUES: Readonly<Record<string, Blocage>> = {
+  A2: {
+    motif:
+      "Context Engine hors circuit — `resolver.ts` n'est atteint par aucun point d'entrée (docs/26 §4.1)",
+    /* Vérifié contre la liste FIGÉE de `wiring.test.ts` : tant que ce module y
+       figure, il est bien hors circuit. Le jour où on le branche, il quitte
+       cette liste et ce test rougit. */
+    moduleOrphelin: 'src/core/context/resolver.ts',
+  },
+  A8: {
+    motif: "aucun outil d'email n'existe — Phase 3",
+    // Le registre des outils ne doit mentionner aucun email, sous aucune forme.
+    absentDuRegistre: 'email',
+  },
+  C3: {
+    motif:
+      "memory_forget non écrit — il n'existe qu'en tant qu'outil inverse déclaré (src/tools/memory.ts) ; Undo Engine",
+    absentDuRegistre: 'memoryForget',
+  },
 };
+
+/** Le registre réel des outils : ce qui est ENREGISTRÉ, pas ce qui est écrit. */
+const REGISTRE = readFileSync('src/tools/index.ts', 'utf8');
 
 describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
   const markdown = readFileSync('docs/05_GOLDEN_TESTS.md', 'utf8');
@@ -95,11 +133,37 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
   });
 
   it('tout scénario déclaré BLOQUÉ existe et porte un motif', () => {
-    for (const [id, motif] of Object.entries(BLOQUES)) {
+    for (const [id, blocage] of Object.entries(BLOQUES)) {
       // Un blocage sur un scénario inexistant serait une dette fantôme.
       expect(ids).toContain(id);
       // Et un motif vide serait une dérogation déguisée.
-      expect(motif.trim().length).toBeGreaterThan(20);
+      expect(blocage.motif.trim().length).toBeGreaterThan(20);
+    }
+  });
+
+  it('CHAQUE blocage prouve que ce qui manque manque ENCORE', () => {
+    /* LE TEST QUI MANQUAIT, ET SON ABSENCE AVAIT ÉTÉ PRÉSENTÉE COMME UNE
+       GARANTIE PAR `docs/28`.
+
+       Sans lui, cette table est déclarative : on peut livrer la capacité et
+       laisser l'entrée, le compteur ne voit rien. Avec lui, l'exemption
+       s'autodétruit — même mécanisme que les NON EXIGIBLES d'ADR-054. */
+    const wiring = readFileSync('tests/redteam/wiring.test.ts', 'utf8');
+
+    for (const [id, blocage] of Object.entries(BLOQUES)) {
+      if ('absentDuRegistre' in blocage) {
+        expect(
+          REGISTRE.includes(blocage.absentDuRegistre),
+          `${id} est déclaré bloqué, or « ${blocage.absentDuRegistre} » est ` +
+            'désormais dans le registre des outils : le blocage n’a plus de motif.',
+        ).toBe(false);
+      } else {
+        expect(
+          wiring.includes(blocage.moduleOrphelin),
+          `${id} est déclaré bloqué parce que ${blocage.moduleOrphelin} est hors ` +
+            'circuit, or `wiring.test.ts` ne le liste plus comme orphelin.',
+        ).toBe(true);
+      }
     }
   });
 
@@ -111,10 +175,15 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
        périme, un test échoue. `docs/28` mesurait 16/30 référencés ; ce
        fichier porte désormais la mesure. A9 a quitté cette liste le jour où
        `audit_query` a existé — c'est exactement le mouvement qu'on attend
-       d'une dette datée. A7 l'a quittée à son tour avec `briefing_generate`, puis C4 avec
-       `egress_review`. */
-    expect(couverts).toBe(26);
-    expect(bloques).toBe(4);
+       d'une dette datée. A7 l'a quittée à son tour avec `briefing_generate`,
+       C4 avec `egress_review`, puis **B4 avec `web_search`** (ADR-055).
+
+       ⚠ CES DEUX LIGNES NE LISENT QUE LA TABLE, et il faut le dire ici plutôt
+         que de laisser croire le contraire : c'est le test au-dessus — « chaque
+         blocage prouve que ce qui manque manque encore » — qui rattache la
+         table au code. Seul, ce compteur n'a jamais rien garanti. */
+    expect(couverts).toBe(27);
+    expect(bloques).toBe(3);
     expect(bloques / ids.length).toBeLessThan(0.25);
   });
 

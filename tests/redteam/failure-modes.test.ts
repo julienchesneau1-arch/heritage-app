@@ -49,6 +49,7 @@ function faulty(
       attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
     inputSchema: z.object({ valeur: z.string() }),
     async execute() {

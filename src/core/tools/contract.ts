@@ -18,6 +18,7 @@ import type {
   EffectContract,
   EvidenceKind,
   PrivacyClass,
+  Provenance,
   Verifiability,
   VerificationStatus,
 } from '../types/domain.js';
@@ -167,6 +168,33 @@ export interface ToolDefinition {
    * à cette déclaration, sans lui faire confiance.
    */
   readonly verifiability: Verifiability;
+
+  /**
+   * CE QUE VAUT LA SORTIE DE CET OUTIL — ADR-004, `docs/03 §3`.
+   *
+   * Le champ qui manquait pour que la séparation Privileged/Quarantined puisse
+   * exister ailleurs que sur le papier.
+   *
+   *   `TOOL_OUTPUT`         la sortie vient de NOTRE code sur NOS données.
+   *                         Semi-fiable : elle peut être fausse, elle n'est pas
+   *                         hostile.
+   *   `EXTERNAL_UNTRUSTED`  la sortie contient du contenu écrit par un TIERS —
+   *                         page web, email, PDF, description d'outil MCP. Elle
+   *                         peut être hostile, et elle n'est JAMAIS une
+   *                         instruction.
+   *
+   * POURQUOI DANS LA DÉFINITION ET PAS DANS L'EXÉCUTION
+   * ----------------------------------------------------
+   * Même raisonnement que `dataCategory` : c'est un FAIT sur l'outil, connu à
+   * l'enregistrement. Le laisser à l'exécution reviendrait à ce qu'un outil
+   * décide au cas par cas si ce qu'il rend est fiable — c'est-à-dire à ce que
+   * la valeur potentiellement hostile choisisse sa propre étiquette.
+   *
+   * `docs/26 §4.1` recensait `quarantine/processor.ts` comme « implémenté,
+   * testé, JAMAIS APPELÉ : rien n'ingère aujourd'hui de contenu externe ». Ce
+   * champ est ce par quoi la première ingestion se déclare.
+   */
+  readonly outputProvenance: Provenance;
 }
 
 /** Ce que le Gateway fournit à l'outil au moment de l'exécution. */
@@ -447,6 +475,53 @@ export function validateDefinition(
         `(UNVERIFIABLE) et se déclare ${definition.autonomy} : un effet non ` +
         'observable ne peut pas être automatique. Exiger L3 (APPROVAL) ou L4.',
     );
+  }
+
+  /* UNE SORTIE D'OUTIL NE VAUT QUE DEUX CHOSES — ADR-055.
+
+     `USER`, `SYSTEM` et `MEMORY` désignent des origines qu'un outil ne PRODUIT
+     pas : il les consomme. Les autoriser ici permettrait à un outil de rendre
+     du contenu web en le présentant comme une parole de l'utilisateur — la
+     confusion exacte que la séparation Privileged/Quarantined existe pour
+     empêcher.
+
+     `MODEL_OUTPUT` est écarté pour une raison différente et volontairement
+     stricte : aucun outil du dépôt n'appelle de modèle. Le jour où l'un le
+     fera, cette règle devra être reprise — pas contournée. */
+  if (
+    definition.outputProvenance !== 'TOOL_OUTPUT' &&
+    definition.outputProvenance !== 'EXTERNAL_UNTRUSTED'
+  ) {
+    problems.push(
+      `${definition.id} déclare une sortie ${definition.outputProvenance} : ` +
+        'un outil ne rend que TOOL_OUTPUT ou EXTERNAL_UNTRUSTED.',
+    );
+  }
+
+  /* INGÉRER ET MUTER DANS LE MÊME OUTIL EST LE TROU QU'ADR-004 FERME.
+
+     Un outil qui rapporte du contenu de tiers ET change le monde dans le même
+     appel n'a aucune frontière entre les deux : le contenu hostile atteint
+     l'effet sans repasser par le Policy Gate. Le plan doit se reformer entre
+     l'ingestion et l'action, et c'est le Gateway qui en fait la garantie —
+     seulement si le contrat interdit de les fondre.
+
+     Concrètement : un outil ingérant est en LECTURE SEULE. Il rapporte, il ne
+     décide pas. */
+  if (definition.outputProvenance === 'EXTERNAL_UNTRUSTED') {
+    if (definition.autonomy !== 'L1') {
+      problems.push(
+        `${definition.id} rapporte du contenu externe et se déclare ` +
+          `${definition.autonomy} : un outil qui ingère est en lecture seule (L1). ` +
+          'Ingérer et muter dans le même appel supprime la frontière ADR-004.',
+      );
+    }
+    if (definition.verification !== 'NONE') {
+      problems.push(
+        `${definition.id} rapporte du contenu externe mais déclare une ` +
+          'vérification de mutation : un outil qui ingère ne mute pas.',
+      );
+    }
   }
 
   // Un outil en lecture seule ne prouve ni présence ni absence d'une mutation

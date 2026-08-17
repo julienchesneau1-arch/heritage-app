@@ -314,6 +314,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
         attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -353,6 +354,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
         attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
       },
       inputSchema: z.object({}),
       execute: () => Promise.resolve(ok({ output: null })),
@@ -397,6 +399,7 @@ describe.skipIf(skip)('Tool Gateway', () => {
           attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
         },
         inputSchema: z.object({}),
         execute: (_input, ctx) => {

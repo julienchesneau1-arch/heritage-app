@@ -3534,3 +3534,198 @@ Si un invariant devenait vérifiable par exécution plutôt que par citation, sa
 ligne devrait quitter ce registre pour un vrai test. Ce fichier mesure la
 traçabilité ; **il ne prouve aucun invariant, et ne doit jamais être invoqué
 comme s'il le faisait.**
+
+---
+
+## ADR-055 — Un outil déclare ce que vaut sa sortie, et la quarantaine entre en circuit
+
+**Statut :** accepté (Phase 3 point 6 — `web_search` ; ADR-004 mis en circuit).
+**Référence :** `docs/03 §3`, `docs/05 §B4`, `docs/26 §4.1`, ADR-004, ADR-054.
+
+### Le fait qui rendait ADR-004 décoratif
+
+`docs/26 §4.1` recensait `quarantine/processor.ts` — la séparation
+Privileged/Quarantined, **défense principale contre T1** — comme :
+
+> implémentée, testée, **JAMAIS APPELÉE** : rien n'ingère aujourd'hui de contenu
+> externe.
+
+Ce n'était pas un défaut tant que rien n'ingérait. Ça le devenait au premier
+outil qui rapporterait du contenu de tiers. `web_search` est cet outil, et il
+arrive **après** le Data Firewall — sans classification, une requête sortante
+n'aurait été bornée par rien.
+
+### Le champ qui manquait
+
+Le Tool Gateway n'avait aucun moyen de savoir qu'une sortie contenait du texte
+écrit par un inconnu. `ToolDefinition` gagne :
+
+```ts
+readonly outputProvenance: Provenance;   // TOOL_OUTPUT | EXTERNAL_UNTRUSTED
+```
+
+**Dans la DÉFINITION, pas dans l'exécution** — même discipline que
+`dataCategory`. Le laisser à l'exécution reviendrait à ce que la valeur
+potentiellement hostile choisisse sa propre étiquette.
+
+Le champ est **obligatoire**, sans valeur par défaut : les quinze outils
+existants ont dû se déclarer. Un défaut aurait laissé un futur outil ingérant
+passer pour du `TOOL_OUTPUT` par omission — le mode de panne exact qu'on veut
+rendre impossible.
+
+### Deux règles de contrat, et la seconde ferme un trou réel
+
+| | |
+|---|---|
+| Une sortie ne vaut que `TOOL_OUTPUT` ou `EXTERNAL_UNTRUSTED` | `USER`/`SYSTEM`/`MEMORY` permettraient de rendre du contenu web comme une parole de l'utilisateur |
+| **Un outil qui ingère est en LECTURE SEULE** | ingérer et muter dans le même appel supprime la frontière : le contenu hostile atteint l'effet sans repasser par le Policy Gate |
+
+### `sealExternal` — un chemin sans modèle, et il n'affaiblit rien
+
+`createQuarantine` suppose qu'un modèle extraie une donnée typée d'un texte
+libre : c'est le cas d'un email ou d'un PDF. Ce n'est pas celui d'un
+fournisseur qui rend déjà `{ title, url }` — la structure existe, seuls les
+contenus viennent de tiers.
+
+Exiger un modèle là où il n'y a rien à extraire aurait un coût et un seul effet :
+décourager l'ingestion, donc **laisser la séparation hors circuit**. Ce qui est
+scellé est identique dans les deux chemins : l'étiquetage n'est pas conditionnel,
+et la détection d'injection est la même fonction. **Le modèle n'a jamais été la
+protection** — il est l'outil d'extraction.
+
+### B4 — on REFUSE, on n'assainit pas silencieusement
+
+`docs/05 §B4` dit « la requête web est minimale et **assainie** ». Retirer
+discrètement un IBAN produirait le pire résultat : l'utilisateur croit avoir
+cherché ce qu'il a écrit, obtient autre chose, et **rien ne le lui dit**.
+
+On refuse donc, **avant tout appel réseau**, en nommant la NATURE de ce qui
+bloque — jamais sa valeur, qui atterrirait dans le journal. C'est plus strict
+que « assaini », et `CLAUDE.md` tranche : la sécurité gagne.
+
+Le détecteur est **explicitement pas la protection principale** contre T2 — le
+Data Firewall l'est, en amont, par le niveau de la donnée. Il attrape ce que le
+niveau ne voit pas : un identifiant glissé dans une requête `PERSONAL`
+légitime. Un détecteur pris pour une barrière est le mensonge le plus coûteux
+qu'on puisse écrire.
+
+### Le faux négatif sur le mot que B4 nomme
+
+Premier motif de montant : `…(?:€|EUR|euros?|\$|USD)\b`. Le `\b` final ne peut
+jamais s'ancrer après `€` ou `$` — caractères non-mot, et une frontière exige
+une transition. **`1 250,00 €` passait au travers**, sur l'exemple même que B4
+cite (« identifiants, **montants** ou données personnelles »).
+
+Le contrôle négatif l'a trouvé ; le cas nominal seul ne l'aurait pas fait.
+
+### Ce que cette étape a révélé sur le test doré — et qui est CORRIGÉ
+
+`docs/28` affirmait, à propos de `tests/golden/contract.test.ts` :
+
+> le compteur `couverts/bloqués` aurait échoué si on avait livré l'outil sans
+> retirer l'entrée.
+
+**C'était faux, et mesuré comme tel :**
+
+```text
+couverts = ids.length - bloques          ← ne lit pas le code
+bloques  = Object.keys(BLOQUES).length   ← ne lit pas le code
+```
+
+Les deux assertions se calculent uniquement à partir de la table. Livrer
+`web_search` en laissant `B4` déclaré bloqué laissait le test **vert**.
+
+C'est la même classe de défaut qu'ADR-054 : *une affirmation sur un mécanisme
+que le mécanisme ne fournit pas*. Deuxième occurrence en deux sprints, sur deux
+documents différents.
+
+**Corrigé de la même manière :** chaque entrée bloquée déclare désormais ce qui
+doit rester **absent**, et le test le vérifie — le registre des outils ne
+mentionne pas la capacité, ou `wiring.test.ts` liste encore le module comme
+orphelin. Un sabotage le confirme : réintroduire `B4` alors que `webSearchTool`
+est enregistré fait rougir le test en le nommant.
+
+### Ce qui bouge, mesuré
+
+| | Avant | Après |
+|---|---|---|
+| Scénarios dorés couverts | 26/30 | **27/30** (B4 payé) |
+| Modules de logique hors circuit | 6 | **5** (`quarantine/processor.ts` branché) |
+| Outils enregistrés | 15 | **16** |
+
+### Condition de révision
+
+Le jour où un outil devra appeler un modèle, `MODEL_OUTPUT` deviendra une
+sortie légitime et la première règle de contrat devra être reprise — **pas
+contournée**. De même, si un besoin réel d'ingestion mutante apparaît, il faudra
+deux outils et un passage par le Policy Gate entre eux, jamais un assouplissement
+de la seconde règle.
+
+---
+
+## ADR-056 — Un test qui corrompt un objet partagé doit le rendre intact
+
+**Statut :** accepté (infrastructure de test — aucun changement produit).
+**Référence :** `docs/26 §2.3`, ADR-012, ADR-055.
+
+### Trouvé en ajoutant un fichier, pas en cherchant
+
+`tests/security/ledger-chain.test.ts` corrompt **délibérément** l'Event Ledger —
+triggers désactivés, ligne réécrite — pour prouver que le chaînage par hash
+détecte l'altération quand les deux premières barrières tombent. C'est un bon
+test, et il doit exister.
+
+Deux de ses cas ne remettaient pas l'état :
+
+| Cas | Ce qui restait après |
+|---|---|
+| modification de contenu | `status = 'FAILED'` — chaîne rompue |
+| **suppression de maillon** | **le maillon manquant, définitivement** |
+
+Le journal est **partagé par toute la suite**. Quatre fichiers y appellent
+`verifyChain()`, et `system_status` le fait en production.
+
+**Mesuré :** `intent/flow.test.ts` — « la chaîne d'audit reste intacte après une
+session complète » — **vert seul, rouge en suite complète**. Ajouter
+`web-search.test.ts` a suffi à déplacer l'ordonnancement.
+
+### Ce qui rendait le défaut invisible
+
+Le second cas se « réparait » incidemment : le test SUIVANT du même fichier
+remettait le statut du premier.
+
+> Une dépendance d'ordre entre deux `it()` n'est pas un mécanisme. C'est une
+> coïncidence — qu'on remarque le jour où elle cesse.
+
+### La tentation, et pourquoi elle était mauvaise
+
+Le réflexe naturel devant un test rouge en suite et vert seul est de le
+soupçonner, lui. **L'assertion avait raison :** c'est la seule vérification
+d'intégrité de bout en bout du dépôt, et la relâcher aurait supprimé la
+détection au moment précis où elle venait de fonctionner.
+
+### La décision
+
+1. **Rendre l'objet intact.** Le maillon supprimé est sauvegardé puis réinséré
+   par `CREATE TABLE … AS SELECT *` — sans énumérer les colonnes, qui se
+   périmeraient à la prochaine migration. C'est exactement ce qui est arrivé
+   aux champs d'égression (ADR-052), et la leçon se réapplique ici.
+2. **Exclure les lecteurs pendant la fenêtre.** `withLedgerExclusive` prend un
+   verrou consultatif PostgreSQL sur une transaction dédiée. **Côté tests
+   uniquement** — le produit n'apprend rien de la suite qui l'exerce.
+
+`pg_advisory_xact_lock` et non sa variante de session : sur un pool, une
+connexion rendue conserverait un verrou de session et le relâcherait à un
+moment qu'on ne contrôle pas.
+
+### La règle qui généralise
+
+> On ne peut pas vérifier globalement l'intégrité d'un objet pendant qu'on le
+> corrompt volontairement ailleurs. Un test qui casse un invariant partagé doit
+> **le rétablir** et **exclure les autres** pendant qu'il le casse.
+
+### Condition de révision
+
+Si la suite passait à une base par fichier de test, l'exclusion deviendrait
+inutile — mais la **restauration** resterait exigible : elle protège aussi les
+`it()` du même fichier les uns des autres.

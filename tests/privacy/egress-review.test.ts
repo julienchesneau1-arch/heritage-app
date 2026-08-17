@@ -79,6 +79,7 @@ function sondeMeteo(): RegisteredTool {
       attemptVerification: 'NONE',
       effect: 'NO_EXTERNAL_EFFECT',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
     inputSchema: z.object({}),
     execute: () =>

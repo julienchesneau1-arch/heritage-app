@@ -78,6 +78,7 @@ export function memoryAddTool(
       // PostgreSQL ferme la fenêtre d'observation : une relecture qui ne
       // trouve rien PROUVE l'absence (ADR-030).
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
     inputSchema: MemoryAddInput,
 
@@ -201,6 +202,7 @@ export function memorySearchTool(search: HybridSearch): RegisteredTool {
       // PostgreSQL ferme la fenêtre d'observation : une relecture qui ne
       // trouve rien PROUVE l'absence (ADR-030).
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
     inputSchema: MemorySearchInput,
 

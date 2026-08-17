@@ -18,7 +18,12 @@ import {
   GENESIS_HASH,
 } from '../../src/core/ledger/event.js';
 import type { Db } from '../../src/core/db/client.js';
-import { appDb, databaseAvailable, superuserDb } from '../helpers/db.js';
+import {
+  appDb,
+  databaseAvailable,
+  superuserDb,
+  withLedgerExclusive,
+} from '../helpers/db.js';
 
 const skip = !databaseAvailable();
 
@@ -149,6 +154,11 @@ describe.skipIf(skip)('détection d\'altération du journal', () => {
     const avant = await ledger.verifyChain();
     expect(avant.ok && avant.value.valid).toBe(true);
 
+    /* FENÊTRE DE CORRUPTION — accès exclusif obligatoire.
+       Pendant qu'elle est ouverte, la chaîne est GLOBALEMENT invalide : un
+       lecteur concurrent d'un autre fichier verrait `valid: false` et
+       échouerait, à juste titre. Voir `withLedgerExclusive`. */
+    await withLedgerExclusive(root, async () => {
     const disable = await root.query('ALTER TABLE event_ledger DISABLE TRIGGER USER');
     expect(disable.ok).toBe(true);
     try {
@@ -177,9 +187,11 @@ describe.skipIf(skip)('détection d\'altération du journal', () => {
       );
       await root.query('ALTER TABLE event_ledger ENABLE TRIGGER USER');
     }
+    });
   });
 
   it('une modification de contenu est détectée, triggers désactivés', async () => {
+    await withLedgerExclusive(root, async () => {
     // On simule la chute des deux premières barrières.
     const disable = await root.query(
       'ALTER TABLE event_ledger DISABLE TRIGGER USER',
@@ -203,10 +215,28 @@ describe.skipIf(skip)('détection d\'altération du journal', () => {
         expect(report.value.brokenAt?.reason).toMatch(/altéré/i);
       }
     } finally {
-      // Restaurer l'état, quoi qu'il arrive : un test qui laisse la protection
-      // désactivée est pire que pas de test du tout.
+      /* Restaurer l'état, quoi qu'il arrive : un test qui laisse la protection
+         désactivée est pire que pas de test du tout.
+
+         ⚠ ET RESTAURER LA VALEUR, PAS SEULEMENT LE TRIGGER. Ce `finally` ne
+         réarmait que les triggers : le statut restait `FAILED`, donc la chaîne
+         rompue jusqu'à ce qu'un test SUIVANT la répare incidemment. Une
+         dépendance d'ordre entre deux `it()` n'est pas un mécanisme — c'est
+         une coïncidence qu'on remarque le jour où elle cesse. */
+      await root.query(
+        `UPDATE event_ledger SET status = 'CONFIRMED'
+          WHERE seq = (SELECT seq FROM event_ledger
+                        WHERE event_type = 'CHAIN_TEST' ORDER BY seq ASC LIMIT 1)`,
+      );
       await root.query('ALTER TABLE event_ledger ENABLE TRIGGER USER');
     }
+    });
+
+    // La chaîne est rendue INTACTE à la sortie : c'est ce qui rend ce fichier
+    // exécutable en parallèle des quatre autres qui la vérifient.
+    const apres = await ledger.verifyChain();
+    expect(apres.ok).toBe(true);
+    if (apres.ok) expect(apres.value.valid).toBe(true);
   });
 
   it('les triggers sont bien réactivés après le test', async () => {
@@ -218,36 +248,73 @@ describe.skipIf(skip)('détection d\'altération du journal', () => {
   });
 
   it('une suppression de maillon est détectée', async () => {
-    const disable = await root.query(
-      'ALTER TABLE event_ledger DISABLE TRIGGER USER',
-    );
-    expect(disable.ok).toBe(true);
+    /* ⚠ CE TEST LAISSAIT LA CHAÎNE ROMPUE POUR TOUTE LA SUITE.
 
-    try {
-      // On répare d'abord le maillon altéré par le test précédent, pour
-      // isoler ce que ce test-ci démontre.
-      await root.query(
-        `UPDATE event_ledger SET status = 'CONFIRMED'
-          WHERE event_type = 'CHAIN_TEST'
-            AND seq = (SELECT min(seq) FROM event_ledger WHERE event_type = 'CHAIN_TEST')`,
+       Les deux tests d'altération au-dessus restauraient dans leur `finally` ;
+       celui-ci, non — un maillon supprimé ne se répare pas en réécrivant une
+       colonne. Le journal étant PARTAGÉ, tout fichier s'exécutant ensuite et
+       appelant `verifyChain()` voyait `valid: false`.
+
+       Mesuré : `intent/flow.test.ts` — « la chaîne d'audit reste intacte après
+       une session complète » — vert seul, rouge en suite complète. Le défaut
+       était LATENT depuis toujours et masqué par l'ordre d'exécution ; ajouter
+       un fichier de test a suffi à le révéler.
+
+       Le maillon est donc SAUVEGARDÉ avant suppression et réinséré ensuite.
+       `CREATE TABLE … AS SELECT *` copie toutes les colonnes sans les
+       énumérer : une liste manuelle se périmerait à la première migration —
+       exactement ce qui est arrivé aux champs d'égression (ADR-052). */
+    await withLedgerExclusive(root, async () => {
+      const disable = await root.query(
+        'ALTER TABLE event_ledger DISABLE TRIGGER USER',
       );
+      expect(disable.ok).toBe(true);
 
-      // Suppression d'un maillon intermédiaire : le suivant pointe désormais
-      // vers un hash absent de la chaîne.
-      await root.query(
-        `DELETE FROM event_ledger
-          WHERE seq = (SELECT seq FROM event_ledger
-                        WHERE event_type = 'CHAIN_TEST' ORDER BY seq ASC OFFSET 1 LIMIT 1)`,
-      );
+      try {
+        // On répare d'abord le maillon altéré par le test précédent, pour
+        // isoler ce que ce test-ci démontre.
+        await root.query(
+          `UPDATE event_ledger SET status = 'CONFIRMED'
+            WHERE event_type = 'CHAIN_TEST'
+              AND seq = (SELECT min(seq) FROM event_ledger WHERE event_type = 'CHAIN_TEST')`,
+        );
 
-      const report = await ledger.verifyChain();
-      expect(report.ok).toBe(true);
-      if (report.ok) {
-        expect(report.value.valid).toBe(false);
-        expect(report.value.brokenAt?.reason).toMatch(/chaînage rompu/i);
+        await root.query('DROP TABLE IF EXISTS chain_test_backup');
+        const sauve = await root.query(
+          `CREATE TABLE chain_test_backup AS
+             SELECT * FROM event_ledger
+              WHERE seq = (SELECT seq FROM event_ledger
+                            WHERE event_type = 'CHAIN_TEST' ORDER BY seq ASC OFFSET 1 LIMIT 1)`,
+        );
+        expect(sauve.ok).toBe(true);
+
+        // Suppression d'un maillon intermédiaire : le suivant pointe désormais
+        // vers un hash absent de la chaîne.
+        await root.query(
+          `DELETE FROM event_ledger
+            WHERE seq = (SELECT seq FROM event_ledger
+                          WHERE event_type = 'CHAIN_TEST' ORDER BY seq ASC OFFSET 1 LIMIT 1)`,
+        );
+
+        const report = await ledger.verifyChain();
+        expect(report.ok).toBe(true);
+        if (report.ok) {
+          expect(report.value.valid).toBe(false);
+          expect(report.value.brokenAt?.reason).toMatch(/chaînage rompu/i);
+        }
+      } finally {
+        // Remettre le maillon AVANT de réarmer les triggers : après, l'INSERT
+        // serait refusé comme toute écriture hors chemin applicatif.
+        await root.query('INSERT INTO event_ledger SELECT * FROM chain_test_backup');
+        await root.query('DROP TABLE IF EXISTS chain_test_backup');
+        await root.query('ALTER TABLE event_ledger ENABLE TRIGGER USER');
       }
-    } finally {
-      await root.query('ALTER TABLE event_ledger ENABLE TRIGGER USER');
-    }
+    });
+
+    // LA PREUVE QUE LA RÉPARATION A EU LIEU — sans elle, on aurait déplacé le
+    // problème au lieu de le corriger.
+    const apres = await ledger.verifyChain();
+    expect(apres.ok).toBe(true);
+    if (apres.ok) expect(apres.value.valid).toBe(true);
   });
 });

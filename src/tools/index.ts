@@ -12,7 +12,7 @@ import type { Ledger } from '../core/ledger/ledger.js';
 import type { MemoryGuard } from '../core/memory/guard.js';
 import type { MemoryStore } from '../core/memory/store.js';
 import type { HybridSearch } from '../core/memory/search.js';
-import type { CalendarProvider } from '../providers/contract.js';
+import type { CalendarProvider, SearchProvider } from '../providers/contract.js';
 import { ok, type Result } from '../core/types/result.js';
 import { memoryAddTool, memorySearchTool } from './memory.js';
 import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
@@ -23,6 +23,7 @@ import { briefingGenerateTool } from './briefing.js';
 import { reminderCreateTool } from './reminders.js';
 import { systemStatusTool } from './status.js';
 import { egressReviewTool } from './egress.js';
+import { webSearchTool } from './web.js';
 import {
   calendarCreateTool,
   calendarReadTool,
@@ -58,6 +59,18 @@ export interface ToolDeps {
    * Sans racine, `file_search` REFUSE — il ne cherche pas dans le vide.
    */
   readonly fileRoots?: readonly string[];
+  /**
+   * Fournisseur de recherche web, ou `null`.
+   *
+   * Même raisonnement que `calendar` : `null` est l'état NORMAL du dépôt, pas
+   * une panne. L'outil s'enregistre quand même et rend `PROVIDER_UNAVAILABLE` — une
+   * réponse, là où l'absence d'outil n'en serait pas une.
+   *
+   * C'est aussi le seul outil dont la sortie est `EXTERNAL_UNTRUSTED`
+   * (ADR-055) : le brancher met en circuit la séparation
+   * Privileged/Quarantined, restée hors circuit depuis ADR-004.
+   */
+  readonly websearch?: SearchProvider | null;
 }
 
 /**
@@ -111,6 +124,11 @@ export function registerCoreTools(
     /* Phase 4, étape F3 — scénario doré C4. « Montre-moi ce qui est parti sur
        Internet » : où, quelle classe, pourquoi (ADR-052). */
     egressReviewTool(),
+    /* Phase 3, point 6 — dernier outil du plan, et PREMIÈRE INGESTION de
+       contenu externe du dépôt. Il arrive après le Data Firewall, pas avant :
+       sans classification, une requête sortante n'aurait été bornée par
+       rien (ADR-055, scénario doré B4). */
+    webSearchTool(deps.websearch ?? null),
   ];
 
   for (const tool of tools) {
@@ -135,4 +153,5 @@ export {
   reminderCreateTool,
   systemStatusTool,
   egressReviewTool,
+  webSearchTool,
 };

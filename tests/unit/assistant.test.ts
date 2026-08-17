@@ -37,6 +37,8 @@ function success(): GatewayResult {
     policy: { decision: 'ALLOW', effectiveAutonomy: 'L2', reasons: [] },
     eventId: 'evt-1',
     replayed: false,
+    provenance: 'TOOL_OUTPUT',
+    suspectedInjection: false,
   };
 }
 

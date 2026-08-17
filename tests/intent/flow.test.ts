@@ -19,7 +19,7 @@ import { mint } from '../../src/core/tools/identity.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createIntentEngine } from '../../src/core/intent/engine.js';
 import type { Db } from '../../src/core/db/client.js';
-import { appDb, databaseAvailable } from '../helpers/db.js';
+import { appDb, databaseAvailable, withLedgerExclusive } from '../helpers/db.js';
 import { buildStack, type Stack } from '../helpers/stack.js';
 
 const skip = !databaseAvailable();
@@ -145,7 +145,16 @@ describe.skipIf(skip)('phrase française → action vérifiée', () => {
   });
 
   it('la chaîne d\'audit reste intacte après une session complète', async () => {
-    const chain = await stack.ledger.verifyChain();
+    /* ACCÈS EXCLUSIF — et ce n'est pas de la prudence décorative.
+
+       `ledger-chain.test.ts` corrompt DÉLIBÉRÉMENT ce journal, partagé par
+       toute la suite, pour prouver que le chaînage détecte l'altération.
+       Pendant cette fenêtre, la chaîne est globalement invalide.
+
+       Ce test était vert seul et rouge en suite complète. L'assertion avait
+       raison ; c'est l'accès concurrent qui était faux. L'affaiblir aurait
+       supprimé la seule vérification d'intégrité de bout en bout du dépôt. */
+    const chain = await withLedgerExclusive(db, () => stack.ledger.verifyChain());
     expect(chain.ok).toBe(true);
     if (chain.ok) expect(chain.value.valid).toBe(true);
   });

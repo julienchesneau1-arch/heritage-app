@@ -21,7 +21,7 @@ import net from 'node:net';
 import dns from 'node:dns';
 import { z } from 'zod';
 import type { Db } from '../../src/core/db/client.js';
-import { appDb, databaseAvailable } from '../helpers/db.js';
+import { appDb, databaseAvailable, withLedgerExclusive } from '../helpers/db.js';
 import { buildRuntime, type Runtime } from '../../src/apps/runtime.js';
 
 const skip = !databaseAvailable();
@@ -165,7 +165,9 @@ describe.skipIf(skip)('RED TEAM — rien ne sort de la machine', () => {
   });
 
   it('la lecture du journal d\'audit ne sort pas non plus', async () => {
-    const chain = await runtime.ledger.verifyChain();
+    // Accès exclusif : `ledger-chain.test.ts` corrompt volontairement ce
+    // journal partagé (voir `withLedgerExclusive`).
+    const chain = await withLedgerExclusive(db, () => runtime.ledger.verifyChain());
     expect(chain.ok).toBe(true);
     await runtime.ledger.recent(50);
     expect(offenders()).toEqual([]);

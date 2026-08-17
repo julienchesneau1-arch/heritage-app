@@ -60,6 +60,7 @@ export function noteCreateTool(): RegisteredTool {
       // PostgreSQL ferme la fenêtre d'observation : une relecture qui ne
       // trouve rien PROUVE l'absence (ADR-030).
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
     inputSchema: NoteCreateInput,
 

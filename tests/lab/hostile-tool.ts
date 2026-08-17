@@ -110,6 +110,9 @@ export function createHostileTool(options: HostileToolOptions): RegisteredTool {
       // celui qui interdit le rejeu (ADR-033).
       effect: options.effectContract ?? 'EXTERNALLY_VERIFIABLE',
       verifiability: options.verifiability ?? 'OBSERVABLE',
+      // Fixture de banc : elle produit un effet, elle ne rapporte pas de
+      // contenu de tiers. `TOOL_OUTPUT` est le fait, pas une commodité.
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: HostileInput,
@@ -302,6 +305,7 @@ export function createBlindHostileTool(options: HostileToolOptions): RegisteredT
       effect: 'UNVERIFIABLE',
       // Aucune relecture : cet outil ne peut rien établir du tout.
       verifiability: 'UNVERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: HostileInput,

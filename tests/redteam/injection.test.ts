@@ -63,6 +63,11 @@ const ENTREES_VALIDES: Readonly<Record<string, unknown>> = {
     startsAt: '2026-08-16T09:00:00.000Z',
   },
   briefing_generate: { limit: 5 },
+  /* `web_search` est SORTANT par contrat, et pas par fournisseur branché
+     (ADR-055) : il apparaît donc toujours dans cette boucle. La requête est
+     volontairement anodine — ce qui est éprouvé ici est le REFUS par la
+     politique, pas le détecteur de fuite de l'outil, qui vit ailleurs. */
+  web_search: { query: 'sujet anodin', limit: 3 },
 };
 
 

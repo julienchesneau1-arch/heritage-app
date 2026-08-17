@@ -75,6 +75,7 @@ export function reminderCreateTool(): RegisteredTool {
       attemptVerification: 'NONE',
       effect: 'LOCAL_TRANSACTIONAL',
       verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
     },
 
     inputSchema: ReminderCreateInput,

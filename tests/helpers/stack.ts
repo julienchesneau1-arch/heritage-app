@@ -23,7 +23,11 @@ import {
 } from '../../src/providers/policy/cedar.js';
 import { registerCoreTools } from '../../src/tools/index.js';
 import type { Db } from '../../src/core/db/client.js';
-import type { CalendarProvider, EmbeddingProvider } from '../../src/providers/contract.js';
+import type {
+  CalendarProvider,
+  EmbeddingProvider,
+  SearchProvider,
+} from '../../src/providers/contract.js';
 import type { Ledger } from '../../src/core/ledger/ledger.js';
 import type { MemoryStore } from '../../src/core/memory/store.js';
 import type { RegisteredTool } from '../../src/core/tools/contract.js';
@@ -47,6 +51,8 @@ export function buildStack(
     calendar?: CalendarProvider | null;
     /** Vide par défaut : l'état réel du dépôt, aucune racine autorisée. */
     fileRoots?: readonly string[];
+    /** `undefined` reproduit le dépôt : aucun fournisseur de recherche. */
+    websearch?: SearchProvider | null;
   } = {},
 ): Stack {
   const source = loadPolicySource(join(process.cwd(), 'policies'));
@@ -77,6 +83,7 @@ export function buildStack(
     isUserConfirmed: () => userConfirmed,
     calendar: options.calendar ?? null,
     fileRoots: options.fileRoots ?? [],
+    websearch: options.websearch ?? null,
   });
   if (!registered.ok) throw new Error(registered.error.message);
 
