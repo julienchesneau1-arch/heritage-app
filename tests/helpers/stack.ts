@@ -73,6 +73,7 @@ export function buildStack(
     guard,
     store,
     search,
+    ledger,
     isUserConfirmed: () => userConfirmed,
     calendar: options.calendar ?? null,
     fileRoots: options.fileRoots ?? [],

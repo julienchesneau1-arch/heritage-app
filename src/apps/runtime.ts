@@ -78,6 +78,7 @@ export function buildRuntime(db: Db, options: { policyDir?: string } = {}): Resu
     // Aucun fournisseur d'embeddings : la voie sémantique est indisponible, les
     // deux autres fonctionnent. C'est exactement le chemin « réseau coupé ».
     search: createHybridSearch(db, null),
+    ledger,
     isUserConfirmed: () => userConfirmed,
   });
   if (!registered.ok) return registered;

@@ -8,6 +8,7 @@
  * sans y passer plus de temps qu'à s'en servir.
  */
 import type { ToolGateway } from '../core/tools/gateway.js';
+import type { Ledger } from '../core/ledger/ledger.js';
 import type { MemoryGuard } from '../core/memory/guard.js';
 import type { MemoryStore } from '../core/memory/store.js';
 import type { HybridSearch } from '../core/memory/search.js';
@@ -19,6 +20,8 @@ import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
 import { fileSearchTool } from './files.js';
 import { briefingGenerateTool } from './briefing.js';
+import { reminderCreateTool } from './reminders.js';
+import { systemStatusTool } from './status.js';
 import {
   calendarCreateTool,
   calendarReadTool,
@@ -26,6 +29,8 @@ import {
 } from './calendar.js';
 
 export interface ToolDeps {
+  /** Le journal, pour que `system_status` puisse en vérifier la chaîne. */
+  readonly ledger: Ledger;
   readonly guard: MemoryGuard;
   readonly store: MemoryStore;
   readonly search: HybridSearch;
@@ -96,6 +101,12 @@ export function registerCoreTools(
        laquelle manque : un briefing partiel doit se déclarer partiel
        (ADR-047). */
     briefingGenerateTool(deps.calendar ?? null),
+    /* Phase 3, point 8. Rien ne sonne dans ce dépôt : le rappel se présente
+       dans le briefing, et l'outil le DIT (ADR-048). */
+    reminderCreateTool(),
+    /* Phase 3, point 9 — le dernier des dix accessibles. Un état qui ne peut
+       pas dire « ça ne va pas » ne dit rien quand ça va (ADR-049). */
+    systemStatusTool(deps.ledger),
   ];
 
   for (const tool of tools) {
@@ -117,4 +128,6 @@ export {
   calendarUpdateTool,
   fileSearchTool,
   briefingGenerateTool,
+  reminderCreateTool,
+  systemStatusTool,
 };

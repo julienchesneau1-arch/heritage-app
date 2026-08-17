@@ -60,11 +60,12 @@ function stack(connection: Db) {
   if (!source.ok) throw new Error(source.error.message);
 
   const store = createMemoryStore(connection);
+  const ledger = createLedger(connection);
   const gateway = createToolGateway({
     db: connection,
     gate: createPolicyGate(createCedarEvaluator(source.value)),
     vault: createEnvSecretVault({}),
-    ledger: createLedger(connection),
+    ledger,
     verifier: createVerificationEngine(),
   });
 
@@ -72,11 +73,12 @@ function stack(connection: Db) {
     guard: createMemoryGuard(store, createMemoryInbox(connection)),
     store,
     search: createHybridSearch(connection, null),
+    ledger,
     isUserConfirmed: () => true,
   });
   if (!registered.ok) throw new Error(registered.error.message);
 
-  return { gateway, ledger: createLedger(connection), snapshots: createSnapshotStore(connection) };
+  return { gateway, ledger, snapshots: createSnapshotStore(connection) };
 }
 
 let seq = 0;

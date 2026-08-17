@@ -1,6 +1,11 @@
 /**
  * `briefing_generate` — Phase 3, point 7. Scénario doré **A7**.
  *
+ * Une QUATRIÈME section s'est ajoutée après coup : les rappels du jour. A7 en
+ * nomme trois, et n'en interdit pas une de plus — son seul interdit porte sur
+ * la modification. Sans elle, `reminder_create` ne livrerait rien du tout :
+ * rien ne sonne dans ce dépôt (ADR-048).
+ *
  *   > **Entrée :** « Prépare ma journée. »
  *   > **Attendu :** agenda + tâches urgentes + points en attente, résumé.
  *   > **Aucune modification.**
@@ -70,6 +75,12 @@ interface TacheRow {
   due_at: Date | null;
 }
 
+interface RappelRow {
+  id: string;
+  text: string;
+  remind_at: Date;
+}
+
 interface AttenteRow {
   operation_id: string;
   tool_id: string;
@@ -132,6 +143,7 @@ export function briefingGenerateTool(
           output: {
             agenda: indisponible<never>("l'horloge de la base n'a pas répondu"),
             taches: indisponible<never>('bornes du jour inconnues'),
+            rappels: indisponible<never>('bornes du jour inconnues'),
             enAttente: indisponible<never>('bornes du jour inconnues'),
             complet: false,
           },
@@ -191,7 +203,27 @@ export function briefingGenerateTool(
         [String(input.limit)],
       );
 
-      /* --- 3. POINTS EN ATTENTE ----------------------------------------- */
+      /* --- 3. RAPPELS DU JOUR ------------------------------------------- */
+      /* SANS CETTE SECTION, `reminder_create` NE LIVRE RIEN.
+
+         Aucun ordonnanceur n'existe : un rappel ne sonne pas, il se présente
+         quand on prépare sa journée. C'est ici — et nulle part ailleurs —
+         qu'il le fait (ADR-048).
+
+         La borne haute est `fin`, calculée par la base comme le reste. Les
+         rappels déjà dépassés sont inclus : `reminder_create` refuse d'en
+         créer dans le passé, mais un rappel créé hier pour ce matin est
+         légitimement en retard, et l'escamoter serait le perdre. */
+      const rappels = await ctx.db.query<RappelRow>(
+        `SELECT id, text, remind_at
+           FROM reminders
+          WHERE state = 'PENDING' AND remind_at < $1
+          ORDER BY remind_at ASC, id ASC
+          LIMIT $2`,
+        [bornes.fin.toISOString(), String(input.limit)],
+      );
+
+      /* --- 4. POINTS EN ATTENTE ----------------------------------------- */
       /* Ce que Jarvis a commencé sans pouvoir conclure. `UNKNOWN` est le cas
          qui exige vraiment un humain : personne d'autre ne peut trancher ce
          que le système ne sait pas observer. */
@@ -214,6 +246,16 @@ export function briefingGenerateTool(
           }
         : indisponible(`tâches illisibles : ${taches.error.message}`);
 
+      const sectionRappels: Section<{ text: string; remindAt: string }> = rappels.ok
+        ? {
+            etat: 'OK',
+            items: rappels.value.rows.map((r) => ({
+              text: r.text,
+              remindAt: r.remind_at.toISOString(),
+            })),
+          }
+        : indisponible(`rappels illisibles : ${rappels.error.message}`);
+
       const sectionAttente: Section<{
         operationId: string;
         tool: string;
@@ -229,13 +271,14 @@ export function briefingGenerateTool(
           }
         : indisponible(`points en attente illisibles : ${attente.error.message}`);
 
-      const sections = [agenda, sectionTaches, sectionAttente];
+      const sections = [agenda, sectionTaches, sectionRappels, sectionAttente];
 
       return ok({
         output: {
           jour: bornes.debut.toISOString(),
           agenda,
           taches: sectionTaches,
+          rappels: sectionRappels,
           enAttente: sectionAttente,
           /* LE DRAPEAU QUI EMPÊCHE LE MENSONGE PAR COMPOSITION.
 

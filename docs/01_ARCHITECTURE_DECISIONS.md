@@ -2913,3 +2913,158 @@ juger de l'urgence autrement que par une échéance — il lui faudra un modèle
 cette ADR tombe : ce serait un outil d'une autre nature, soumis à `docs/15` et à
 la règle « une sortie de modèle est une entrée non fiable ». Aujourd'hui,
 « résumé » veut dire *présenté par rubriques*, et rien d'autre.
+
+---
+
+## ADR-048 — Un rappel qui ne sonne pas le dit
+
+**Statut :** accepté (Phase 3). **Référence :** `docs/02 §Phase 3`, `CLAUDE.md`
+règle 3, ADR-047.
+
+### L'arbitrage, posé avant d'écrire
+
+Mesuré : **il n'existe dans le dépôt ni ordonnanceur, ni minuterie applicative,
+ni canal de notification.** Rien ne peut faire sonner quoi que ce soit à une
+heure donnée.
+
+> Un « rappel » qui ne sonne pas est un mensonge porté par son nom.
+
+C'est la règle 3 — *jamais de succès non vérifié* — appliquée non pas à un effet
+mais à une **promesse**. Et c'est sa forme la plus difficile à repérer : rien
+n'échoue, rien ne s'affiche en rouge, la déception arrive des heures plus tard.
+
+### Trois issues, et une seule tient
+
+| | |
+|---|---|
+| ne pas écrire l'outil | `docs/02` le nomme ; réduire le périmètre n'est pas ma décision |
+| l'écrire et se taire | exactement le mensonge ci-dessus |
+| **l'écrire et le dire** | retenu |
+
+**Décision :** l'outil crée le rappel et **déclare** qu'aucun mécanisme ne le
+délivrera — `delivery: 'NONE'`, avec le motif en toutes lettres.
+
+### Ce qui empêche que ce soit du théâtre
+
+Un rappel stocké et invisible ne vaut rien. Il gagne son existence parce que
+`briefing_generate` existe :
+
+> Il ne sonne pas. **Il se présente.**
+
+Une quatrième section a donc été ajoutée au briefing. A7 en nomme trois et n'en
+interdit pas une de plus — son seul interdit porte sur la modification. Sans
+elle, `reminder_create` ne livrerait rien du tout, et la promesse
+`surfacedIn: ['briefing_generate']` serait le même mensonge, déplacé d'un cran.
+D'où un test qui vérifie la promesse **là où elle est faite** : le rappel créé
+doit apparaître dans le briefing.
+
+### L'horloge de la base tranche, et doublement
+
+`reminder_create` refuse une échéance déjà passée — puisque rien ne sonne, un
+rappel créé dans le passé n'aurait aucune chance de servir. La comparaison est
+faite par `clock_timestamp()`, jamais par `Date.now()` : l'échéance sera relue
+par le briefing, qui interroge lui aussi l'horloge de la base. Deux horloges pour
+un même fait produiraient un rappel accepté comme futur par l'outil et déjà
+dépassé pour le briefing.
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| `delivery` / `surfacedIn` retirés (promesse muette) | **1 / 7** |
+| section rappels retirée du briefing | **1 / 7** |
+| « déjà passé » tranché par le processus | **1 / 7** |
+
+### La dette d'annulation, comptée
+
+`reminder_cancel` est le **cinquième** outil inverse déclaré et non écrit, après
+`task_cancel`, `note_delete`, `memory_forget`, `calendar_delete`. ADR-019
+l'autorise explicitement — « la capture est un enregistrement, pas une
+exécution » — mais le lot grandit à chaque outil mutant, et l'Undo Engine devra
+les livrer ensemble.
+
+### Condition de révision
+
+Le jour où un ordonnanceur existe, `delivery` doit changer de valeur **et** le
+mécanisme doit être vérifiable au sens de `docs/16` : « le rappel a sonné » ne
+sera pas plus crédible que « l'email est envoyé » sans preuve de délivrance.
+
+---
+
+## ADR-049 — Un état qui ne peut pas alerter ne dit rien
+
+**Statut :** accepté (Phase 3). **Référence :** `docs/02 §Phase 3`, ADR-019,
+ADR-036, ADR-037.
+
+### Le mode de panne d'un tableau de bord
+
+> Un « tout va bien » est la réponse la plus facile à écrire et la plus facile à
+> rendre fausse : il suffit de ne pas regarder, ou de regarder ce qui ne risque
+> rien.
+
+D'où trois choix de forme :
+
+**Trois contrôles seulement**, chacun parce qu'il peut mal aller *sans bruit* :
+la chaîne du journal (seule vérification qui invalide **rétroactivement** ce qui
+a déjà été affirmé), les opérations sans issue, les instantanés d'annulation qui
+expirent — sept jours, après quoi l'action devient définitivement non annulable
+sans que rien ne le signale.
+
+**Pas de « base OK ».** Si la base ne répondait pas, cet outil ne répondrait pas
+non plus. Un contrôle qui ne peut pas échouer séparément de son appelant ne
+mesure rien.
+
+**`INCONNU` est un troisième verdict.** Ne pas avoir pu regarder n'est pas avoir
+regardé, et fondre les deux est exactement ce qui rend un tableau de bord
+rassurant et inutile. Le verdict global est le **pire** des contrôles, jamais une
+moyenne.
+
+### Le défaut que le premier test a démoli
+
+Première rédaction du contrôle 2 :
+
+```sql
+WHERE state IN ('UNKNOWN', 'COMMITTED_TO_EXECUTION', 'EXECUTING')
+```
+
+**`system_status` est lui-même `EXECUTING` pendant qu'il compte.** L'observateur
+se comptait dans ce qu'il observait, et le tableau de bord signalait une
+opération en suspens *en permanence*.
+
+> Une alerte toujours allumée est une alerte éteinte.
+
+La correction n'a pas été de s'exclure par identifiant — emplâtre qui aurait
+laissé passer toute autre opération en cours. Elle a été de distinguer **en vol**
+d'**abandonné**, information que le bail porte déjà (ADR-035) :
+
+| État | Lecture |
+|---|---|
+| `UNKNOWN` | terminal, observé, issue inconnue → un humain |
+| en vol, bail **vivant** | quelqu'un travaille → rien à signaler |
+| en vol, bail **périmé** | plus personne ne travaille → abandonnée |
+
+### Le sens du `COALESCE` est INVERSE de celui d'ADR-036
+
+Et c'est délibéré. ADR-036 décide s'il faut **laisser écrire** : *fail-closed* y
+signifie « en cas de doute, refuser », donc un bail sans échéance vaut `infinity`.
+
+Ici on décide s'il faut **prévenir un humain** : *fail-closed* signifie « en cas
+de doute, prévenir ». Une opération déclarée en vol sans échéance de bail n'est
+pas vivante pour l'éternité — c'est une anomalie, et elle se rapporte.
+
+Deux directions opposées pour un même mot, parce que la question n'est pas la
+même. Le noter ici évite qu'on « harmonise » un jour les deux.
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| retour à la première rédaction (l'observateur se compte) | **2 / 9** |
+| verdict global optimiste (`OK` dès qu'un contrôle est `OK`) | **3 / 9** |
+| un contrôle retiré en silence | **3 / 9** |
+
+### Condition de révision
+
+Chaque nouveau mécanisme qui peut se dégrader silencieusement doit ajouter son
+contrôle ici — et le compteur `controlesEffectues`, asserté en test, est ce qui
+empêche qu'un contrôle disparaisse « parce qu'il était bruyant ».
