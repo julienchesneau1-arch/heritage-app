@@ -40,6 +40,8 @@ export function taskCreateTool(): RegisteredTool {
       description: 'Créer une tâche.',
       autonomy: 'L2',
       privacyClass: 'ORANGE',
+      /* `docs/14 §3` place TASK au plancher PERSONAL. */
+      dataCategory: 'TASK',
       reversible: true,
       networkRequired: false,
       parameters: [
@@ -156,6 +158,8 @@ export function taskListTool(): RegisteredTool {
       description: 'Lister les tâches.',
       autonomy: 'L1',
       privacyClass: 'ORANGE',
+      /* idem. */
+      dataCategory: 'TASK',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'state', sensitive: false }],
@@ -233,6 +237,8 @@ export function taskCompleteTool(): RegisteredTool {
          mutation trouverait une raison d'être l'exception. */
       autonomy: 'L2',
       privacyClass: 'ORANGE',
+      /* idem. */
+      dataCategory: 'TASK',
       reversible: true,
       networkRequired: false,
       parameters: [{ name: 'taskId', sensitive: false }],

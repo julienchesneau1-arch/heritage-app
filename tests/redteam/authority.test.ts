@@ -14,10 +14,30 @@ import type { Db } from '../../src/core/db/client.js';
 import { appDb, databaseAvailable } from '../helpers/db.js';
 import { buildStack, callContext, operationId, type Stack } from '../helpers/stack.js';
 import { defineTool } from '../../src/core/tools/contract.js';
-import { ok } from '../../src/core/types/result.js';
+import { err, ok, jarvisError } from '../../src/core/types/result.js';
+import type { CalendarProvider } from '../../src/providers/contract.js';
 import type { ToolCall } from '../../src/core/tools/gateway.js';
 
 const skip = !databaseAvailable();
+
+/** Fournisseur d'agenda CLOUD — `local: false`, donc l'outil sort vraiment. */
+function agendaCloud(): CalendarProvider {
+  return {
+    capabilities: {
+      id: 'agenda-cloud-fictif',
+      local: false,
+      requiresNetwork: true,
+      maxPrivacyClass: 'ORANGE',
+      costPerMillionTokensEur: 0,
+    },
+    health: () => Promise.resolve(ok({ available: true })),
+    listEvents: () => Promise.resolve(ok([])),
+    createEvent: () => Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre'))),
+    updateEvent: () => Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre'))),
+    verifyEvent: () => Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre'))),
+  };
+}
+
 
 /**
  * Entrée VALIDE par outil sortant.
@@ -63,6 +83,8 @@ function trap(
       description: 'Outil de test red team',
       autonomy,
       privacyClass: overrides.privacyClass ?? 'RED',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: overrides.networkRequired ?? false,
       parameters: [
@@ -183,6 +205,8 @@ describe.skipIf(skip)('RED TEAM — le modèle propose, le système décide', ()
       policyDecision: 'ALLOW',
       egress: false,
       privacyClass: 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
     });
 
     const before = executions;
@@ -297,7 +321,8 @@ describe.skipIf(skip)('RED TEAM — le modèle propose, le système décide', ()
        remplacer une preuve par une liste d'exceptions, et la liste
        grandirait. On la remplace par la propriété qu'elle visait vraiment —
        **rien ne sort sans autorisation d'égression.** */
-    const core = stack.gateway
+    const sortant = buildStack(db, { calendar: agendaCloud() });
+    const core = sortant.gateway
       .list()
       .filter((t) => !t.definition.id.startsWith('redteam_'));
 
@@ -310,11 +335,22 @@ describe.skipIf(skip)('RED TEAM — le modèle propose, le système décide', ()
       expect(tool.definition.id).not.toMatch(/shell|exec|eval|command|http/i);
     }
 
+
+    /* LE DÉPÔT N'A PLUS AUCUN OUTIL SORTANT PAR DÉFAUT — et c'est vrai.
+
+       Depuis ADR-051, `networkRequired` est dérivé du fournisseur branché.
+       Aucun fournisseur n'est configuré dans ce dépôt, donc aucun outil ne
+       sort. La boucle ci-dessus serait vide, donc verte pour rien.
+
+       On BRANCHE donc un fournisseur cloud pour que la propriété ait de quoi
+       s'éprouver. C'est plus honnête que d'assouplir l'assertion : le jour où
+       un fournisseur cloud existera vraiment, c'est exactement cette
+       configuration qui tournera. */
     const sortants = core.filter((t) => t.definition.networkRequired);
     for (const tool of sortants) {
       const entree = ENTREES_VALIDES[tool.definition.id];
       expect(entree, `entrée valide manquante pour ${tool.definition.id}`).toBeDefined();
-      const result = await stack.gateway.invoke({
+      const result = await sortant.gateway.invoke({
         toolId: tool.definition.id,
         input: entree ?? {},
         parameterProvenance: {},

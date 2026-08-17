@@ -65,6 +65,8 @@ function leaseProbe(options: {
       description: 'Sonde de couche 02 : délai déclaré paramétrable.',
       autonomy: 'L2',
       privacyClass: 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'payload', sensitive: false }],

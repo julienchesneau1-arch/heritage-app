@@ -44,6 +44,7 @@ import {
 } from '../core/tools/contract.js';
 import { ok, type Result } from '../core/types/result.js';
 import type { CalendarProvider } from '../providers/contract.js';
+import { leavesMachine } from '../core/privacy/egress.js';
 
 const BriefingInput = z.object({
   /** Nombre de tâches et de points remontés. Borné. */
@@ -104,11 +105,13 @@ export function briefingGenerateTool(
          et A7 interdit explicitement toute modification. */
       autonomy: 'L1',
       privacyClass: 'ORANGE',
+      /* un ensemble hérite du niveau MAXIMUM de ses éléments (`docs/14 §3`) : agenda + tâches + rappels, donc CALENDAR. */
+      dataCategory: 'CALENDAR',
       reversible: false,
-      /* `true` — l'outil touche l'agenda, donc il hérite du pessimisme de
-         `calendar_read` : le trajet dépend du fournisseur branché, inconnu à
-         la déclaration. `docs/26 §4.5`. */
-      networkRequired: true,
+      /* Hérité du fournisseur d'agenda, comme `calendar_read` (ADR-051).
+         Sans agenda branché, le briefing ne sort pas de la machine — il rend
+         alors sa section `INDISPONIBLE`, ce qui est la bonne réponse. */
+      networkRequired: leavesMachine(calendar),
       parameters: [{ name: 'limit', sensitive: false }],
       idempotency: 'NATURALLY_IDEMPOTENT',
       verification: 'NONE',

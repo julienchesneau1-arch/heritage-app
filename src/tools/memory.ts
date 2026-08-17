@@ -50,6 +50,8 @@ export function memoryAddTool(
       description: 'Mémoriser une information, via le Memory Guard.',
       autonomy: 'L2', // réversible, faible risque
       privacyClass: 'ORANGE',
+      /* vocation de l'outil ; la catégorie RÉELLE de chaque souvenir est portée par la ligne et arbitrée par le Memory Guard. */
+      dataCategory: 'PERSONAL_MEMORY',
       reversible: true,
       networkRequired: false,
       parameters: [
@@ -177,6 +179,8 @@ export function memorySearchTool(search: HybridSearch): RegisteredTool {
       description: 'Rechercher dans la mémoire personnelle (trois voies).',
       autonomy: 'L1', // lecture seule
       privacyClass: 'ORANGE',
+      /* même vocation, en lecture. */
+      dataCategory: 'PERSONAL_MEMORY',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'query', sensitive: false }],

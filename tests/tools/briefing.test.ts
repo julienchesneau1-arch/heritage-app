@@ -263,8 +263,13 @@ describe.runIf(enabled)('briefing_generate — A7', () => {
     expect(d.autonomy).toBe('L1');
     expect(d.reversible).toBe(false);
     expect(d.rollback).toBeNull();
-    // Il touche l'agenda, donc il hérite du pessimisme de `calendar_read`.
-    expect(d.networkRequired).toBe(true);
+    /* Il hérite du fournisseur d'agenda (ADR-051). Ici il n'y en a pas :
+       rien ne sort de la machine, et le briefing rend sa section agenda
+       `INDISPONIBLE` — ce qui est la bonne réponse, pas un contournement. */
+    expect(d.networkRequired).toBe(false);
+    /* Un ensemble hérite du niveau MAXIMUM de ses éléments (`docs/14 §3`) :
+       agenda + tâches + rappels, donc CALENDAR, donc SENSITIVE. */
+    expect(d.dataCategory).toBe('CALENDAR');
     expect(d.requiredSecrets).toEqual([]);
   });
 });

@@ -23,6 +23,21 @@ forbid(principal, action, resource)
 when { context.privacyClass == "RED" && context.egress == true };
 
 
+// --- Niveau >= SENSITIVE : jamais hors de la machine (14 §2, §5) ------------
+// AJOUTÉE à la règle RED ci-dessus, jamais en remplacement : la retirer le
+// temps d'un commit, sur la foi d'une équivalence qu'on croit vraie, est
+// exactement le genre de fenêtre qu'on ne rouvre pas. Voir ADR-050.
+//
+// `forbid` prime toujours : un interdit de plus ne peut que refuser davantage.
+forbid(principal, action, resource)
+when {
+    context.egress == true &&
+    (context.dataLevel == "SENSITIVE" ||
+     context.dataLevel == "HIGHLY_SENSITIVE" ||
+     context.dataLevel == "RESTRICTED")
+};
+
+
 // --- Mode privé (03 §7) -----------------------------------------------------
 // Objectif mesuré : 0 requête sortante inattendue.
 forbid(principal, action, resource)

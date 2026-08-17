@@ -35,6 +35,8 @@ export function noteCreateTool(): RegisteredTool {
       description: 'Créer une note.',
       autonomy: 'L2',
       privacyClass: 'ORANGE',
+      /* une note écrite PAR l'utilisateur, pas un DOCUMENT reçu d'un tiers — la distinction porte le plancher de PERSONAL à SENSITIVE. */
+      dataCategory: 'PERSONAL_MEMORY',
       reversible: true,
       networkRequired: false,
       parameters: [

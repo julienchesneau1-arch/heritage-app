@@ -200,27 +200,26 @@ describe.runIf(enabled)('calendar_read — Phase 3 point 2', () => {
    * Le contrat déclaré, et le pessimisme assumé sur `egress`
    * ================================================================== */
 
-  it("déclare `networkRequired` même avec un fournisseur LOCAL — pire cas assumé", async () => {
-    /* `egress` est dérivé de `networkRequired` (gateway.ts:801). L'outil ne
-       PEUT PAS savoir si l'appel quitte la machine : cela dépend du
-       fournisseur branché, connu seulement à l'exécution.
+  it("un fournisseur LOCAL ne déclare AUCUNE égression ; un fournisseur cloud si", () => {
+    /* CE TEST A CHANGÉ DE SENS, ET C'EST LE RÉSULTAT DE F2.
 
-       Un contrat statique devant une inconnue déclare le PIRE CAS. Le refus
-       en mode privé avec un agenda local est un refus faux, et c'est le bon
-       sens du compromis : l'erreur inverse laisserait un agenda partir sans
-       que le Gate le voie. */
-    const stack = buildStack(db, { calendar: fauxAgenda({ local: true }) });
-    const tool = stack.gateway.list().find((t) => t.definition.id === 'calendar_read');
-    expect(tool).toBeDefined();
-    if (tool === undefined) return;
+       Il affirmait le contraire : « déclare `networkRequired` même avec un
+       fournisseur LOCAL — pire cas assumé ». Le contrat était statique, il ne
+       pouvait pas savoir où va l'appel, il déclarait le pire.
 
-    expect(tool.definition.networkRequired).toBe(true);
-    /* Et l'outil rapporte quand même la vérité observée à l'exécution : le
-       contrat est pessimiste, le rapport est exact. Les deux coexistent. */
-    const lu = await lire(stack);
-    expect(lu.ok).toBe(true);
-    if (!lu.ok) return;
-    expect(lu.output['local']).toBe(true);
+       Ce pessimisme est devenu intenable quand le Data Firewall a appliqué
+       `docs/14 §5` : agenda = `SENSITIVE`, donc `egress` interdit, donc
+       l'outil définitivement refusé même sur un CalDAV local.
+
+       La décision est prise au BRANCHEMENT, seul endroit où l'information
+       existe (ADR-051). */
+    const local = buildStack(db, { calendar: fauxAgenda({ local: true }) });
+    const localTool = local.gateway.list().find((t) => t.definition.id === 'calendar_read');
+    expect(localTool?.definition.networkRequired).toBe(false);
+
+    const cloud = buildStack(db, { calendar: fauxAgenda({ local: false }) });
+    const cloudTool = cloud.gateway.list().find((t) => t.definition.id === 'calendar_read');
+    expect(cloudTool?.definition.networkRequired).toBe(true);
   }, 30_000);
 
   it("se déclare sans effet externe : une lecture ne change rien, y compris chez le fournisseur", () => {
@@ -234,7 +233,14 @@ describe.runIf(enabled)('calendar_read — Phase 3 point 2', () => {
     /* `NO_EXTERNAL_EFFECT` décrit l'EFFET, `networkRequired` décrit le TRAJET.
        Les confondre ferait d'un outil réseau un outil mutant, ou l'inverse. */
     expect(d.effect).toBe('NO_EXTERNAL_EFFECT');
-    expect(d.networkRequired).toBe(true);
+    /* `NO_EXTERNAL_EFFECT` décrit l'EFFET, `networkRequired` le TRAJET — et le
+       trajet dépend désormais du fournisseur branché (ADR-051). Ici il est
+       local, donc rien ne sort. */
+    expect(d.networkRequired).toBe(false);
+    /* La CATÉGORIE, elle, ne dépend d'aucun branchement : un agenda est un
+       agenda. `docs/14 §2` la classe SENSITIVE, et c'est ce qui interdit sa
+       sortie quand il y en a une. */
+    expect(d.dataCategory).toBe('CALENDAR');
     // `docs/03 §118` place « consulter l'agenda » en L1. Ce n'est pas déduit.
     expect(d.autonomy).toBe('L1');
     expect(d.reversible).toBe(false);
@@ -256,84 +262,56 @@ describe.runIf(enabled)('calendar_read — Phase 3 point 2', () => {
    * CE QUE LA MESURE A RÉVÉLÉ — et qui n'est pas réparable ici
    * ================================================================== */
 
-  it("est REFUSÉ par défaut : hors autorisation d'égression, l'agenda ne se lit pas", async () => {
-    /* La posture par défaut du système est « pas de sortie » : `callContext()`
-       rend `cloudEnabled: false`, et la politique dure interdit
-       `egress == true && cloudEnabled == false`.
+  it("un agenda LOCAL se lit SANS activer le cloud — la zone d'ombre est fermée", async () => {
+    /* `docs/26 §4.5` DISPARAÎT ICI, et le test qui la portait avait annoncé sa
+       propre fin :
 
-       C'est fail-closed, et c'est bien. On le fixe par un test pour que
-       personne ne desserre la vis sans s'en apercevoir. */
-    const stack = buildStack(db, { calendar: fauxAgenda({ events: [EVENEMENT] }) });
+         « Ce test ne demande pas de correction — il DATE le constat et
+           échouera le jour où le Data Firewall le rendra faux. C'est
+           exactement ce qu'on veut d'une zone d'ombre : qu'elle se signale
+           quand elle disparaît. »
+
+       Il a échoué. Le voici retourné en preuve : un fournisseur dont
+       `capabilities.local === true` ne déclare aucune égression, donc la
+       politique dure `egress && !cloudEnabled` ne s'applique pas, donc
+       l'agenda se lit dans la posture par DÉFAUT. */
+    const stack = buildStack(db, { calendar: fauxAgenda({ local: true, events: [EVENEMENT] }) });
     const result = await stack.gateway.invoke({
       toolId: 'calendar_read',
       input: FENETRE,
       parameterProvenance: { fromIso: 'USER', toIso: 'USER' },
-      operationId: op('cal-defaut'),
+      operationId: op('cal-local-defaut'),
       actor: 'USER',
-      context: callContext(), // posture par défaut : aucune sortie autorisée
+      context: callContext({ cloudEnabled: false }), // posture par défaut
+    });
+    expect(result.ok).toBe(true);
+  }, 30_000);
+
+  it("§6.4 — un agenda CLOUD est refusé, MÊME cloud activé", async () => {
+    /* LE TEST QUE `docs/14 §6` DÉSIGNE COMME LE PLUS IMPORTANT :
+
+         « une donnée SENSITIVE n'atteint aucun palier cloud, MÊME SI tous les
+           paliers locaux sont indisponibles — c'est celui qui prouve que le
+           coût ne décide pas de la confidentialité. »
+
+       Il n'était pas atteignable à F1, faute d'appelant. Il l'est maintenant.
+
+       `cloudEnabled: true` ne suffit pas : l'agenda est `CALENDAR`, donc
+       `SENSITIVE`, et `niveau ≥ SENSITIVE + egress → DENY` s'applique
+       AVANT toute considération d'autorisation ou de disponibilité. */
+    const stack = buildStack(db, { calendar: fauxAgenda({ local: false, events: [EVENEMENT] }) });
+    const result = await stack.gateway.invoke({
+      toolId: 'calendar_read',
+      input: FENETRE,
+      parameterProvenance: { fromIso: 'USER', toIso: 'USER' },
+      operationId: op('cal-cloud-refuse'),
+      actor: 'USER',
+      context: callContext({ cloudEnabled: true, userConfirmed: true }),
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe('POLICY_DENIED');
-  }, 30_000);
-
-  it("DÉFAUT DE MODÉLISATION : un agenda LOCAL exige quand même `cloudEnabled`", async () => {
-    /* LE RÉSULTAT LE PLUS INTÉRESSANT DE CE FICHIER, ET IL N'EST PAS
-       RÉPARABLE DANS L'OUTIL.
-
-       Le fournisseur ci-dessous est LOCAL : `capabilities.local === true`,
-       aucune donnée ne quitte la machine. Et pourtant il faut activer le
-       cloud pour le lire.
-
-       La cause : le modèle a UN booléen là où il y a DEUX questions.
-
-         `networkRequired`  — l'appel quitte-t-il le PROCESSUS ?
-         (manquant)         — la destination est-elle hors de la MACHINE ?
-
-       `egress` est dérivé du premier (`gateway.ts:801`) et confronté à un
-       interrupteur nommé `cloudEnabled`. Un CalDAV sur 127.0.0.1 sort du
-       processus sans sortir de la machine : le modèle ne sait pas le dire.
-
-       Les deux issues sont mauvaises et c'est ce qui rend le défaut
-       structurel :
-         — déclarer `networkRequired: false` ferait sortir un agenda CLOUD
-           sans que le Gate le voie ;
-         — déclarer `true` force l'utilisateur à laisser `cloudEnabled` armé
-           pour un usage quotidien — et un interrupteur de sûreté qu'il faut
-           désarmer pour se servir de la machine cesse d'être un interrupteur
-           de sûreté.
-
-       `ProviderCapabilities.local` porte déjà la réponse. Ce qui manque est
-       le composant qui croise les deux : le Data Firewall de `docs/02`
-       Phase 4 (« classification, redaction, DÉCISION D'ÉGRESSION »).
-
-       Ce test ne demande pas de correction — il DATE le constat et échouera
-       le jour où le Data Firewall le rendra faux. C'est exactement ce qu'on
-       veut d'une zone d'ombre : qu'elle se signale quand elle disparaît. */
-    const agendaLocal = fauxAgenda({ local: true, events: [EVENEMENT] });
-    expect(agendaLocal.capabilities.local).toBe(true);
-
-    const stack = buildStack(db, { calendar: agendaLocal });
-
-    const sansCloud = await stack.gateway.invoke({
-      toolId: 'calendar_read',
-      input: FENETRE,
-      parameterProvenance: { fromIso: 'USER', toIso: 'USER' },
-      operationId: op('cal-local-sans'),
-      actor: 'USER',
-      context: callContext({ cloudEnabled: false }),
-    });
-    expect(sansCloud.ok).toBe(false);
-
-    const avecCloud = await stack.gateway.invoke({
-      toolId: 'calendar_read',
-      input: FENETRE,
-      parameterProvenance: { fromIso: 'USER', toIso: 'USER' },
-      operationId: op('cal-local-avec'),
-      actor: 'USER',
-      context: callContext({ cloudEnabled: true }),
-    });
-    expect(avecCloud.ok).toBe(true);
+    expect(JSON.stringify(result.error)).toContain('SENSITIVE');
   }, 30_000);
 });

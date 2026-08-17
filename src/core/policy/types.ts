@@ -14,6 +14,7 @@ import { z } from 'zod';
 import {
   Actor,
   AutonomyLevel,
+  DataLevel,
   Mode,
   PrivacyClass,
   Provenance,
@@ -47,6 +48,15 @@ export const PolicyRequest = z.object({
     type: z.string().min(1),
     id: z.string().min(1),
     privacyClass: PrivacyClass,
+    /**
+     * Niveau `docs/14`, DÉRIVÉ de la catégorie par le système — jamais déclaré
+     * par l'outil ni par un modèle (`docs/14 §3`).
+     *
+     * Il coexiste avec `privacyClass` au lieu de le remplacer : la bascule des
+     * données stockées est le seul pas du Data Firewall qui ÉLARGIT, et elle
+     * n'a pas eu lieu (ADR-050).
+     */
+    dataLevel: DataLevel,
   }),
 
   context: z.object({

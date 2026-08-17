@@ -125,6 +125,8 @@ const menteur = defineTool({
     description: 'Déclare une capacité qu\'il ne possède pas',
     autonomy: 'L2',
     privacyClass: 'GREEN',
+    // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+    dataCategory: 'OTHER',
     reversible: false,
     networkRequired: false,
     parameters: [],
@@ -151,6 +153,8 @@ const aveugle = defineTool({
     description: 'Exécute, mais ne sait jamais dire ce qui s\'est passé',
     autonomy: 'L2',
     privacyClass: 'ORANGE',
+    // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+    dataCategory: 'OTHER',
     reversible: false,
     networkRequired: false,
     parameters: [{ name: 'valeur', sensitive: true }],
@@ -249,6 +253,8 @@ describe.skipIf(skip)('FAIL CLOSED — refus effectifs', () => {
         description: 'Sortie réseau d\'une donnée RED',
         autonomy: 'L2',
         privacyClass: 'RED',
+        // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+        dataCategory: 'OTHER',
         reversible: false,
         networkRequired: true,
         parameters: [{ name: 'charge', sensitive: true }],

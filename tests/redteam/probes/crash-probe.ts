@@ -108,6 +108,8 @@ function effectTool(point: CrashPoint) {
       description: 'Outil dont l\'effet externe est observable',
       autonomy: 'L2',
       privacyClass: 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'marker', sensitive: false }],

@@ -15,8 +15,7 @@
  * Il n'est pas encore atteignable — rien n'appelle cette classification — et
  * l'écrire ici serait éprouver la simulation. Il arrive avec F2.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   classify,
@@ -181,37 +180,32 @@ describe('docs/14 — la classification tient-elle ?', () => {
    * Ce que F1 ne fait PAS
    * ================================================================== */
 
-  it("mayEgress refuse à partir de SENSITIVE — et n'est encore appelé par PERSONNE", () => {
-    /* La frontière que F2 branchera au Policy Gate. On la fixe maintenant pour
-       qu'elle ne se négocie pas au moment du branchement, où la tentation sera
-       de l'assouplir pour faire passer un outil.
+  it("mayEgress refuse à partir de SENSITIVE, et le Policy Gate l'APPELLE", () => {
+    /* CE TEST A CHANGÉ, ET IL AVAIT ANNONCÉ SON PROPRE CHANGEMENT.
 
-       Et on VÉRIFIE qu'elle n'est appelée par personne : F1 est un calcul,
-       pas une décision. Le jour où ce test rougit, c'est que F2 a eu lieu — et
-       il devra être remplacé par la preuve du refus, pas par une exemption. */
+       À F1 il vérifiait que la classification n'était appelée par PERSONNE, et
+       il disait : « le jour où ce test rougit, c'est que F2 a eu lieu — et il
+       devra être remplacé par la preuve du REFUS, pas par une exemption. »
+
+       F2 a eu lieu. La frontière reste la même — elle avait été fixée à
+       l'avance précisément pour qu'elle ne se négocie pas au moment du
+       branchement, où la tentation aurait été de l'assouplir pour faire passer
+       un outil. */
     expect(mayEgress('PUBLIC')).toBe(true);
     expect(mayEgress('PERSONAL')).toBe(true);
     expect(mayEgress('SENSITIVE')).toBe(false);
     expect(mayEgress('HIGHLY_SENSITIVE')).toBe(false);
     expect(mayEgress('RESTRICTED')).toBe(false);
 
-    const appelants: string[] = [];
-    const parcourir = (dir: string): void => {
-      for (const entree of readdirSync(dir)) {
-        const complet = join(dir, entree);
-        if (statSync(complet).isDirectory()) parcourir(complet);
-        else if (complet.endsWith('.ts') && !complet.endsWith('privacy/classify.ts')) {
-          /* On cherche l'IMPORT du module, pas un nom de fonction : la
-             première rédaction cherchait `classify(` et trouvait le
-             `classify()` sans rapport de `memory/guard.ts` — un faux positif
-             qui aurait pu, dans l'autre sens, masquer un vrai appelant. */
-          if (/from ['"].*privacy\/classify\.js['"]/.test(readFileSync(complet, 'utf8'))) {
-            appelants.push(complet);
-          }
-        }
-      }
-    };
-    parcourir('src');
-    expect(appelants).toEqual([]);
+    /* Et la preuve qu'elle est BRANCHÉE : le Policy Gate l'importe. Sans cette
+       assertion, la frontière pourrait redevenir décorative sans bruit. */
+    const gate = readFileSync('src/core/policy/gate.ts', 'utf8');
+    expect(gate).toContain("from '../privacy/classify.js'");
+    expect(gate).toContain('mayEgress(req.resource.dataLevel)');
+
+    /* Le Gateway, lui, DÉRIVE le niveau — il ne le laisse pas déclarer. C'est
+       `docs/14 §3` : « le système le détermine AVANT lui ». */
+    const gateway = readFileSync('src/core/tools/gateway.ts', 'utf8');
+    expect(gateway).toContain('floorFor(def.dataCategory)');
   });
 });

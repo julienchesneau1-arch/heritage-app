@@ -101,6 +101,8 @@ export function fileSearchTool(roots: readonly string[]): RegisteredTool {
          documents SENSITIVE, mais `DataLevel` n'est pas implémenté. Même
          situation que l'agenda, même raison. */
       privacyClass: 'ORANGE',
+      /* `docs/14 §2` classe documents en SENSITIVE ; c'est ce que cet outil parcourt. */
+      dataCategory: 'DOCUMENT',
       reversible: false,
       /* Le disque local n'est pas le réseau. Contrairement à l'agenda, il n'y
          a ici aucune incertitude sur le trajet : rien ne sort de la machine. */

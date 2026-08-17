@@ -67,6 +67,8 @@ export function systemStatusTool(ledger: Ledger): RegisteredTool {
          COMPTES disent quelque chose de l'activité de l'utilisateur, même sans
          aucun contenu. */
       privacyClass: 'ORANGE',
+      /* des compteurs sur l'activité du système ; OTHER tombe sur PERSONAL, défaut fermé. */
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: false,
       parameters: [],

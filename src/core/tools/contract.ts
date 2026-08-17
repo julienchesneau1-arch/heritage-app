@@ -14,6 +14,7 @@ import type { Db } from '../db/client.js';
 import type {
   Actor,
   AutonomyLevel,
+  DataCategory,
   EffectContract,
   EvidenceKind,
   PrivacyClass,
@@ -132,6 +133,25 @@ export interface ToolDefinition {
    * vide. Aucune observation ne le détecte — seule une garantie du fournisseur
    * ferme le trou.
    */
+  /**
+   * DE QUOI cet outil parle — `docs/14 §3`.
+   *
+   * Le contrat déclare un FAIT (la nature de la donnée), jamais une POLITIQUE
+   * (son niveau de protection). Le niveau est dérivé par le système :
+   *
+   *   > Le LLM ne choisit jamais lui-même son niveau de confidentialité.
+   *   > Le système le détermine **avant** lui.
+   *
+   * La même discipline vaut pour un outil. S'il déclarait son niveau, il
+   * suffirait d'écrire `PUBLIC` pour contourner la classification — et ce
+   * serait tentant le jour où un outil légitime se ferait refuser.
+   *
+   * Pour un outil dont la catégorie varie avec l'appel (`memory_add` accepte
+   * n'importe quelle catégorie en entrée), on déclare celle qui décrit sa
+   * VOCATION ; le niveau par valeur reste l'affaire du Memory Guard.
+   */
+  readonly dataCategory: DataCategory;
+
   readonly effect: EffectContract;
 
   /**

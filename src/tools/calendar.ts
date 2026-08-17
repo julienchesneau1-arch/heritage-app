@@ -29,6 +29,7 @@ import {
 import { verificationOutcome } from '../core/verification/engine.js';
 import { err, ok, jarvisError, type Result } from '../core/types/result.js';
 import type { CalendarProvider } from '../providers/contract.js';
+import { leavesMachine } from '../core/privacy/egress.js';
 
 const CalendarReadInput = z.object({
   /** Fenêtre demandée, bornée. Un agenda sans borne est une requête sans fin. */
@@ -54,6 +55,8 @@ export function calendarReadTool(
          est spécifié. La bascule est un chantier de `docs/14 §5`, pas une
          décision de cet outil. */
       privacyClass: 'ORANGE',
+      /* `docs/14 §2` classe explicitement agenda en SENSITIVE. */
+      dataCategory: 'CALENDAR',
       reversible: false,
       /* `true`, ET C'EST UN CHOIX DÉLIBÉRÉMENT PESSIMISTE.
 
@@ -72,7 +75,17 @@ export function calendarReadTool(
          du compromis — l'erreur inverse laisserait un agenda partir sans que
          le Gate le voie. Le raffinement (croiser `capabilities.local`)
          appartient au Data Firewall de Phase 4, pas au contrat d'outil. */
-      networkRequired: true,
+      /* DÉRIVÉ DU FOURNISSEUR, PLUS DÉCLARÉ EN DUR — ADR-051.
+
+         Ce champ valait `true` inconditionnellement : le contrat est statique,
+         il ne pouvait pas savoir où va l'appel, et il déclarait le pire cas.
+         L'étape F2 du Data Firewall a rendu ce pessimisme intenable — agenda =
+         `SENSITIVE`, donc `egress` interdit, donc l'outil définitivement
+         refusé même sur un CalDAV local.
+
+         Le branchement, lui, SAIT. Voir `privacy/egress.ts` — y compris ce que
+         ce choix coûte. */
+      networkRequired: leavesMachine(provider),
       parameters: [
         { name: 'fromIso', sensitive: false },
         { name: 'toIso', sensitive: false },
@@ -181,10 +194,22 @@ export function calendarCreateTool(
          écrit dans le document, et l'outil s'y range. */
       autonomy: 'L3',
       privacyClass: 'ORANGE',
+      /* idem. */
+      dataCategory: 'CALENDAR',
       reversible: true,
       /* Même raisonnement que `calendar_read` : le contrat est statique, le
          trajet dépend du fournisseur, donc pire cas. Voir `docs/26 §4.5`. */
-      networkRequired: true,
+      /* DÉRIVÉ DU FOURNISSEUR, PLUS DÉCLARÉ EN DUR — ADR-051.
+
+         Ce champ valait `true` inconditionnellement : le contrat est statique,
+         il ne pouvait pas savoir où va l'appel, et il déclarait le pire cas.
+         L'étape F2 du Data Firewall a rendu ce pessimisme intenable — agenda =
+         `SENSITIVE`, donc `egress` interdit, donc l'outil définitivement
+         refusé même sur un CalDAV local.
+
+         Le branchement, lui, SAIT. Voir `privacy/egress.ts` — y compris ce que
+         ce choix coûte. */
+      networkRequired: leavesMachine(provider),
       parameters: [
         { name: 'title', sensitive: true },
         { name: 'startsAt', sensitive: true },
@@ -381,8 +406,20 @@ export function calendarUpdateTool(
          comme exemple de APPROVAL. C'est CET outil que le document décrit. */
       autonomy: 'L3',
       privacyClass: 'ORANGE',
+      /* idem. */
+      dataCategory: 'CALENDAR',
       reversible: true,
-      networkRequired: true,
+      /* DÉRIVÉ DU FOURNISSEUR, PLUS DÉCLARÉ EN DUR — ADR-051.
+
+         Ce champ valait `true` inconditionnellement : le contrat est statique,
+         il ne pouvait pas savoir où va l'appel, et il déclarait le pire cas.
+         L'étape F2 du Data Firewall a rendu ce pessimisme intenable — agenda =
+         `SENSITIVE`, donc `egress` interdit, donc l'outil définitivement
+         refusé même sur un CalDAV local.
+
+         Le branchement, lui, SAIT. Voir `privacy/egress.ts` — y compris ce que
+         ce choix coûte. */
+      networkRequired: leavesMachine(provider),
       parameters: [
         { name: 'eventId', sensitive: false },
         { name: 'title', sensitive: true },

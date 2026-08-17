@@ -67,6 +67,8 @@ describe.skipIf(skip)('Verification Engine', () => {
           description: 'Renvoie un succès sans rien changer.',
           autonomy: 'L2',
           privacyClass: 'GREEN',
+          // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+          dataCategory: 'OTHER',
           reversible: true,
           networkRequired: false,
           parameters: [],
@@ -150,6 +152,8 @@ describe.skipIf(skip)('Verification Engine', () => {
         description: 'La relecture échoue.',
         autonomy: 'L2',
         privacyClass: 'GREEN',
+        // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+        dataCategory: 'OTHER',
         reversible: true,
         networkRequired: false,
         parameters: [],
@@ -198,6 +202,8 @@ describe.skipIf(skip)('Verification Engine', () => {
         description: 'Exige une preuve mais n\'en fournit pas.',
         autonomy: 'L3',
         privacyClass: 'ORANGE',
+        // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+        dataCategory: 'OTHER',
         reversible: false,
         networkRequired: true,
         parameters: [],
@@ -237,6 +243,8 @@ describe.skipIf(skip)('Verification Engine', () => {
         description: 'Fournit une preuve, sans relecture indépendante.',
         autonomy: 'L3',
         privacyClass: 'ORANGE',
+        // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+        dataCategory: 'OTHER',
         reversible: false,
         networkRequired: true,
         parameters: [],
@@ -282,6 +290,8 @@ describe.skipIf(skip)('Verification Engine', () => {
           description: 'Ne rend jamais la main.',
           autonomy: 'L2',
           privacyClass: 'GREEN',
+          // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+          dataCategory: 'OTHER',
           reversible: true,
           networkRequired: false,
           parameters: [],

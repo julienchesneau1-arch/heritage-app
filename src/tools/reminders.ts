@@ -55,6 +55,8 @@ export function reminderCreateTool(): RegisteredTool {
          anodin ne le sort pas de la cérémonie. */
       autonomy: 'L2',
       privacyClass: 'ORANGE',
+      /* un rappel est une tâche datée du point de vue de la classification. */
+      dataCategory: 'TASK',
       reversible: true,
       networkRequired: false,
       parameters: [

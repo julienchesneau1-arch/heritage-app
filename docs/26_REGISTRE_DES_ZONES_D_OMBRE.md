@@ -193,7 +193,36 @@ provenance `intentId → effectId`, invariants I11 à I13.
 > Ce qui a pris sa place — **I12** (aucune action nouvelle après violation) et
 > **I13** (chaîne de provenance complète) — est nommé en `docs/27 §8`.
 
-### 4.5 `egress` est un booléen là où il y a DEUX questions
+### 4.5 ~~`egress` est un booléen là où il y a DEUX questions~~ — **LEVÉE**
+
+> **LEVÉE à l'étape F2 du Data Firewall — ADR-051.** Le paragraphe reste écrit
+> tel qu'il l'était : un registre qu'on réécrit cesse d'être un registre.
+>
+> `networkRequired` est désormais **dérivé du fournisseur branché**
+> (`privacy/egress.ts`), au seul moment où l'information existe. Un CalDAV
+> local ne déclare plus d'égression ; un agenda cloud si.
+>
+> **Ce qui l'a rendue urgente :** F2 applique « niveau ≥ SENSITIVE + egress →
+> DENY ». L'agenda est `SENSITIVE`, et les quatre outils sortants du dépôt
+> manipulent tous de l'agenda — **tous devenaient définitivement refusés, y
+> compris sur un fournisseur purement local.** Le défaut de modélisation
+> cessait d'être une gêne théorique pour devenir un blocage complet.
+>
+> **Le test qui la portait avait annoncé sa propre fin** — « il DATE le constat
+> et échouera le jour où le Data Firewall le rendra faux » — et il a échoué. Il
+> est retourné en preuve de la fermeture.
+>
+> ⚠ **CE QUE LA LEVÉE COÛTE, ET IL FAUT LE DIRE.** `capabilities.local` est une
+> DÉCLARATION du fournisseur. Un adaptateur qui mentirait — `local: true` en
+> pointant vers Internet — échapperait au Gate. Avant, `networkRequired: true`
+> était inconditionnel et ce chemin n'existait pas.
+>
+> Ce n'est pas un troc gratuit, c'est un troc **assumé** : l'alternative rendait
+> la capacité inutilisable. Voir la nouvelle entrée **§4.9**.
+
+#### Le constat d'origine, conservé
+
+### 4.5-bis `egress` était un booléen là où il y a DEUX questions
 
 **Trouvé en écrivant `calendar_read`, pas en relisant le modèle.**
 
@@ -350,6 +379,39 @@ C'est un contournement assumé, pas une solution.
 **Condition de levée :** un chantier de composition, avec son banc — pas un effet
 de bord du prochain outil qui en aurait besoin. Le test structurel de
 `briefing.test.ts` sera le premier à retirer, et sciemment.
+
+### 4.9 `capabilities.local` est CRU, pas vérifié
+
+**Créée par la levée de §4.5, et c'est la moitié qu'il ne faut pas oublier.**
+
+Depuis ADR-051, la décision d'égression repose sur ce que le fournisseur déclare
+de lui-même :
+
+```ts
+export function leavesMachine(provider: Provider | null): boolean {
+  if (provider === null) return false;
+  return !provider.capabilities.local;   // ← une DÉCLARATION
+}
+```
+
+Un adaptateur qui annoncerait `local: true` en pointant vers Internet
+échapperait au Policy Gate. Aucun mécanisme ne le contredit aujourd'hui.
+
+**Pourquoi c'est accepté :** l'alternative — `networkRequired: true`
+inconditionnel — rendait tout outil manipulant de l'agenda **définitivement
+refusé**, y compris sur un CalDAV local. Une protection qui interdit l'usage
+normal n'est pas conservée par les utilisateurs, elle est désactivée.
+
+**Ce qui le borne déjà :** aucun adaptateur n'existe. Le seul fournisseur du
+dépôt est une doublure de test, dont le `local` est fixé par le test lui-même.
+
+**Condition de levée — et le mécanisme existe déjà.** `isPrivateAddress`
+(`src/apps/server/auth.ts`) reconnaît `127.*`, `10.*`, `192.168.*`,
+`172.16-31.*`, lien-local et ULA IPv6. Au premier adaptateur réel,
+`capabilities.local` doit être **corroboré** par l'adresse effective du
+fournisseur, pas cru sur parole. C'est la même discipline que
+`PROVIDER_CONTRACT_VIOLATION` : un fournisseur qui ment sur lui-même est un
+problème de SOURCE, et il se constate.
 
 ---
 

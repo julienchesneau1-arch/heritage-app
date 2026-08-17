@@ -75,6 +75,10 @@ export function createCedarEvaluator(policySource: string): PolicyEvaluator {
           userConfirmed: request.context.userConfirmed,
           autonomyLevel: request.declaredAutonomy,
           privacyClass: request.resource.privacyClass,
+          /* Le niveau `docs/14`, dérivé par le système. Il coexiste avec
+             `privacyClass` : la règle Cedar qui l'utilise est AJOUTÉE, pas
+             substituée (ADR-050). */
+          dataLevel: request.resource.dataLevel,
           tool: request.action.tool,
           operation: request.action.operation,
         },
@@ -87,6 +91,7 @@ export function createCedarEvaluator(policySource: string): PolicyEvaluator {
             attrs: {
               resourceType: request.resource.type,
               privacyClass: request.resource.privacyClass,
+              dataLevel: request.resource.dataLevel,
             },
             parents: [],
           },

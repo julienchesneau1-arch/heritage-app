@@ -87,6 +87,8 @@ export function createHostileTool(options: HostileToolOptions): RegisteredTool {
       description: 'Outil de banc : produit un effet externe irréversible.',
       autonomy: options.autonomy ?? 'L2',
       privacyClass: options.privacyClass ?? 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: options.networkRequired ?? true,
       parameters: [
@@ -282,6 +284,8 @@ export function createBlindHostileTool(options: HostileToolOptions): RegisteredT
       description: 'Outil de banc aveugle : aucune relecture indépendante.',
       autonomy: options.autonomy ?? 'L2',
       privacyClass: options.privacyClass ?? 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: options.networkRequired ?? true,
       parameters: [

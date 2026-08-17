@@ -34,6 +34,8 @@ function faulty(
       description: 'Outil défaillant',
       autonomy: 'L2',
       privacyClass: 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'valeur', sensitive: false }],

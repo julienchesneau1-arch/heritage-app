@@ -25,6 +25,7 @@ import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domai
 import { isExternalEffect, mayReplayAfterUnknown } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
+import { floorFor } from '../privacy/classify.js';
 import type { OperationIdentity } from './identity.js';
 import type { UnknownReason, VerificationEngine } from '../verification/engine.js';
 import { verificationOutcome } from '../verification/engine.js';
@@ -795,6 +796,12 @@ export function createToolGateway(deps: {
         type: def.id,
         id: call.operationId,
         privacyClass: def.privacyClass,
+        /* DÉRIVÉ, jamais déclaré. Un outil annonce DE QUOI il parle ; le
+           système en déduit le niveau (`docs/14 §3`). S'il déclarait son
+           niveau, il suffirait d'écrire `PUBLIC` pour contourner la
+           classification — et ce serait tentant le jour où un outil légitime
+           se ferait refuser. */
+        dataLevel: floorFor(def.dataCategory),
       },
       context: {
         mode: call.context.mode,

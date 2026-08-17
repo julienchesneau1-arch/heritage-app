@@ -25,12 +25,16 @@ beforeAll(() => {
 });
 
 /** Requête de base : action locale, réversible, demandée explicitement. */
+/* `dataLevel: 'PERSONAL'` sur les fixtures : ce plancher AUTORISE l'égression,
+   donc les tests d'égression de ce fichier portent sur la règle RED historique
+   et non sur celle ajoutée par F2. Les deux cohabitent — c'est la décision
+   d'ADR-050 — et `tests/privacy/` éprouve la seconde séparément. */
 function request(overrides: Partial<PolicyRequest> = {}): PolicyRequest {
   return {
     actor: 'USER',
     action: { tool: 'task', operation: 'create' },
     declaredAutonomy: 'L2',
-    resource: { type: 'task', id: 'task-1', privacyClass: 'ORANGE' },
+    resource: { type: 'task', id: 'task-1', privacyClass: 'ORANGE', dataLevel: 'PERSONAL' },
     context: {
       mode: 'NORMAL',
       egress: false,
@@ -93,7 +97,7 @@ describe('05/B7 — une règle apprise n\'assouplit jamais une règle dure', () 
       request({
         action: { tool: 'payment', operation: 'execute' },
         declaredAutonomy: 'L4',
-        resource: { type: 'payment', id: 'pay-30eur', privacyClass: 'RED' },
+        resource: { type: 'payment', id: 'pay-30eur', privacyClass: 'RED', dataLevel: 'PERSONAL' },
       }),
     );
     expect(out.decision).toBe('CONFIRM');
@@ -187,7 +191,7 @@ describe('03/§6 — confidentialité et égression', () => {
     const out = decide(
       request({
         declaredAutonomy: 'L1',
-        resource: { type: 'document', id: 'doc-1', privacyClass: 'RED' },
+        resource: { type: 'document', id: 'doc-1', privacyClass: 'RED', dataLevel: 'PERSONAL' },
         context: { ...request().context, egress: true, cloudEnabled: true },
       }),
     );
@@ -199,7 +203,7 @@ describe('03/§6 — confidentialité et égression', () => {
     const out = decide(
       request({
         declaredAutonomy: 'L1',
-        resource: { type: 'query', id: 'q-1', privacyClass: 'GREEN' },
+        resource: { type: 'query', id: 'q-1', privacyClass: 'GREEN', dataLevel: 'PERSONAL' },
         context: {
           ...request().context,
           mode: 'PRIVATE',
@@ -216,7 +220,7 @@ describe('03/§6 — confidentialité et égression', () => {
     const out = decide(
       request({
         declaredAutonomy: 'L1',
-        resource: { type: 'query', id: 'q-2', privacyClass: 'GREEN' },
+        resource: { type: 'query', id: 'q-2', privacyClass: 'GREEN', dataLevel: 'PERSONAL' },
         context: { ...request().context, egress: true, cloudEnabled: false },
       }),
     );

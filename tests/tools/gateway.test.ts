@@ -299,6 +299,8 @@ describe.skipIf(skip)('Tool Gateway', () => {
         description: 'Mute sans pouvoir être vérifié.',
         autonomy: 'L2',
         privacyClass: 'ORANGE',
+        // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+        dataCategory: 'OTHER',
         reversible: true,
         networkRequired: false,
         parameters: [],
@@ -336,6 +338,8 @@ describe.skipIf(skip)('Tool Gateway', () => {
         description: 'Interdit par construction.',
         autonomy: 'L0',
         privacyClass: 'RED',
+        // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+        dataCategory: 'OTHER',
         reversible: false,
         networkRequired: false,
         parameters: [],
@@ -378,6 +382,8 @@ describe.skipIf(skip)('Tool Gateway', () => {
           description: 'Observe les secrets reçus.',
           autonomy: 'L1',
           privacyClass: 'GREEN',
+          // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+          dataCategory: 'OTHER',
           reversible: false,
           networkRequired: false,
           parameters: [],

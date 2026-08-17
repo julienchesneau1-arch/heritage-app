@@ -16,6 +16,7 @@
  *     Résultat : le paiement exige toujours confirmation. »  (03 §5)
  */
 import { strictest, isUntrusted, type AutonomyLevel } from '../types/domain.js';
+import { mayEgress } from '../privacy/classify.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import type { PolicyEvaluator } from './evaluator.js';
 import {
@@ -103,6 +104,30 @@ export function createPolicyGate(evaluator: PolicyEvaluator): PolicyGate {
           reasons: [
             ...reasons,
             'Donnée classée RED : aucune sortie réseau, sans exception.',
+          ],
+        });
+      }
+
+      /* 2c-bis. LA RÈGLE DE `docs/14 §5`, AJOUTÉE À LA PRÉCÉDENTE.
+
+           > « RED + egress → DENY » devient « niveau ≥ SENSITIVE + egress → DENY »
+
+         « Devient » dans le document, **« s'ajoute à » ici**, et la nuance est
+         la décision d'ADR-050 : remplacer la règle RED reviendrait à la retirer
+         le temps d'un commit, sur la foi d'une équivalence qu'on croit vraie.
+         Les deux cohabitent jusqu'à ce que `DataLevel` remplace réellement
+         `PrivacyClass` dans les colonnes — ce qui n'a pas eu lieu.
+
+         Un `forbid` de plus ne peut que refuser davantage. C'est ce qui permet
+         de livrer la protection AVANT la migration des données, et non après. */
+      if (req.context.egress && !mayEgress(req.resource.dataLevel)) {
+        return ok({
+          decision: 'DENY',
+          effectiveAutonomy: level,
+          reasons: [
+            ...reasons,
+            `Niveau ${req.resource.dataLevel} : aucune sortie hors de la machine `
+              + '(docs/14 §2). Le coût ne décide pas de la confidentialité.',
           ],
         });
       }

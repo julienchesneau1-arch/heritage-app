@@ -78,6 +78,8 @@ export function createAuditQueryTool(): RegisteredTool {
          information sur la vie de l'utilisateur. Classer GREEN reviendrait à
          dire que la liste de ce qu'on a fait ne dit rien de soi. */
       privacyClass: 'ORANGE',
+      /* le journal ne relève d'aucune catégorie métier ; OTHER tombe sur PERSONAL, ce qui est exact — l'enchaînement des actions est une information sur la vie de l'utilisateur. */
+      dataCategory: 'OTHER',
       /* `false`, et le validateur de contrat me l'a appris — il refuse un
          outil qui se déclare réversible sans décrire comment défaire.
 

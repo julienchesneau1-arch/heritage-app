@@ -193,6 +193,8 @@ function verifiableTool(verdict: () => AttemptVerdict) {
       description: 'Outil sachant vérifier une tentative',
       autonomy: 'L2',
       privacyClass: 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'marker', sensitive: false }],
@@ -277,6 +279,8 @@ describe.skipIf(skip)('RED TEAM — vérification idempotente auprès du fournis
         description: 'Promet une vérification qu\'il ne fournit pas',
         autonomy: 'L2',
         privacyClass: 'GREEN',
+        // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+        dataCategory: 'OTHER',
         reversible: false,
         networkRequired: false,
         parameters: [],

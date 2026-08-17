@@ -3164,3 +3164,115 @@ Si `DataLevel` devait un jour remplacer `PrivacyClass` **avant** F2 — pour une
 raison de calendrier, par exemple — cette ADR tombe : l'ordre est la décision,
 pas les composants. Le reprendre à l'envers ferait du Data Firewall le rattrapage
 d'un trou qu'on aurait ouvert soi-même.
+
+---
+
+## ADR-051 — L'égression se décide sur la destination, pas sur le trajet
+
+**Statut :** accepté (Phase 4, étape F2). **Référence :** `docs/14 §5`,
+`docs/26 §4.5` (levée), `docs/26 §4.9` (créée), ADR-050.
+
+### Ce que F2 a rendu urgent
+
+F2 applique la règle de `docs/14 §5` : **« niveau ≥ SENSITIVE + egress → DENY »**.
+Elle est **ajoutée** à la règle `RED + egress`, jamais substituée — remplacer
+reviendrait à la retirer le temps d'un commit, sur la foi d'une équivalence
+qu'on croit vraie.
+
+Mesuré immédiatement après le branchement : **les quatre outils sortants du
+dépôt manipulent tous de l'agenda.** L'agenda est `CALENDAR`, donc `SENSITIVE`.
+Ils devenaient donc **tous définitivement refusés — y compris sur un CalDAV
+purement local.**
+
+`docs/26 §4.5` cessait d'être une gêne théorique. Le défaut qu'elle décrivait
+bloquait la capacité entière.
+
+### Le défaut, et là où l'information existe
+
+Un booléen répondait à deux questions :
+
+| Question | Champ |
+|---|---|
+| l'appel quitte-t-il le **processus** ? | `networkRequired` |
+| la destination est-elle hors de la **machine** ? | *(personne)* |
+
+Ni le contrat d'outil (statique) ni le Gate (qui ignore les fournisseurs) ne
+savent où va l'appel. **Le seul moment où c'est connu est le branchement** :
+l'outil reçoit son fournisseur à la construction, et `ProviderCapabilities`
+porte déjà `local`.
+
+> **Décision :** `networkRequired` est dérivé du fournisseur, au branchement.
+
+### Ce que la levée coûte — et pourquoi ce n'est pas gratuit
+
+`capabilities.local` est une **déclaration** du fournisseur. Un adaptateur qui
+mentirait échapperait au Gate. Avant, `networkRequired: true` était
+inconditionnel et ce chemin n'existait pas.
+
+**C'est un troc, et il est assumé.** L'alternative rendait la capacité
+inutilisable — et une protection qui interdit l'usage normal n'est pas
+conservée par les utilisateurs, elle est désactivée. La contrepartie est écrite
+en `docs/26 §4.9` avec sa condition de levée : `isPrivateAddress` existe déjà et
+saura corroborer l'adresse au premier adaptateur réel.
+
+**Naming a residue is not the same as removing it.** §4.5 disparaît, §4.9
+apparaît. Le solde est positif — un blocage total contre une déclaration à
+vérifier — mais il n'est pas nul, et l'écrire est la seule façon de ne pas le
+perdre de vue.
+
+### Le niveau est DÉRIVÉ, jamais déclaré
+
+`ToolDefinition` gagne `dataCategory` — **de quoi l'outil parle**, un fait. Le
+niveau est calculé par le Gateway (`floorFor`).
+
+> Si un outil déclarait son niveau, il suffirait d'écrire `PUBLIC` pour
+> contourner la classification — et ce serait tentant le jour où un outil
+> légitime se ferait refuser.
+
+C'est `docs/14 §3` appliqué aux outils comme aux modèles : *« le système le
+détermine avant lui »*.
+
+### Le test que `docs/14 §6` désigne comme le plus important
+
+> une donnée `SENSITIVE` n'atteint aucun palier cloud, **même si tous les
+> paliers locaux sont indisponibles** — c'est celui qui prouve que le coût ne
+> décide pas de la confidentialité.
+
+Il était inatteignable à F1 faute d'appelant. **Il est écrit et il passe** : un
+agenda cloud est refusé `POLICY_DENIED` avec `cloudEnabled: true`.
+
+### Trois tests avaient annoncé leur propre fin, et ils ont tenu parole
+
+| Test | Ce qu'il avait écrit |
+|---|---|
+| `calendar-read` §4.5 | « il DATE le constat et échouera le jour où le Data Firewall le rendra faux » |
+| `classify` F1 | « le jour où ce test rougit, c'est que F2 a eu lieu — remplacé par la preuve du REFUS, pas par une exemption » |
+| `wiring` orphelins | « il redescendra à F2 » — sept modules → six |
+
+Aucun n'a été assoupli. Les trois ont été retournés en preuve de la correction.
+
+### Un effet de bord qui mérite d'être dit
+
+**Le dépôt n'a plus aucun outil sortant par défaut**, puisque aucun fournisseur
+n'est configuré. Les deux tests de red team qui éprouvent « rien ne sort sans
+autorisation » auraient donc bouclé sur le vide — verts par vacuité.
+
+Ils construisent désormais une pile **avec un fournisseur cloud fictif**, pour
+que la propriété ait de quoi s'éprouver. C'est plus honnête qu'assouplir
+l'assertion : le jour où un fournisseur cloud existera, c'est exactement cette
+configuration qui tournera.
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| la règle ajoutée retirée du Gate | **2 / 35** |
+| le niveau déclaré (`'PUBLIC'`) au lieu d'être dérivé | **2 / 35** |
+| un fournisseur cloud traité comme local | **3 / 35** |
+
+### Condition de révision
+
+Si un fournisseur devait un jour être à la fois local ET distant — un cache
+local d'un service cloud, par exemple — `capabilities.local` deviendrait
+insuffisant : la question se poserait par requête, pas par fournisseur. Ce
+serait une décision d'architecture, et elle passerait par ici.

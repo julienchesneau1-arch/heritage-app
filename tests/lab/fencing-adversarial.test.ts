@@ -113,6 +113,8 @@ function createGatedTool(options: {
       description: 'Outil de banc dont le retour est piloté par le test.',
       autonomy: 'L2',
       privacyClass: 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'payload', sensitive: false }],
@@ -186,6 +188,8 @@ function createRaceyVerifyTool(db: Db): RegisteredTool {
       description: 'Outil de banc : un tiers reprend le bail pendant la vérification.',
       autonomy: 'L2',
       privacyClass: 'GREEN',
+      // Fixture de test : catégorie neutre, plancher PERSONAL (défaut fermé).
+      dataCategory: 'OTHER',
       reversible: false,
       networkRequired: false,
       parameters: [{ name: 'payload', sensitive: false }],

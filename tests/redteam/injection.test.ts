@@ -11,9 +11,31 @@ import { appDb, databaseAvailable } from '../helpers/db.js';
 import { buildRuntime, type Runtime } from '../../src/apps/runtime.js';
 import { looksLikeInjection } from '../../src/core/quarantine/processor.js';
 import { mint } from '../../src/core/tools/identity.js';
+import { buildStack } from '../helpers/stack.js';
+import { err, ok, jarvisError } from '../../src/core/types/result.js';
+import type { CalendarProvider } from '../../src/providers/contract.js';
 
 const skip = !databaseAvailable();
 const T = `inj-${String(Date.now())}`;
+
+/** Fournisseur d'agenda CLOUD — `local: false`, donc l'outil sort vraiment. */
+function agendaCloud(): CalendarProvider {
+  return {
+    capabilities: {
+      id: 'agenda-cloud-fictif',
+      local: false,
+      requiresNetwork: true,
+      maxPrivacyClass: 'ORANGE',
+      costPerMillionTokensEur: 0,
+    },
+    health: () => Promise.resolve(ok({ available: true })),
+    listEvents: () => Promise.resolve(ok([])),
+    createEvent: () => Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre'))),
+    updateEvent: () => Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre'))),
+    verifyEvent: () => Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre'))),
+  };
+}
+
 
 /**
  * Entrée VALIDE par outil sortant.
@@ -131,9 +153,14 @@ describe.skipIf(skip)('RED TEAM — injection, seconde vague', () => {
 
        Deux barrières, éprouvées séparément parce qu'elles peuvent tomber
        séparément. */
-    const reseau = runtime.gateway.list().filter((t) => t.definition.networkRequired);
+    /* LE DÉPÔT N'A PLUS AUCUN OUTIL SORTANT PAR DÉFAUT — et c'est vrai.
 
-    // Le jour où cette liste redevient vide, ce test doit redevenir l'ancien.
+       Depuis ADR-051, `networkRequired` est dérivé du fournisseur branché, et
+       aucun fournisseur n'est configuré. On construit donc une pile AVEC un
+       agenda cloud, pour que la propriété ait de quoi s'éprouver plutôt que
+       d'être verte par vacuité. */
+    const sortant = buildStack(appDb(), { calendar: agendaCloud() });
+    const reseau = sortant.gateway.list().filter((t) => t.definition.networkRequired);
     expect(reseau.length).toBeGreaterThan(0);
 
     // 1. Aucune charge ne fait ROUTER l'assistant vers un outil sortant.
@@ -151,7 +178,7 @@ describe.skipIf(skip)('RED TEAM — injection, seconde vague', () => {
     for (const tool of reseau) {
       const entree = ENTREES_VALIDES[tool.definition.id];
       expect(entree, `entrée valide manquante pour ${tool.definition.id}`).toBeDefined();
-      const result = await runtime.gateway.invoke({
+      const result = await sortant.gateway.invoke({
         toolId: tool.definition.id,
         input: entree ?? {},
         parameterProvenance: {},

@@ -167,6 +167,13 @@ téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant 
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
 **657 tests passent**, dont 99 écrits pour l'audit et la red team.
 
+Le **Data Firewall** est à mi-chemin : la classification de `docs/14` est
+branchée au Policy Gate, et une donnée `SENSITIVE` — un agenda, par exemple —
+n'atteint **aucun palier cloud, même cloud activé** (ADR-050/051). La
+migration des colonnes stockées, seul pas du chantier qui ÉLARGIT ce qui peut
+sortir, n'est délibérément pas faite : `docs/14 §5` exige une vérification
+ligne par ligne.
+
 Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
 Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit
 désormais à une coupure de PostgreSQL et reprend seul, et une déduction de
