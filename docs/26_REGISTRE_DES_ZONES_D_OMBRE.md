@@ -320,6 +320,37 @@ expose un jeton de version. S'il l'expose, `updateEvent` doit le prendre et le
 renvoyer, et cette entrée disparaît. S'il ne l'expose pas, elle devient
 **irréductible pour ce fournisseur** et doit remonter en §5.
 
+### 4.8 La composition d'outils n'est pas éprouvée
+
+**Mesuré avant d'écrire `briefing_generate` :** aucun outil du dépôt n'invoque le
+Tool Gateway.
+
+```bash
+grep -rn "gateway\.\|invoke(" src/tools/*.ts   # → aucun appel
+```
+
+Un outil qui en appellerait un autre créerait une opération **imbriquée** dans
+une opération : second bail, second identifiant, seconde entrée au journal, et
+un verdict qui dépendrait de trois sous-verdicts. Rien de tout cela n'est
+interdit par le code — et rien n'est éprouvé non plus.
+
+`briefing_generate` **évite** la question : il lit les sources directement, et un
+test structurel interdit à son fichier de contenir `gateway` ou `.invoke(`.
+C'est un contournement assumé, pas une solution.
+
+**Ce qui reste ouvert, et qu'il faudra trancher un jour :**
+
+| Question | État |
+|---|---|
+| un bail imbriqué se comporte-t-il correctement ? | inconnu |
+| le journal doit-il montrer une ou N opérations ? | non décidé |
+| le verdict composite se déduit-il des sous-verdicts ? | non spécifié |
+| une sous-opération refusée annule-t-elle la parente ? | non spécifié |
+
+**Condition de levée :** un chantier de composition, avec son banc — pas un effet
+de bord du prochain outil qui en aurait besoin. Le test structurel de
+`briefing.test.ts` sera le premier à retirer, et sciemment.
+
 ---
 
 ## 5. IRRÉDUCTIBLES — et elles le resteront

@@ -2821,3 +2821,95 @@ sont pas traitées ici : la **lecture de contenu** (`readWithinRoot` existe, auc
 outil ne l'expose) et la **classification par racine** — `docs/14` place les
 documents en `SENSITIVE`, ce que `PrivacyClass` à trois valeurs ne sait pas
 exprimer. Même limite que l'agenda, même chantier (`docs/14 §5`).
+
+---
+
+## ADR-047 — Un briefing partiel se déclare partiel
+
+**Statut :** accepté (Phase 3). **Référence :** `docs/05 §A7`, ADR-037, ADR-043,
+`docs/26 §4.8`.
+
+### Le mensonge d'ADR-043, élevé au cube
+
+`docs/05 §A7` demande « agenda + tâches urgentes + points en attente », avec une
+contrainte dure : **« Aucune modification. »**
+
+La partie difficile n'est ni l'agrégation ni l'interdit d'écriture. C'est que
+**les trois sources peuvent manquer indépendamment** :
+
+> Un briefing qui présente deux tiers de la journée comme si c'était la journée
+> entière ne se contente pas d'omettre — il **compose** une image cohérente et
+> fausse.
+
+Et il est plus difficile à repérer qu'un agenda vide : rien ne manque
+visiblement. La réponse a la bonne forme, les bonnes rubriques, un contenu
+plausible.
+
+**Décision :** chaque section porte son propre état — `OK` avec son contenu, ou
+`INDISPONIBLE` avec son motif. Aucune section ne peut être vide « par défaut ».
+
+Et un drapeau `complet: false` en tête, parce qu'un lecteur pressé — humain ou
+interface — regarde le contenu, pas l'état de chaque rubrique.
+
+**Échouer entièrement serait excessif**, contrairement à `calendar_read` : les
+tâches et les points en attente sont connus. Une réponse partielle vaut mieux
+qu'aucune réponse — **à condition qu'elle dise qu'elle est partielle.**
+
+### Ce que cet outil n'appelle PAS
+
+Il ne passe **pas** par le Tool Gateway pour composer `calendar_read` et
+`task_list`. Mesuré avant d'écrire : **aucun outil du dépôt n'invoque le
+Gateway.** La composition d'outils — opérations imbriquées, baux imbriqués,
+journaux imbriqués — est un terrain non éprouvé, et on ne l'inaugure pas dans un
+outil de confort.
+
+Le jour où elle sera un chantier assumé, le test structurel qui l'interdit ici
+sera le premier à retirer, sciemment.
+
+### Un défaut trouvé par la suite complète, pas par le test
+
+Le test A7 passait **seul** et échouait **en suite complète**. La cause n'était
+pas dans le test :
+
+```sql
+ORDER BY (due_at IS NULL), due_at ASC        -- tri PARTIEL
+```
+
+Toutes les tâches sans échéance étant ex æquo, PostgreSQL rendait un ordre libre.
+Avec plus de `limit` tâches ouvertes, **deux briefings successifs pouvaient
+montrer des tâches différentes sans que rien n'ait changé.**
+
+> Un briefing irreproductible est pire qu'un briefing incomplet : il donne
+> l'impression que la journée a bougé.
+
+Corrigé par un tri **total** (`created_at DESC, id ASC`). Et le test crée
+désormais une tâche avec échéance, ce qui le rend indépendant du reste de la
+suite plutôt que chanceux.
+
+### Les bornes du jour viennent de la base
+
+`date_trunc('day', clock_timestamp())`, jamais `Date.now()`. Leçon d'ADR-037 : un
+processus dont l'horloge dérive préparerait la mauvaise journée — **avec l'aplomb
+de celui qui a tout regardé.**
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| agenda absent rendu comme section `OK` vide | **1 / 9** |
+| `complet` toujours vrai | **2 / 9** |
+| bornes du jour calculées par le processus | **1 / 9** |
+
+### Effet sur le contrat doré
+
+**A7 quitte la liste des scénarios bloqués** : 25 couverts, 5 bloqués. Le
+compteur est asserté dans `tests/golden/contract.test.ts`, qui aurait échoué si
+on avait livré l'outil sans retirer l'entrée.
+
+### Condition de révision
+
+Si un jour le briefing doit **résumer** au sens fort — reformuler, hiérarchiser,
+juger de l'urgence autrement que par une échéance — il lui faudra un modèle, et
+cette ADR tombe : ce serait un outil d'une autre nature, soumis à `docs/15` et à
+la règle « une sortie de modèle est une entrée non fiable ». Aujourd'hui,
+« résumé » veut dire *présenté par rubriques*, et rien d'autre.

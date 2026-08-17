@@ -54,7 +54,6 @@ function testSources(): readonly { file: string; content: string }[] {
  */
 const BLOQUES: Readonly<Record<string, string>> = {
   A2: "Context Engine hors circuit — `resolver.ts` n'est atteint par aucun point d'entrée (docs/26 §4.1)",
-  A7: 'briefing_generate non écrit — Phase 3',
   A8: "aucun outil d'email n'existe — Phase 3",
   B4: 'web_search non écrit — Phase 3 ; la propriété RED↛sortie est couverte par exfiltration.test.ts',
   C4: "console d'égression non écrite — Phase 4",
@@ -113,9 +112,9 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
        périme, un test échoue. `docs/28` mesurait 16/30 référencés ; ce
        fichier porte désormais la mesure. A9 a quitté cette liste le jour où
        `audit_query` a existé — c'est exactement le mouvement qu'on attend
-       d'une dette datée. */
-    expect(couverts).toBe(24);
-    expect(bloques).toBe(6);
+       d'une dette datée. A7 l'a quittée à son tour avec `briefing_generate`. */
+    expect(couverts).toBe(25);
+    expect(bloques).toBe(5);
     expect(bloques / ids.length).toBeLessThan(0.25);
   });
 

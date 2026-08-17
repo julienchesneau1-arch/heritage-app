@@ -40,6 +40,7 @@ const ENTREES_VALIDES: Readonly<Record<string, unknown>> = {
     eventId: 'evt-exfil',
     startsAt: '2026-08-16T09:00:00.000Z',
   },
+  briefing_generate: { limit: 5 },
 };
 
 

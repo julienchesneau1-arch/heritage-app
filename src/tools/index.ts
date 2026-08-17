@@ -18,6 +18,7 @@ import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
 import { fileSearchTool } from './files.js';
+import { briefingGenerateTool } from './briefing.js';
 import {
   calendarCreateTool,
   calendarReadTool,
@@ -91,6 +92,10 @@ export function registerCoreTools(
     /* Phase 3, point 5. Premier outil qui touche le disque : une racine
        explicitement autorisée, ou rien — ADR-046. */
     fileSearchTool(deps.fileRoots ?? []),
+    /* Phase 3, point 7 — scénario doré A7. Agrège trois sources, et dit
+       laquelle manque : un briefing partiel doit se déclarer partiel
+       (ADR-047). */
+    briefingGenerateTool(deps.calendar ?? null),
   ];
 
   for (const tool of tools) {
@@ -111,4 +116,5 @@ export {
   calendarCreateTool,
   calendarUpdateTool,
   fileSearchTool,
+  briefingGenerateTool,
 };

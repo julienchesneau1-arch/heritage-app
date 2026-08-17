@@ -6,7 +6,7 @@
 > humaine en action vérifiable.**
 
 Statut : **Jarvis fonctionne.** Interface texte, passerelle web pour le téléphone,
-onze outils, mémoire, journal interrogeable — sans Internet et sans aucun modèle
+douze outils, mémoire, journal interrogeable — sans Internet et sans aucun modèle
 installé.
 
 ---
@@ -79,7 +79,7 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 620 tests
+pnpm test                   # 629 tests
 pnpm test:redteam           # les 97 tests d'audit et de red team
 pnpm test:lab               # les 149 tests du banc (chaos, bail, deux mondes, byzantin, provenance)
 JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
@@ -153,14 +153,16 @@ fournisseur ne répond (ADR-044), et `calendar_update`, où l'état antérieur e
 déclaré par le fournisseur qui l'a remplacé plutôt que deviné par nous
 (ADR-045), et `file_search`, **premier accès disque**, confiné à une racine
 explicitement autorisée et vérifié par `realpath` plutôt que par comparaison de
-chaînes (ADR-046) — et une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
+chaînes (ADR-046), et `briefing_generate`, qui prépare la journée en déclarant
+quelle source lui manque plutôt qu'en composant une image cohérente et fausse
+(ADR-047) — et une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
 aucun modèle requis).
 
 Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**620 tests passent**, dont 99 écrits pour l'audit et la red team.
+**629 tests passent**, dont 99 écrits pour l'audit et la red team.
 
 Cet audit a trouvé deux défauts critiques et sept majeurs. **Le Sprint
 Foundation 1 en a corrigé six** — dont les deux critiques : le processus survit
