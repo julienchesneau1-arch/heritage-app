@@ -2536,3 +2536,93 @@ réexaminé : lire un agenda distant n'a rien à vérifier, mais un agenda qui r
 **partiellement** (page tronquée, fenêtre écrêtée côté serveur) est un cas que
 cette ADR ne couvre pas — et qui ressemble beaucoup, encore une fois, à un agenda
 vide.
+
+---
+
+## ADR-044 — Le premier effet externe, et ce qu'on refuse de promettre
+
+**Statut :** accepté (Phase 3). **Référence :** `docs/02 §Phase 3`, `docs/03 §120`,
+`docs/16 §3`, `docs/21 §2`, ADR-030, ADR-033, ADR-034, `docs/26 §4.6`.
+
+### Ce qui change avec `calendar_create`
+
+Les huit outils précédents écrivent dans PostgreSQL ou ne changent rien. Celui-ci
+modifie un monde que nos transactions ne couvrent pas.
+
+**Toute la machinerie construite ces dernières semaines existait pour ce cas
+sans qu'aucun code de production ne l'exerce** : contrats d'effet, `UNKNOWN`
+définitif, refus de rejeu, classification byzantine, deux mondes du banc. Le
+constat mesuré avant d'écrire l'outil : `grep "effect:" src/tools/*.ts` ne
+rendait que `NO_EXTERNAL_EFFECT` et `LOCAL_TRANSACTIONAL`.
+
+### La propriété qui structure tout
+
+> Une ligne absente après commit **prouve** l'absence.
+> Un événement absent chez un fournisseur distant prouve seulement qu'il n'est
+> pas là **à cet instant.**
+
+D'où `verifiability: 'OBSERVABLE'` et un `readBack` qui rend `UNKNOWN` sur une
+absence, jamais `FAILED`. L'utilisateur qui entendrait « échec » recréerait le
+rendez-vous, et il en aurait deux — la requête peut arriver une seconde plus
+tard (`docs/21 §2`).
+
+### Les trois déclarations, chacune choisie CONTRE une option plus flatteuse
+
+**`effect: 'EXTERNALLY_VERIFIABLE'`, et surtout pas `PROVIDER_IDEMPOTENT`.**
+
+La signature `createEvent(event, operationId)` *invite* à déclarer l'idempotence :
+la clé est là, le fournisseur pourrait dédoublonner. Mais **« pourrait » n'est pas
+« garantit »**, et `PROVIDER_IDEMPOTENT` est le seul contrat externe qui autorise
+un rejeu après `UNKNOWN` (ADR-034).
+
+Aucun fournisseur n'existe. Le déclarer serait promettre **au nom** d'un
+adaptateur que personne n'a écrit — et le jour où quelqu'un brancherait un CalDAV
+qui ignore la clé, un rejeu créerait un second rendez-vous en silence. C'est la
+déclaration la plus dangereuse du dépôt si elle était fausse.
+
+**`maxRetries: 0`.** Une seconde requête après un échec réseau créerait un doublon
+si la première a abouti sans que la réponse nous parvienne. Aucune observation de
+notre part ne peut l'exclure.
+
+**`attemptVerification: 'NONE'`** — une limite d'interface, pas une paresse.
+`verifyEvent(id)` exige l'identifiant de l'événement, précisément ce qu'on n'a pas
+après un crash. Détaillé en `docs/26 §4.6`, avec la divergence
+`docs/16 §3` ↔ ADR-030 qu'il faut trancher.
+
+**`autonomy: 'L3'`** — `docs/03 §120` nomme explicitement « déplacer un
+rendez-vous » comme exemple d'APPROVAL. Le niveau est lu, pas déduit. Et le
+fournisseur ne reçoit **rien** tant que la confirmation n'est pas donnée : une
+action préparée n'a pas le droit de toucher le monde extérieur « pour préparer ».
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| `readBack` conclut `FAILED` sur une absence | **1 / 12** |
+| `effect` requalifié `PROVIDER_IDEMPOTENT` | **1 / 12** |
+| `maxRetries` remonté à 2 | **1 / 12** |
+| `L3` abaissé en `L2` | **2 / 12** |
+
+**Le premier sabotage mérite d'être lu deux fois.** Un seul test rougit — et le
+verdict rendu à l'utilisateur **reste `UNKNOWN`**, parce que
+`constrainToVerifiability` dégrade tout `FAILED` venant d'un outil `OBSERVABLE`
+(`engine.ts:200`). La redondance est donc réelle et non décorative, et il fallait
+la mesurer pour le savoir. Le test qui rougit est celui qui empêche la barrière
+de l'outil de pourrir sans bruit derrière celle du moteur.
+
+### Ce qui n'est PAS fait
+
+Aucun adaptateur. `calendar_delete`, déclaré comme outil inverse, n'existe pas —
+ADR-019 l'autorise explicitement (« la capture est un enregistrement, pas une
+exécution »), mais la dette rejoint `task_cancel`, `note_delete` et
+`memory_forget` : **quatre outils inverses déclarés, zéro écrit.** L'Undo Engine
+devra les livrer ensemble.
+
+### Condition de révision
+
+Le jour où un adaptateur réel existe, deux choses tombent et doivent être
+reprises ici : `effect` peut devenir `PROVIDER_IDEMPOTENT` **si et seulement si**
+le fournisseur documente sa déduplication par clé — la fiche `ReplaySafety`
+d'ADR-034 exige alors un `independentOfObservation` démontrable, pas plausible.
+Et un `findByOperationId` sur `CalendarProvider` rendrait `BY_OPERATION_KEY`
+honnête.

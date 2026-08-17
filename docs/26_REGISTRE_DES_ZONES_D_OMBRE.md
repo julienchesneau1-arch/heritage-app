@@ -240,6 +240,53 @@ ouvert.
 dernier test de `calendar-read.test.ts` échouera ce jour-là — c'est ce qu'on
 demande à une zone d'ombre : se signaler quand elle disparaît.
 
+### 4.6 `CalendarProvider` ne peut pas vérifier une tentative
+
+**Trouvé en écrivant `calendar_create`, contre la prescription de `docs/16`.**
+
+`docs/16 §3` prescrit pour cet outil :
+
+```text
+| futur calendar.create | EXTERNE | READ_BACK | BY_RESOURCE | clé d'opération |
+```
+
+L'interface déclarée ne peut pas l'honorer :
+
+```ts
+createEvent(event, operationId): Promise<Result<CalendarEvent>>
+verifyEvent(id):                 Promise<Result<CalendarEvent | null>>
+```
+
+`verifyEvent` exige **l'identifiant de l'événement** — précisément ce qu'on n'a
+pas si le processus est mort avant de l'avoir enregistré. La question à laquelle
+une vérification de tentative doit répondre est *« as-tu déjà traité l'opération
+8f2a… ? »*, et `CalendarProvider` ne sait pas l'entendre.
+
+D'où `attemptVerification: 'NONE'`. Déclarer `BY_OPERATION_KEY` exigerait un
+`verifyAttempt` qu'on ne pourrait pas écrire honnêtement — c'est exactement
+l'**illusion de fiabilité** que le validateur de contrat existe pour empêcher
+(`contract.ts:397`).
+
+**Conséquence assumée :** après un `UNKNOWN`, on ne rejoue pas et on demande.
+C'est la conduite prescrite par ADR-027, et elle est correcte ; simplement, elle
+sera demandée plus souvent qu'elle ne devrait.
+
+**Divergence document ↔ document, à trancher.** La règle de `docs/16 §3` —
+*« aucun outil `effect: EXTERNAL` ne peut être enregistré avec
+`attemptVerification: NONE` »* — n'est **pas** celle que le code applique, et ce
+n'est pas un oubli : **ADR-030 l'a explicitement remplacée.**
+
+> *« Interdire aurait exclu des familles entières d'outils légitimes — un webhook
+> chez un tiers sans API de consultation reste utile. On n'interdit donc pas
+> l'OUTIL : on interdit l'ILLUSION DE FIABILITÉ. »*
+
+Le code interdit désormais : effet externe + `UNVERIFIABLE` + autonomie L1/L2.
+`docs/16 §3` est donc **périmé sur ce point** et devrait renvoyer à ADR-030.
+
+**Condition de levée :** un `findByOperationId` sur `CalendarProvider`, à ajouter
+le jour où un adaptateur réel est écrit — et à ne pas ajouter avant, faute de
+savoir si un CalDAV donné sait y répondre.
+
 ---
 
 ## 5. IRRÉDUCTIBLES — et elles le resteront

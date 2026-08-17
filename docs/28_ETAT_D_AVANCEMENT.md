@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 54 %**
+## 1. Étendue fonctionnelle — **≈ 55 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -31,12 +31,12 @@ nombre de cases à cocher.
 | 0 Fondations | 12 % | **100 %** | 12,0 | `gate:phase0` ✅ |
 | 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
-| 3 Les 10 outils restants | 12 % | **30 %** | 3,6 | **8 outils sur 15** ; `audit_query` ✅ · `task_complete` ✅ · `calendar_read` ✅ (ADR-043, sans adaptateur) — 7 restants |
+| 3 Les 10 outils restants | 12 % | **40 %** | 4,8 | **9 outils sur 15** ; `audit_query` ✅ · `task_complete` ✅ · `calendar_read` ✅ · `calendar_create` ✅ (ADR-044, **premier effet externe**) — 6 restants |
 | 4 Confidentialité, coût, indépendance | 13 % | **45 %** | 5,9 | égression ✅ · redaction ✅ · **Cost Engine ✅** (ADR-040) · **Model Router ✗** |
 | 5 Voix | 10 % | **0 %** | 0,0 | rien |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 54 %** | |
+| **TOTAL** | 100 % | | **≈ 55 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -45,7 +45,7 @@ elle n'est donc pas un dû.
 
 | Affirmation | Mesure |
 |---|---|
-| 8 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read` |
+| 9 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create` |
 | Model Router absent | aucun fichier de `src/` ne contient « router » |
 | Voix absente | aucun module STT/TTS/VAD |
 | Update Engine absent | aucun module canary/rollback/twin |
@@ -104,9 +104,9 @@ parfaite.**
 
 | | |
 |---|---|
-| **La qualité de ce qui est fait** | 54 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
+| **La qualité de ce qui est fait** | 55 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
 | **La difficulté restante** | la Phase 5 (voix) est plus longue que la Phase 3, à poids presque égal. |
-| **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 46 %. |
+| **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 45 %. |
 | **Ce qui est irréductible** | `docs/26 §5` — six limites qu'aucun pourcentage ne fera bouger. |
 
 Le troisième point mérite d'être lu deux fois : **le plan d'exécution n'a jamais
@@ -120,8 +120,8 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **43 ADR**, chacune avec sa condition de révision |
-| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 ouverte** (3 outils sur 10) ; 4→7 ouvertes |
+| 01 | ADR | **44 ADR**, chacune avec sa condition de révision |
+| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 ouverte** (4 outils sur 10) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **9/15 nommés en test** |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
 | 05 | Tests dorés | **24/30 référencés**, 6 bloqués déclarés — lien mécanique |
@@ -129,13 +129,14 @@ mesurer contre `docs/02` le fait donc disparaître.
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
 | 08·09·10·11 | Audits | faits, conclusions intégrées |
 | 12 | Vérité et traçabilité | **le journal est interrogeable** (`audit_query`, ADR-041) — la promesse est tenue, pas seulement écrite |
-| 13·14·15·16 | Menace, données, fournisseurs, vérification | posés et appliqués |
+| 13·14·15 | Menace, données, fournisseurs | posés et appliqués |
+| 16 | Capacités de vérification | appliqué, **sauf §3 périmé** : sa règle « aucun EXTERNAL avec `attemptVerification: NONE` » a été remplacée par ADR-030 (`docs/26 §4.6`) |
 | 17·18 | Défaillances réelles | **banc complet**, mesures publiées |
 | 19 | `PARTIAL` et routage | **spécifié, non branché** |
 | 20·21 | Chaos, bail adversarial | faits |
 | 22 | Conception du banc | **5 couches sur 8** |
 | 23·24·25 | Horloge, cloisonnement, bail | faits, avec sabotage |
-| 26 | Registre des zones d'ombre | tenu à jour ; **§4.5 ajoutée** — `egress` est un booléen là où il y a deux questions |
+| 26 | Registre des zones d'ombre | tenu à jour ; **§4.5 et §4.6 ajoutées** — `egress` est un booléen là où il y a deux questions ; `CalendarProvider` ne peut pas vérifier une tentative |
 | 27 | Deux mondes | fait |
 
 ---
@@ -149,7 +150,8 @@ mesurer contre `docs/02` le fait donc disparaître.
 | ~~1. `audit_query`~~ | **FAIT** — ADR-041. Le journal est interrogeable ; **A9** est sorti de la liste des bloqués. |
 | ~~1. `task_complete`~~ | **FAIT** — ADR-042. Premier outil qui MODIFIE : la capture d'annulation y devient une restauration de l'état OBSERVÉ, et le validateur de contrat a corrigé au passage un `NATURALLY_IDEMPOTENT` de trop (S6). |
 | ~~1. `calendar_read`~~ | **FAIT** — ADR-043, sans adaptateur. A surtout fait CHANGER DE FONDATION l'invariant S2 : deux tests de red team tenaient par absence d'outil réseau, ils tiennent désormais par le refus. |
-| **1. Les 7 outils restants** (Phase 3) | `briefing_generate` débloque **A7**, un outil d'email débloque **A8**, `web_search` débloque **B4**, `memory_forget` débloque **C3**. Quatre des six blocages restants sont dans cette phase. |
+| ~~1. `calendar_create`~~ | **FAIT** — ADR-044. **Premier effet EXTERNE du dépôt** : la machinerie de contrats d'effet, jusque-là exercée par le seul banc, porte enfin du code de production. |
+| **1. Les 6 outils restants** (Phase 3) | `briefing_generate` débloque **A7**, un outil d'email débloque **A8**, `web_search` débloque **B4**, `memory_forget` débloque **C3**. Quatre des six blocages restants sont dans cette phase. |
 | **2. Câbler le Context Engine** | débloque **A2**, et tient la promesse de levée d'ambiguïté du `QUICKSTART`. |
 | **3. Model Router** (Phase 4) | choisir le moins cher **parmi les éligibles** — l'ordre de `docs/14 §4` devra y être respecté, et c'est le point à ne pas manquer. |
 
@@ -161,7 +163,7 @@ entier, et aucun ne renforce ce qui existe.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 54 %     ce que Jarvis sait faire
+ÉTENDUE FONCTIONNELLE   ≈ 55 %     ce que Jarvis sait faire
 PROFONDEUR DE PREUVE    ≈ 77 %     ce qu'on peut en démontrer
 ```
 
@@ -170,5 +172,5 @@ Et la phrase qui les relie, qui n'a pas changé depuis le début :
 > Une fonctionnalité ne peut jamais être plus autonome que la qualité de la
 > preuve disponible sur son effet.
 
-Un projet à 54 % d'étendue et 77 % de preuve est exactement dans le bon ordre.
+Un projet à 55 % d'étendue et 77 % de preuve est exactement dans le bon ordre.
 L'inverse aurait été inquiétant.

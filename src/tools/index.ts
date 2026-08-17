@@ -17,7 +17,7 @@ import { memoryAddTool, memorySearchTool } from './memory.js';
 import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
-import { calendarReadTool } from './calendar.js';
+import { calendarCreateTool, calendarReadTool } from './calendar.js';
 
 export interface ToolDeps {
   readonly guard: MemoryGuard;
@@ -68,6 +68,10 @@ export function registerCoreTools(
        vide et un agenda inaccessible se ressemblent, et se racontent
        différemment — ADR-043. */
     calendarReadTool(deps.calendar ?? null),
+    /* Phase 3, point 3. PREMIER EFFET EXTERNE du dépôt : toute la machinerie
+       de contrats d'effet existait pour ce cas sans qu'aucun code de
+       production ne l'exerce — ADR-044. */
+    calendarCreateTool(deps.calendar ?? null),
   ];
 
   for (const tool of tools) {
@@ -85,4 +89,5 @@ export {
   taskCompleteTool,
   noteCreateTool,
   calendarReadTool,
+  calendarCreateTool,
 };

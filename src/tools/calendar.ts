@@ -24,7 +24,9 @@ import {
   defineTool,
   type RegisteredTool,
   type ToolExecution,
+  type VerificationOutcome,
 } from '../core/tools/contract.js';
+import { verificationOutcome } from '../core/verification/engine.js';
 import { err, ok, jarvisError, type Result } from '../core/types/result.js';
 import type { CalendarProvider } from '../providers/contract.js';
 
@@ -142,6 +144,200 @@ export function calendarReadTool(
           })),
         },
       });
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+
+const CalendarCreateInput = z.object({
+  title: z.string().min(1).max(300),
+  startsAt: z.string().datetime(),
+  endsAt: z.string().datetime(),
+});
+
+/**
+ * `calendar_create` — Phase 3, point 3.
+ *
+ * **PREMIER EFFET EXTERNE DU DÉPÔT.** Les huit outils précédents écrivent dans
+ * PostgreSQL ou ne changent rien. Celui-ci modifie un monde que nos
+ * transactions ne couvrent pas, et toute la machinerie construite ces dernières
+ * semaines — contrats d'effet, `UNKNOWN` définitif, refus de rejeu, deux mondes
+ * du banc — existait pour ce cas sans qu'aucun code de production ne l'exerce.
+ *
+ * Voir ADR-044. Les trois déclarations qui suivent sont les seules qui
+ * comptent, et chacune a été choisie CONTRE une option plus flatteuse.
+ */
+export function calendarCreateTool(
+  provider: CalendarProvider | null,
+): RegisteredTool {
+  return defineTool<z.infer<typeof CalendarCreateInput>>({
+    definition: {
+      id: 'calendar_create',
+      version: '1.0.0',
+      description: "Créer un événement dans l'agenda.",
+      /* L3 — `docs/03 §120` nomme explicitement « déplacer un rendez-vous »
+         comme exemple de APPROVAL. Ce n'est pas une déduction : le niveau est
+         écrit dans le document, et l'outil s'y range. */
+      autonomy: 'L3',
+      privacyClass: 'ORANGE',
+      reversible: true,
+      /* Même raisonnement que `calendar_read` : le contrat est statique, le
+         trajet dépend du fournisseur, donc pire cas. Voir `docs/26 §4.5`. */
+      networkRequired: true,
+      parameters: [
+        { name: 'title', sensitive: true },
+        { name: 'startsAt', sensitive: true },
+        { name: 'endsAt', sensitive: true },
+      ],
+      idempotency: 'OPERATION_KEY',
+      verification: 'READ_BACK',
+      timeoutMs: 10_000,
+      /* ZÉRO. Une nouvelle tentative après un échec réseau créerait un second
+         rendez-vous si le premier a abouti sans que la réponse nous parvienne.
+         C'est `docs/21 §2` — la requête encore en vol — et aucune observation
+         de notre part ne peut l'exclure. */
+      maxRetries: 0,
+      auditEvent: 'CALENDAR_EVENT_CREATED',
+      requiredSecrets: [],
+      rollback: "Supprimer l'événement créé chez le fournisseur (calendar_delete).",
+      /* `NONE`, ET C'EST UNE LIMITE DE L'INTERFACE, PAS UNE PARESSE.
+
+         `docs/16 §3` prescrit `BY_RESOURCE` pour cet outil. Or
+         `CalendarProvider.verifyEvent(id)` exige l'IDENTIFIANT DE L'ÉVÉNEMENT
+         — précisément ce qu'on n'a pas si le processus est mort avant de
+         l'avoir enregistré. L'interface, telle qu'elle est déclarée, ne sait
+         pas répondre à « as-tu déjà traité l'opération 8f2a… ? ».
+
+         `BY_OPERATION_KEY` exigerait `verifyAttempt`, que nous ne pourrions
+         pas écrire honnêtement. Le déclarer serait l'illusion de fiabilité que
+         le validateur de contrat existe pour empêcher.
+
+         Conséquence assumée : après un `UNKNOWN`, on ne rejoue pas et on
+         demande. Consigné en `docs/26 §4.6`. */
+      attemptVerification: 'NONE',
+      /* `EXTERNALLY_VERIFIABLE`, ET SURTOUT PAS `PROVIDER_IDEMPOTENT`.
+
+         La signature `createEvent(event, operationId)` INVITE à déclarer
+         `PROVIDER_IDEMPOTENT` : la clé d'opération est là, le fournisseur
+         pourrait dédoublonner. Mais « pourrait » n'est pas « garantit », et
+         `PROVIDER_IDEMPOTENT` est le SEUL contrat externe qui autorise un
+         rejeu après `UNKNOWN`.
+
+         Aucun fournisseur n'existe. Déclarer cette garantie serait la promettre
+         AU NOM d'un adaptateur que personne n'a écrit — et le jour où
+         quelqu'un brancherait un CalDAV qui ignore la clé, un rejeu créerait
+         un second rendez-vous en silence.
+
+         `EXTERNALLY_VERIFIABLE` dit ce qui est vrai : le fournisseur est
+         interrogeable, donc un `UNKNOWN` peut devenir `CONFIRMED` ; il n'est
+         pas idempotent, donc on ne rejoue jamais. */
+      effect: 'EXTERNALLY_VERIFIABLE',
+      /* `OBSERVABLE` — présence seulement, JAMAIS `FAILED`.
+
+         Ne pas voir l'événement ne prouve pas qu'il n'existe pas : la requête
+         peut encore être en vol. Le Verification Engine dégrade d'ailleurs
+         tout `FAILED` en `UNKNOWN` pour un outil OBSERVABLE (`engine.ts:200`),
+         ce qui fait de cette ligne une seconde barrière et non l'unique. */
+      verifiability: 'OBSERVABLE',
+    },
+
+    inputSchema: CalendarCreateInput,
+
+    async execute(input, ctx): Promise<Result<ToolExecution>> {
+      if (provider === null) {
+        return err(
+          jarvisError(
+            'PROVIDER_UNAVAILABLE',
+            "Aucun fournisseur d'agenda n'est configuré : l'événement n'a pas "
+              + 'été créé, et rien ne permet de dire qu\'il le sera.',
+          ),
+        );
+      }
+
+      if (Date.parse(input.startsAt) >= Date.parse(input.endsAt)) {
+        return err(
+          jarvisError('VALIDATION', 'Un événement doit finir après avoir commencé.'),
+        );
+      }
+
+      /* La clé d'opération est transmise au fournisseur. Elle ne FONDE aucune
+         garantie de notre côté — voir `effect` ci-dessus — mais la retenir
+         empêcherait un fournisseur qui, lui, sait dédoublonner, de le faire. */
+      const created = await provider.createEvent(
+        {
+          title: input.title,
+          startsAt: input.startsAt,
+          endsAt: input.endsAt,
+        },
+        ctx.operationId,
+      );
+      /* L'erreur remonte telle quelle. Le Gateway la traduira en `UNKNOWN` et
+         non en `FAILED`, parce que le contrat d'effet est externe : une erreur
+         de transport ne prouve pas l'absence d'effet chez le fournisseur. */
+      if (!created.ok) return created;
+
+      return ok({
+        output: {
+          eventId: created.value.id,
+          title: created.value.title,
+          startsAt: created.value.startsAt,
+          endsAt: created.value.endsAt,
+          source: provider.capabilities.id,
+        },
+        resource: { kind: 'calendar_event', id: created.value.id },
+        undo: {
+          kind: 'INVERSE_OPERATION',
+          inverseToolId: 'calendar_delete',
+          inverseInput: { eventId: created.value.id },
+        },
+      });
+    },
+
+    async readBack(execution, ctx): Promise<Result<VerificationOutcome>> {
+      void ctx;
+      if (provider === null || execution.resource === undefined) {
+        return ok(
+          verificationOutcome.unknown('Aucune ressource à relire.', 'NO_OBSERVATION'),
+        );
+      }
+
+      const found = await provider.verifyEvent(execution.resource.id);
+      if (!found.ok) {
+        /* Le fournisseur ne répond pas à la relecture. L'événement a peut-être
+           été créé — on ne le saura pas maintenant. */
+        return ok(
+          verificationOutcome.unknown(
+            `Relecture impossible chez ${provider.capabilities.id} : ${found.error.message}`,
+            'EXTERNAL_STATE',
+          ),
+        );
+      }
+
+      if (found.value === null) {
+        /* ABSENCE OBSERVÉE ⇒ `UNKNOWN`, JAMAIS `FAILED`.
+
+           C'est la différence entre PostgreSQL et le monde. Une ligne absente
+           après commit PROUVE l'absence ; un événement absent chez un
+           fournisseur distant prouve seulement qu'il n'est pas là À CET
+           INSTANT. La requête peut arriver une seconde plus tard, et
+           l'utilisateur qui aurait entendu « échec » recréerait le
+           rendez-vous. */
+        return ok(
+          verificationOutcome.unknown(
+            `Événement ${execution.resource.id} non trouvé chez `
+              + `${provider.capabilities.id} — un effet différé reste possible.`,
+            'EXTERNAL_STATE',
+          ),
+        );
+      }
+
+      return ok(
+        verificationOutcome.confirmed({
+          observed: `événement « ${found.value.title} » relu chez `
+            + `${provider.capabilities.id} (${found.value.startsAt})`,
+        }),
+      );
     },
   });
 }

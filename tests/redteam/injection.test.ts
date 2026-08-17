@@ -31,6 +31,11 @@ const ENTREES_VALIDES: Readonly<Record<string, unknown>> = {
     fromIso: '2026-08-16T00:00:00.000Z',
     toIso: '2026-08-16T23:59:59.000Z',
   },
+  calendar_create: {
+    title: 'exfiltration',
+    startsAt: '2026-08-16T09:00:00.000Z',
+    endsAt: '2026-08-16T10:00:00.000Z',
+  },
 };
 
 
