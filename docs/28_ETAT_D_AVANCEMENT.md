@@ -209,7 +209,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **57 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **58 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
@@ -262,9 +262,18 @@ entier, et aucun ne renforce ce qui existe.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 64 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 80 %     ce qu'on peut en démontrer
+ÉTENDUE FONCTIONNELLE   ≈ 65 %     ce que Jarvis sait faire
+PROFONDEUR DE PREUVE    ≈ 76 %     ce qu'on peut en démontrer
 ```
+
+> ⚠ **CETTE SECTION A CONTREDIT LE RESTE DU DOCUMENT.** Elle affichait encore
+> 64 % / 80 % quand les §1 et §2 disaient 65 % et 76 % : les corrections
+> d'ADR-054 et ADR-055 avaient touché les sections, pas le résumé.
+>
+> Quatrième occurrence du même motif — **un chiffre en prose que rien ne relie
+> au reste**. `tests/architecture/coherence-des-chiffres.test.ts` lie désormais
+> ce bloc aux deux en-têtes : ils ne peuvent plus diverger sans faire rougir la
+> CI (ADR-058).
 
 Et la phrase qui les relie, qui n'a pas changé depuis le début :
 

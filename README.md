@@ -59,7 +59,7 @@ Le changement de philosophie entre v0.1 et v0.2 tient en une phrase :
 | 25 | [`docs/25_LEASE_LAYER_REPORT.md`](docs/25_LEASE_LAYER_REPORT.md) | **Couche 02 — le bail** : l'échéance appartient à l'acquisition, le gel qu'aucune mesure ne détecte, et le coût mesuré de l'absence de renouvellement | avant de toucher à l'expiration d'un bail ou au `timeoutMs` d'un outil |
 | 26 | [`docs/26_REGISTRE_DES_ZONES_D_OMBRE.md`](docs/26_REGISTRE_DES_ZONES_D_OMBRE.md) | **Registre des zones d'ombre** : ce qui est supprimé, ce qui est irréductible, ce qui est différé — et ce que le balayage ne garantit pas | avant de croire qu'une capacité de ce dépôt est disponible |
 | 27 | [`docs/27_TWO_WORLDS_REPORT.md`](docs/27_TWO_WORLDS_REPORT.md) | **Les deux mondes** : « Jarvis avait raison de dire UNKNOWN alors que l'effet avait eu lieu », matrice de vérité exécutable, fournisseur byzantin et classes A/B/C/D | avant de croire qu'une violation de contrat fournisseur est détectable |
-| 28 | [`docs/28_ETAT_D_AVANCEMENT.md`](docs/28_ETAT_D_AVANCEMENT.md) | **État d'avancement mesuré** : étendue fonctionnelle ≈ 51 %, profondeur de preuve ≈ 76 %, et ce que le chiffre ne mesure pas | vous voulez savoir où en est le projet |
+| 28 | [`docs/28_ETAT_D_AVANCEMENT.md`](docs/28_ETAT_D_AVANCEMENT.md) | **État d'avancement mesuré** — c'est la SEULE source des chiffres du projet ; ce README n'en recopie aucun (ADR-058) | vous voulez savoir où en est le projet |
 | — | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) | Registre des dépendances et de leurs fiches | avant d'ajouter une dépendance |
 
 `CLAUDE.md` à la racine est chargé automatiquement par Claude Code et renvoie vers 06.
@@ -79,9 +79,9 @@ pnpm jarvis:setup           # secrets générés, rôles, bases, migrations
 pnpm jarvis                 # l'interface texte
 pnpm jarvis:web             # la passerelle web locale (téléphone)
 
-pnpm test                   # 670 tests
-pnpm test:redteam           # les 97 tests d'audit et de red team
-pnpm test:lab               # les 149 tests du banc (chaos, bail, deux mondes, byzantin, provenance)
+pnpm test                   # la suite entière
+pnpm test:redteam           # audit et red team
+pnpm test:lab               # le banc (chaos, bail, deux mondes, byzantin, provenance)
 JARVIS_CHAOS_RUNS=150 pnpm test:lab   # campagne de chaos étendue
 pnpm test:coverage          # couverture mesurée
 pnpm gate:phase0            # vérifie la porte de sortie Phase 0
@@ -138,10 +138,11 @@ Ledger append-only chaîné par hash, Policy Gate L0–L4 adossé à Cedar, Memo
 Guard à deux axes de classification, recherche hybride à trois voies, Context
 Engine avec détection d'ambiguïté, Memory Inbox, capture d'état antérieur,
 registre des dérivés, interfaces fournisseurs avec test de contrat bloquant,
-coffre à secrets, banc de mesure, CI. **154 tests passent.**
+coffre à secrets, banc de mesure, CI.
 
 S'y ajoutent le Tool Gateway et ses contrats, le Verification Engine, la
-séparation Privileged/Quarantined (ADR-004), les sept outils écrits —
+séparation Privileged/Quarantined (ADR-004) — désormais EN CIRCUIT, depuis
+que `web_search` ingère du contenu de tiers (ADR-055) — et les outils écrits :
 `memory_add`, `memory_search`, `task_create`, `task_list`, `note_create`,
 `audit_query`, qui rend le journal interrogeable (ADR-041), et `task_complete`,
 premier outil qui MODIFIE une ligne et donc le premier dont l'annulation exige
@@ -157,15 +158,31 @@ chaînes (ADR-046), et `briefing_generate`, qui prépare la journée en déclara
 quelle source lui manque plutôt qu'en composant une image cohérente et fausse
 (ADR-047), `reminder_create`, qui déclare qu'il ne sonnera pas faute
 d'ordonnanceur et se présente dans le briefing (ADR-048), et `system_status`,
-qui refuse de se déclarer sain sur ce qu'il n'a pas pu mesurer (ADR-049) — et
-une **interface texte** avec analyse d'intention par règles (Tier 0 du PRD :
-aucun modèle requis).
+qui refuse de se déclarer sain sur ce qu'il n'a pas pu mesurer (ADR-049),
+`egress_review`, la console qui montre ce qui est parti de la machine — où,
+quelle classe de donnée, pourquoi — en LISANT le journal plutôt qu'en
+reconstituant après coup (ADR-052), et `web_search`, **première ingestion de
+contenu externe du dépôt** : sa requête est refusée avant tout appel réseau si
+elle porte un identifiant, et ce qu'il rapporte est scellé `EXTERNAL_UNTRUSTED`
+— c'est lui qui met la séparation Privileged/Quarantined en circuit (ADR-055).
+
+S'y ajoute un **arrêt d'urgence** (ADR-057) qui n'est délibérément pas un outil :
+un arrêt que le Policy Gate pourrait refuser n'en serait pas un. Il vit en base,
+donc il survit au redémarrage ; il annule ce qui est en attente et **ne prétend
+pas** annuler ce qui est déjà parti ; il laisse les lectures locales disponibles,
+parce qu'après avoir appuyé sur le bouton on a plus besoin de comprendre, pas
+moins ; et seul l'utilisateur peut le lever.
+
+Enfin une **interface texte** avec analyse d'intention par règles (Tier 0 du
+PRD : aucun modèle requis).
 
 Enfin une **passerelle web locale** (ADR-023) : la même boucle, servie sur le
 réseau domestique derrière un jeton obligatoire, pour utiliser Jarvis depuis un
 téléphone. Elle n'exécute rien en propre — elle appelle le même Assistant que le
 CLI, donc le même Policy Gate, le même Memory Guard et le même journal.
-**670 tests passent**, dont 99 écrits pour l'audit et la red team.
+Le compte des tests, la couverture et l'avancement chiffré vivent dans
+[`docs/28`](docs/28_ETAT_D_AVANCEMENT.md) et nulle part ailleurs : le même
+chiffre recopié à quatre endroits dérive à trois, et c'est arrivé (ADR-058).
 
 Le **Data Firewall** est à mi-chemin : la classification de `docs/14` est
 branchée au Policy Gate, et une donnée `SENSITIVE` — un agenda, par exemple —

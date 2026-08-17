@@ -212,7 +212,7 @@ démarrer, avec la marche à suivre. Essayez `JARVIS_WEB_HOST=0.0.0.0` : refus
 ## Vérifier soi-même
 
 ```bash
-pnpm test            # 345 tests
+pnpm test            # la suite entière
 pnpm gate:phase0     # journal inaltérable, isolation fournisseurs, secrets
 pnpm gate:phase1     # mémoire, contexte, ambiguïté, hors ligne
 pnpm gate:phase2     # outils, idempotence, vérification, injection

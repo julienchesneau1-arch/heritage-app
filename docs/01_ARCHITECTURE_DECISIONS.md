@@ -3845,3 +3845,98 @@ simulé côté sécurité ».
 Le jour où une sortie en flux existera, « sorties interrompues » deviendra
 exigible et cette ADR devra être reprise : aujourd'hui rien ne stream, et le
 prétendre serait un mensonge porté par un nom.
+
+---
+
+## ADR-058 — Un chiffre publié vit à un seul endroit, ou il diverge
+
+**Statut :** accepté (cohérence documentaire — aucun changement fonctionnel).
+**Référence :** ADR-041, ADR-054, ADR-055, ADR-057,
+`tests/architecture/coherence-des-chiffres.test.ts`.
+
+### Quatre fois le même défaut, en quatre sprints
+
+| | |
+|---|---|
+| ADR-054 | « 9 des 15 invariants » — la mesure en donnait **7** |
+| ADR-055 | « le compteur aurait échoué » — il ne lisait que sa propre table |
+| ADR-057 | un scénario **CRITIQUE** compté couvert par collision de chaîne |
+| **ici** | **`docs/28` se contredisait LUI-MÊME** |
+
+Le quatrième est le plus embarrassant : `## 1. Étendue fonctionnelle — ≈ 65 %`
+et le bloc de synthèse final du **même document** affichaient 65 % et 64 %,
+76 % et 80 %. Deux corrections successives avaient touché les sections sans
+toucher le résumé, cent lignes plus bas.
+
+Et il n'était pas seul. Balayage complet des documents d'état :
+
+```text
+README      « ≈ 51 % » d'étendue      — périmé de deux révisions
+README      « 670 tests » ligne 82
+README      « 154 tests » ligne 141   — deux comptes contradictoires
+README      « 670 tests » ligne 168     dans le MÊME fichier
+QUICKSTART  « 345 tests »             — périmé de plusieurs sprints
+README      récit des outils arrêté à `system_status` — `egress_review` et
+            `web_search` existaient sans y figurer, sous une introduction qui
+            annonçait encore « les sept outils écrits » devant dix noms
+```
+
+### La cause n'est pas l'inattention, c'est la DUPLICATION
+
+Corriger le quatrième défaut sans corriger la cause aurait garanti un
+cinquième. Et le dépôt connaît déjà cette cause — ADR-041 l'a tranchée pour les
+données :
+
+> Une console alimentée par une seconde table pourrait diverger — et le jour où
+> elles divergent, aucune ne fait autorité.
+
+C'est exactement ce qui est arrivé à la documentation. L'étendue fonctionnelle
+vivait à trois endroits ; les trois ont fini par dire trois choses.
+
+### La décision
+
+**`docs/28` est la seule source des chiffres du projet.** README et QUICKSTART
+n'en republient aucun : ils pointent vers lui.
+
+Un compte de tests ne peut d'ailleurs pas être vérifié sans exécuter la suite.
+Le figer en prose garantit qu'il se périme — on le retire, et on garde la
+commande qui produit la vérité.
+
+### Ce que le test vérifie, et ce qu'il ne peut pas vérifier
+
+| Vérifié | Comment |
+|---|---|
+| cohérence interne de `docs/28` | résumé = en-têtes ; TOTAL = titre ; moyenne = moyenne de ses lignes |
+| fidélité au réel | ADR, outils, scénarios dorés, invariants : **comptés**, pas relus |
+| accord avec les tests qui portent la mesure | le chiffre publié doit être celui que `contract.test.ts`, `invariants-contract.test.ts` et `wiring.test.ts` figent |
+| non-duplication | aucun compte de tests ni pourcentage concurrent ailleurs |
+| exhaustivité du README | chaque outil enregistré y est nommé |
+
+**Il n'établit PAS que les pondérations de `docs/28 §1` sont justes.** Ce sont
+des jugements, écrits pour être contestés, et aucun test ne tranche un jugement.
+Il établit qu'un chiffre écrit quelque part correspond à ce qu'on peut compter
+ailleurs — c'est tout, et c'est précisément ce qui manquait.
+
+### La règle qui va dans l'autre sens, et qui est figée aussi
+
+`docs/09`, `docs/11`, `docs/12` sont des **audits datés**. « 121 tests »,
+« 345 tests » y sont des constats d'alors. Les mettre à jour serait falsifier un
+rapport et rendrait incompréhensible la progression qu'ils documentent.
+
+Le test l'exige explicitement : ces documents **doivent** continuer à porter
+leurs chiffres d'époque. Sans cette clause, un futur balayage « de cohérence »
+les corrigerait par excès de zèle — et personne ne le remarquerait.
+
+### Cinq sabotages
+
+Résumé divergent · compte de tests réintroduit dans le README · `docs/26`
+annonçant six modules quand `wiring.test.ts` en dit cinq · compte d'ADR faussé ·
+moyenne ne suivant plus ses lignes. Chacun fait rougir exactement le test visé,
+et aucun autre.
+
+### Condition de révision
+
+Si `docs/28` cessait d'être tenu à jour, ce test deviendrait un frein plutôt
+qu'une garde : il faudrait alors retirer les chiffres du document plutôt que
+d'assouplir le test. Un chiffre qu'on n'entretient pas doit disparaître, pas
+devenir approximatif.

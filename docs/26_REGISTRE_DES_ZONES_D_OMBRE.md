@@ -247,37 +247,46 @@ sur la sûreté.
 
 **Condition :** à couvrir avant toute promesse de disponibilité produit.
 
-### 4.3 Couverture globale — 83,28 % des lignes
+### 4.3 Couverture globale — 83,89 % des lignes
 
-Remesuré après les Phases 3 et 4 (l'ancien relevé disait 80,97 %) :
+> ⚠ **MESURE DATÉE, ET C'EST UN CHOIX ASSUMÉ.** Contrairement aux autres
+> chiffres du dépôt, celui-ci ne peut pas être lié mécaniquement (ADR-058) :
+> le vérifier exige d'exécuter la suite entière sous instrumentation, ce
+> qu'aucun test ne peut faire sur lui-même. Il est donc traité comme les
+> rapports `docs/09` et `docs/11` — **un constat à une date**, à remesurer par
+> `pnpm test:coverage`, jamais à recopier.
+>
+> Relevé après ADR-057 (arrêt d'urgence). Le précédent disait 83,28 %, celui
+> d'avant 80,97 %.
 
 | | Taux | Fraction |
 |---|---|---|
-| Lignes · instructions | **83,28 %** | 5122 / 6150 |
-| Branches | **78,91 %** | 977 / 1238 |
-| Fonctions | **91,25 %** | 240 / 263 |
+| Lignes · instructions | **83,89 %** | 5397 / 6433 |
+| Branches | **79,11 %** | 1034 / 1307 |
+| Fonctions | **91,54 %** | 249 / 272 |
 
-Zones les plus basses hors CLI :
+Zones sous 80 %, hors points d'entrée :
 
 | Fichier | Lignes | Ce que ça signifie |
 |---|---|---|
-| `providers/contract.ts` | 0 % | fichier de **types purs** — il n'y a rien à exécuter |
+| `providers/contract.ts` · `policy/evaluator.ts` | 0 % | **types purs** — il n'y a rien à exécuter (§2.5) |
 | `tools/outcome.ts` | 55 % | orphelin déclaré (§4.1) |
 | `tools/identity.ts` | 65 % | `sameOperation` / `isSameOperation` jamais appelés en production |
+| `apps/runtime.ts` | 62 % | assemblage ; le CLI et la passerelle ne sont pas traversés (§4.2) |
 | `tools/files.ts` | 74 % | chemins de refus de `readWithinRoot` |
+| `config/load.ts` | 75 % | chemins d'erreur de configuration |
 | `providers/policy/cedar.ts` | 75 % | chemins d'échec du chargeur |
+| `tools/reminders.ts` | 77 % | branches d'échéance non exercées |
 
-**Le taux de BRANCHES est le seul qui mérite de l'inquiétude** : 78,91 % contre
-91,25 % de fonctions. L'écart dit ce qu'on attend de lui — les fonctions sont
-appelées, mais leurs **chemins de refus** le sont moins que leurs chemins
+**Le taux de BRANCHES reste le seul qui mérite de l'inquiétude** : 79,11 %
+contre 91,54 % de fonctions. L'écart dit ce qu'on attend de lui — les fonctions
+sont appelées, mais leurs **chemins de refus** le sont moins que leurs chemins
 nominaux. Or dans ce dépôt, le chemin de refus *est* la fonctionnalité.
-Plusieurs outils sont sous les 55 % de branches (`audit.ts` 60 %,
-`memory.ts` 50 %, `status.ts` 50 %, `reminders.ts` 54 %, `tasks.ts` 54 %).
 
-`identity.ts` mérite un mot : les deux fonctions non couvertes sont les
-**garde-fous anti-repli**. Leur non-usage est cohérent — aucun routeur de repli
-n'existe encore — mais il faut le dire, parce que le typage marqué protège
-aujourd'hui davantage que ces fonctions.
+`safety/halt.ts` en est l'illustration fraîche : 92,77 % de lignes mais
+**70,37 % de branches**. Un sabotage y a d'ailleurs montré qu'un chemin d'erreur
+non couvert n'était pas seulement non mesuré — il était **non éprouvé**
+(ADR-057).
 
 ### 4.4 Couches 04 à 08 du banc — non construites
 
