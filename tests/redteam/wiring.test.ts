@@ -142,13 +142,32 @@ describe('RED TEAM — code mort en production', () => {
         // nommée de Foundation 4, et ce test la maintient visible jusqu'à ce
         // qu'un outil multi-cibles existe. Voir `docs/20 §4`.
         'src/core/tools/outcome.ts',
+
+        /* Classification de confidentialité (`docs/14`, étape F1 du Data
+           Firewall). Écrite, testée, appelée par PERSONNE — et c'est la
+           définition même de l'étape.
+
+           Le Data Firewall est le premier chantier du dépôt dont un pas
+           ÉLARGIT : faire passer une donnée `GREEN` en `PUBLIC`, c'est-à-dire
+           envoyable. On isole donc le CALCUL, qui n'accorde aucune permission,
+           du BRANCHEMENT, qui en accorde.
+
+           Elle sortira de cette liste à l'étape F2, quand le Policy Gate la
+           consultera — et ce sera un `forbid` AJOUTÉ à l'existant, donc un
+           changement qui ne peut que refuser davantage. Ce test signalera
+           l'oubli. */
+        'src/core/privacy/classify.ts',
       ].sort(),
     );
   });
 
-  it('six modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('sept modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
-    expect(deadLogic).toHaveLength(6);
+    /* Le chiffre est asserté, pas seulement la liste : c'est ce qui force à
+       PASSER ICI quand un module cesse d'être atteint — ou le devient. Il est
+       monté de six à sept avec `privacy/classify.ts`, délibérément, et il
+       redescendra à F2. */
+    expect(deadLogic).toHaveLength(7);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

@@ -3068,3 +3068,99 @@ même. Le noter ici évite qu'on « harmonise » un jour les deux.
 Chaque nouveau mécanisme qui peut se dégrader silencieusement doit ajouter son
 contrôle ici — et le compteur `controlesEffectues`, asserté en test, est ce qui
 empêche qu'un contrôle disparaisse « parce qu'il était bruyant ».
+
+---
+
+## ADR-050 — Le Data Firewall se construit dans l'ordre qui ne peut pas élargir
+
+**Statut :** accepté (Phase 4, étape F1). **Référence :** `docs/14`,
+`docs/02 §Phase 4`, ADR-017, `docs/26 §4.5`.
+
+### Ce qui distingue ce chantier de tous les précédents
+
+**Tout ce que ce dépôt a construit jusqu'ici RÉTRÉCIT.** Le cloisonnement refuse
+plus d'écritures, le bail refuse plus d'exécutions, `UNKNOWN` affirme moins,
+`PROVIDER_CONTRACT_VIOLATION` retire une confiance. Un défaut dans l'un d'eux
+bloque une action légitime — c'est ennuyeux, c'est visible, ça se corrige.
+
+Le Data Firewall contient le premier pas dont le mode de panne est
+l'**élargissement** : faire passer une donnée `GREEN` en `PUBLIC`, c'est-à-dire
+*envoyable*. `docs/14 §5` le signale lui-même :
+
+> ⚠ **à vérifier ligne par ligne avant migration.** Une donnée aujourd'hui
+> `GREEN` par défaut d'attention deviendrait publiquement envoyable. **La
+> migration doit défaillir plutôt que deviner.**
+
+Un défaut là ne bloque rien. Il expose, en silence, et rien ne le signale.
+
+### La décomposition, et le critère qui la fonde
+
+| Étape | Direction | |
+|---|---|---|
+| **F1** `DataLevel` + classification, branchée à rien | pure | **fait** |
+| **F2** le Policy Gate consulte le niveau **EN PLUS** de la règle existante | rétrécit | à venir |
+| **F3** journal d'égression consultable | additif | à venir |
+| **F4** migration des colonnes stockées | **élargit** | **pas sans relecture humaine** |
+
+Le critère n'est pas la taille des étapes : c'est leur **direction**. F1 à F3 ne
+peuvent que refuser davantage ou observer ; F4 est le seul qui autorise.
+
+**F2 est possible sans F4**, et c'est ce qui rend la découpe utile plutôt que
+dilatoire : en Cedar, `forbid` prime toujours sur `permit`. Ajouter un `forbid`
+sur `niveau ≥ SENSITIVE + egress` ne retire aucune protection existante — la
+règle `RED + egress → DENY` reste. La protection arrive donc **avant** la
+migration des données, pas après.
+
+### Ce que F1 livre
+
+La table `DataCategory → plancher` de `docs/14 §3`, écrite **en toutes lettres**
+plutôt que déduite d'une heuristique : une catégorie oubliée doit provoquer une
+erreur de compilation, pas un repli silencieux vers le niveau le plus bas.
+
+`strictest()` a été **généralisé plutôt que dupliqué**, parce que `docs/14 §3`
+l'exige mot pour mot — « ce doit être le même code, pas un second mécanisme qui
+lui ressemble ». Deux fonctions jumelles divergent toujours : l'une reçoit une
+correction que l'autre ignore, et le jour où elles ne disent plus la même chose,
+aucune ne fait autorité.
+
+`fromLegacy` rend un **`Result`**, et c'est le cœur de l'ADR. `RED` et `ORANGE`
+se convertissent seuls — ils ne peuvent que rester au moins aussi protégés.
+`GREEN` n'est accepté que si la catégorie le confirme ; sinon la conversion
+**échoue**, bruyamment, et la ligne remonte à un humain. C'est le seul endroit du
+chantier où l'erreur exposerait une donnée : il rend donc une erreur là où il
+serait tentant de rendre une valeur.
+
+### Un module orphelin, déclaré comme tel
+
+`wiring.test.ts` a signalé `privacy/classify.ts` dès son écriture — c'est son
+travail, et c'était le résultat attendu. Il rejoint la liste des orphelins
+déclarés avec son motif, à côté du CostGate, et le compteur est passé de six à
+sept. **Il en sortira à F2, et le test le signalera si on l'oublie.**
+
+### Sabotage
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| `OTHER` tombe sur `PUBLIC` (défaut ouvert) | **3 / 12** |
+| la demande utilisateur écrase le plancher | **2 / 12** |
+| `GREEN` se convertit silencieusement en `PUBLIC` | **1 / 12** |
+| un ensemble prend le premier niveau au lieu du maximum | **1 / 12** |
+
+### Le test que F1 ne peut PAS écrire
+
+`docs/14 §6` nomme le plus important de ses sept :
+
+> une donnée `SENSITIVE` n'atteint aucun palier cloud, **même si tous les
+> paliers locaux sont indisponibles** — c'est celui qui prouve que le coût ne
+> décide pas de la confidentialité.
+
+Il n'est pas atteignable tant que rien n'appelle la classification. L'écrire
+maintenant reviendrait à éprouver la simulation. Il arrive avec F2, et son
+absence est écrite en tête du fichier de tests plutôt que passée sous silence.
+
+### Condition de révision
+
+Si `DataLevel` devait un jour remplacer `PrivacyClass` **avant** F2 — pour une
+raison de calendrier, par exemple — cette ADR tombe : l'ordre est la décision,
+pas les composants. Le reprendre à l'envers ferait du Data Firewall le rattrapage
+d'un trou qu'on aurait ouvert soi-même.

@@ -109,9 +109,66 @@ export function isAtLeastAsStrict(a: AutonomyLevel, b: AutonomyLevel): boolean {
   return AUTONOMY_ORDER[a] >= AUTONOMY_ORDER[b];
 }
 
-/** Le niveau le plus contraignant des deux. Utilisé pour combiner des règles. */
-export function strictest(a: AutonomyLevel, b: AutonomyLevel): AutonomyLevel {
-  return AUTONOMY_ORDER[a] >= AUTONOMY_ORDER[b] ? a : b;
+/**
+ * Fabrique un « le plus contraignant des deux » pour une échelle ordonnée.
+ *
+ * GÉNÉRALISÉE POUR UNE RAISON ÉCRITE DANS `docs/14 §3` :
+ *
+ *   > le niveau ne peut que monter. Même mécanique que `strictest()` dans le
+ *   > Policy Gate — **et ce doit être le même code, pas un second mécanisme
+ *   > qui lui ressemble.**
+ *
+ * Deux fonctions jumelles divergent toujours : l'une reçoit une correction que
+ * l'autre ignore, et le jour où elles ne disent plus la même chose, aucune ne
+ * fait autorité. La forme générique rend la divergence impossible plutôt
+ * qu'improbable.
+ */
+function strictestOf<T extends string>(
+  order: Readonly<Record<T, number>>,
+): (a: T, b: T) => T {
+  return (a, b) => (order[a] >= order[b] ? a : b);
+}
+
+/** Le niveau d'autonomie le plus contraignant des deux. */
+export const strictest = strictestOf(AUTONOMY_ORDER);
+
+/* -------------------------------------------------------------------------- */
+/* Niveau de confidentialité — `docs/14 §2`                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Les cinq niveaux de `docs/14`, appelés à remplacer `PrivacyClass`.
+ *
+ * ⚠ COHABITATION ASSUMÉE. `PrivacyClass` (3 valeurs) reste en vigueur dans les
+ * colonnes et les contrats d'outils. `DataLevel` est introduit d'abord comme
+ * un CALCUL, branché à rien : la bascule des données stockées est le seul pas
+ * de ce chantier dont le mode de panne est l'ÉLARGISSEMENT — `docs/14 §5`
+ * exige qu'elle soit vérifiée ligne par ligne, et elle ne se fait pas ici.
+ */
+export const DataLevel = z.enum([
+  'PUBLIC',
+  'PERSONAL',
+  'SENSITIVE',
+  'HIGHLY_SENSITIVE',
+  'RESTRICTED',
+]);
+export type DataLevel = z.infer<typeof DataLevel>;
+
+/** Plus le rang est haut, plus la donnée est protégée. */
+const DATA_LEVEL_ORDER: Readonly<Record<DataLevel, number>> = {
+  PUBLIC: 0,
+  PERSONAL: 1,
+  SENSITIVE: 2,
+  HIGHLY_SENSITIVE: 3,
+  RESTRICTED: 4,
+};
+
+/** Le niveau le plus protecteur des deux. MÊME code que `strictest`. */
+export const strictestLevel = strictestOf(DATA_LEVEL_ORDER);
+
+/** `a` protège-t-il au moins autant que `b` ? */
+export function levelAtLeast(a: DataLevel, b: DataLevel): boolean {
+  return DATA_LEVEL_ORDER[a] >= DATA_LEVEL_ORDER[b];
 }
 
 /* -------------------------------------------------------------------------- */
