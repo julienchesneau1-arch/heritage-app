@@ -287,6 +287,39 @@ Le code interdit désormais : effet externe + `UNVERIFIABLE` + autonomie L1/L2.
 le jour où un adaptateur réel est écrit — et à ne pas ajouter avant, faute de
 savoir si un CalDAV donné sait y répondre.
 
+### 4.7 La fenêtre entre lecture et écriture, chez un fournisseur
+
+**Trouvée en transposant ADR-042 hors de PostgreSQL.**
+
+`task_complete` fusionne mutation et capture dans une seule instruction
+(`UPDATE … FROM tasks AS prior`) : aucune fenêtre où l'état changerait entre les
+deux. Chez un fournisseur distant, cette fusion **n'existe pas** — il n'y a ni
+transaction commune, ni comparaison-et-échange.
+
+ADR-045 déplace l'obligation plutôt que de fermer la fenêtre : le fournisseur
+rend `previous`, l'état qu'il a lui-même remplacé. C'est strictement mieux qu'une
+lecture préalable de notre part — mais **ce n'est pas une atomicité**, et la
+différence doit être écrite.
+
+**Ce qui reste ouvert :**
+
+| Résidu | Ce qui le couvre aujourd'hui |
+|---|---|
+| le fournisseur peut mentir sur `previous` | vérifié : un identifiant qui ne correspond pas ⇒ `INTEGRITY`, refus |
+| son `previous` peut être périmé de quelques millisecondes | **rien** — irréductible sans mise à jour conditionnelle |
+| deux modifications concurrentes peuvent s'écraser | **rien** — c'est le même manque |
+
+Le mécanisme qui fermerait les deux dernières lignes existe et porte un nom :
+**la mise à jour conditionnelle** (`If-Match` sur un ETag, que CalDAV expose).
+Elle n'est pas ajoutée à `CalendarProvider` aujourd'hui, et c'est délibéré —
+ajouter un champ qu'aucun adaptateur ne remplit serait spéculatif au sens de
+`docs/04`, et donnerait l'illusion d'une garantie.
+
+**Condition de levée :** au premier adaptateur réel, mesurer si le fournisseur
+expose un jeton de version. S'il l'expose, `updateEvent` doit le prendre et le
+renvoyer, et cette entrée disparaît. S'il ne l'expose pas, elle devient
+**irréductible pour ce fournisseur** et doit remonter en §5.
+
 ---
 
 ## 5. IRRÉDUCTIBLES — et elles le resteront

@@ -2626,3 +2626,101 @@ le fournisseur documente sa déduplication par clé — la fiche `ReplaySafety`
 d'ADR-034 exige alors un `independentOfObservation` démontrable, pas plausible.
 Et un `findByOperationId` sur `CalendarProvider` rendrait `BY_OPERATION_KEY`
 honnête.
+
+---
+
+## ADR-045 — Le fournisseur déclare ce qu'il a remplacé
+
+**Statut :** accepté (Phase 3). **Référence :** ADR-042, ADR-019, ADR-038,
+`docs/03 §120`, `docs/26 §4.7`.
+
+### Le problème qu'ADR-042 ne pouvait pas résoudre deux fois
+
+ADR-042 a établi qu'une modification ne se défait qu'en restaurant l'état
+**observé**, et l'a obtenu par une fusion :
+
+```sql
+UPDATE tasks AS t SET … FROM tasks AS prior WHERE …
+RETURNING …, prior.state AS prior_state
+```
+
+Une seule instruction, donc aucune fenêtre. **Chez un fournisseur distant, cette
+fusion n'existe pas.** Il n'y a ni transaction commune, ni comparaison-et-échange.
+Lire puis écrire laisse entre les deux un intervalle où le téléphone de
+l'utilisateur peut modifier le même agenda — et la capture décrirait alors un
+passé qui n'était déjà plus vrai au moment de l'écriture.
+
+C'est exactement le défaut qu'ADR-042 a fermé, rouvert par la distance.
+
+### La décision
+
+> **On ne ferme pas la fenêtre. On déplace l'obligation.**
+> Le fournisseur — seule partie à avoir réellement effectué l'échange — déclare
+> ce qu'il a remplacé.
+
+```ts
+updateEvent(id, changes, operationId): Promise<Result<CalendarUpdate>>
+
+interface CalendarUpdate {
+  readonly previous: CalendarEvent;   // ce qu'il a remplacé
+  readonly updated: CalendarEvent;
+}
+```
+
+**L'obligation est dans la signature, pas dans une convention.** Un fournisseur
+qui ne sait rendre que `updated` ne peut pas satisfaire `CalendarProvider` — et
+c'est voulu : un système incapable de dire ce qu'il a remplacé ne peut pas
+héberger d'action annulable, et il vaut mieux l'apprendre à l'écriture du premier
+adaptateur qu'à la première annulation.
+
+### Et on ne le croit pas sur parole
+
+Le fournisseur vient de remettre l'état sur lequel repose toute possibilité
+d'annuler. S'il parle d'un autre événement que celui demandé, la capture est
+syntaxiquement parfaite — et le jour de l'annulation, Jarvis **écraserait un
+tiers** avec cet état. Il détruirait un rendez-vous que personne n'a demandé de
+toucher.
+
+> Une capture inutilisable vaut mieux qu'une capture destructrice.
+
+D'où le refus `INTEGRITY` quand `previous.id` ou `updated.id` ne correspond pas.
+
+### Ce que la décision ne fait PAS
+
+Elle n'établit pas une atomicité. `docs/26 §4.7` écrit le résidu : le `previous`
+du fournisseur peut être périmé de quelques millisecondes, et deux modifications
+concurrentes peuvent encore s'écraser. Le mécanisme qui fermerait les deux existe
+et porte un nom — **la mise à jour conditionnelle** (`If-Match` sur un ETag, que
+CalDAV expose). Il n'est pas ajouté aujourd'hui : un champ qu'aucun adaptateur ne
+remplit serait spéculatif au sens de `docs/04`, et donnerait l'illusion d'une
+garantie.
+
+### Sabotage — et ce qu'il a trouvé dans MES TESTS
+
+| Ligne remise dans son état fautif | Tests rouges |
+|---|---|
+| capture de l'état ÉCRIT au lieu de l'état remplacé | **2 / 15** |
+| garde d'intégrité retirée (fournisseur cru sur parole) | **2 / 15** |
+| demande vide acceptée | **1 / 15** |
+| `readBack` conclut `FAILED` sur une absence | **0 / 14** ⚠ puis **1 / 15** |
+
+**La dernière ligne est le vrai résultat de ce point.** Au premier passage, ce
+sabotage ne cassait rien : `constrainToVerifiability` dégrade tout `FAILED` venant
+d'un outil `OBSERVABLE`, donc le verdict rendu à l'utilisateur restait correct — et
+la discipline propre de l'outil pouvait pourrir sans bruit derrière celle du
+moteur.
+
+ADR-044 avait pourtant nommé ce risque mot pour mot, et j'ai omis d'appliquer la
+leçon au fichier suivant. Le test manquant a été ajouté, et le sabotage rejoué le
+trouve.
+
+> **La redondance ne se teste pas toute seule.** Chaque barrière a besoin de son
+> propre test, sinon seule la dernière est réellement éprouvée — et rien ne
+> signale que les autres ont cessé de tenir.
+
+### Condition de révision
+
+Au premier adaptateur réel : si le fournisseur expose un jeton de version,
+`updateEvent` doit le prendre et le renvoyer, et `docs/26 §4.7` disparaît. S'il ne
+l'expose pas, ce résidu devient irréductible pour ce fournisseur et remonte en
+`docs/26 §5`.

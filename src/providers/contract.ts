@@ -153,12 +153,47 @@ export interface CalendarEvent {
   readonly endsAt: string;
 }
 
+/**
+ * Ce qu'une modification d'agenda doit rendre — ADR-045.
+ *
+ * `previous` N'EST PAS un confort. C'est l'obligation qui permet d'annuler.
+ *
+ * ADR-042 a établi qu'une modification ne se défait qu'en restaurant l'état
+ * OBSERVÉ, et l'a obtenu localement en fusionnant mutation et capture dans une
+ * seule instruction SQL. Chez un fournisseur distant, cette fusion est
+ * impossible : lire puis écrire laisse entre les deux une fenêtre où
+ * l'événement peut changer, et la capture décrirait alors un passé qui n'était
+ * déjà plus vrai au moment de l'écriture.
+ *
+ * On ne peut pas fermer la fenêtre. On peut déplacer l'obligation : **c'est le
+ * fournisseur — la seule partie qui a réellement effectué l'échange — qui
+ * déclare ce qu'il a remplacé.** Un fournisseur incapable de le dire ne peut
+ * pas héberger d'action annulable, et il vaut mieux le savoir à l'écriture du
+ * premier adaptateur qu'à la première annulation.
+ */
+export interface CalendarUpdate {
+  /** L'événement TEL QU'IL ÉTAIT, rendu par celui qui l'a remplacé. */
+  readonly previous: CalendarEvent;
+  readonly updated: CalendarEvent;
+}
+
 export interface CalendarProvider extends Provider {
   listEvents(fromIso: string, toIso: string): Promise<Result<readonly CalendarEvent[]>>;
   createEvent(
     event: Omit<CalendarEvent, 'id'>,
     operationId: string,
   ): Promise<Result<CalendarEvent>>;
+  /**
+   * Modifie un événement et rend CE QU'IL A REMPLACÉ.
+   *
+   * La signature est le contrat : un fournisseur qui ne sait rendre que
+   * `updated` ne peut pas satisfaire cette interface, et c'est voulu.
+   */
+  updateEvent(
+    id: string,
+    changes: Partial<Omit<CalendarEvent, 'id'>>,
+    operationId: string,
+  ): Promise<Result<CalendarUpdate>>;
   /**
    * Relit l'état réel après mutation. C'est ce qui distingue « l'API a répondu
    * 200 » de « l'événement existe » (22 du PRD, invariant S7).

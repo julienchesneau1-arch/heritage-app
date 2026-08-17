@@ -78,6 +78,8 @@ function agenda(options: {
       cree.push(complet);
       return Promise.resolve(ok(complet));
     },
+    updateEvent: () =>
+      Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre de ce test'))),
     verifyEvent: (id): Promise<Result<CalendarEvent | null>> => {
       if (options.relecture === 'erreur') {
         return Promise.resolve(

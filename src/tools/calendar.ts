@@ -341,3 +341,203 @@ export function calendarCreateTool(
     },
   });
 }
+
+/* -------------------------------------------------------------------------- */
+
+const CalendarUpdateInput = z.object({
+  eventId: z.string().min(1),
+  title: z.string().min(1).max(300).optional(),
+  startsAt: z.string().datetime().optional(),
+  endsAt: z.string().datetime().optional(),
+});
+
+/**
+ * `calendar_update` — Phase 3, point 4.
+ *
+ * ADR-042 APPLIQUÉ LÀ OÙ L'ÉTAT ANTÉRIEUR VIT CHEZ QUELQU'UN D'AUTRE
+ * ------------------------------------------------------------------
+ * `task_complete` a établi qu'une modification ne se défait qu'en restaurant
+ * l'état **observé**, et l'a obtenu en fusionnant mutation et capture dans une
+ * seule instruction SQL. Ici cette fusion est impossible : entre un `SELECT`
+ * chez le fournisseur et l'écriture qui suit, l'événement peut changer — le
+ * téléphone de l'utilisateur écrit dans le même agenda.
+ *
+ * On ne peut pas fermer la fenêtre. On déplace l'obligation : **le fournisseur
+ * déclare ce qu'il a remplacé** (`CalendarUpdate.previous`). Il est la seule
+ * partie qui a réellement effectué l'échange.
+ *
+ * Ce qui reste — et qui ne se referme pas ici — est en `docs/26 §4.7`.
+ * Voir ADR-045.
+ */
+export function calendarUpdateTool(
+  provider: CalendarProvider | null,
+): RegisteredTool {
+  return defineTool<z.infer<typeof CalendarUpdateInput>>({
+    definition: {
+      id: 'calendar_update',
+      version: '1.0.0',
+      description: "Modifier un événement de l'agenda.",
+      /* L3 — `docs/03 §120` nomme littéralement « déplacer un rendez-vous »
+         comme exemple de APPROVAL. C'est CET outil que le document décrit. */
+      autonomy: 'L3',
+      privacyClass: 'ORANGE',
+      reversible: true,
+      networkRequired: true,
+      parameters: [
+        { name: 'eventId', sensitive: false },
+        { name: 'title', sensitive: true },
+        { name: 'startsAt', sensitive: true },
+        { name: 'endsAt', sensitive: true },
+      ],
+      idempotency: 'OPERATION_KEY',
+      verification: 'READ_BACK',
+      timeoutMs: 10_000,
+      /* Zéro, et la raison est PIRE que pour `calendar_create`. Un doublon de
+         création se voit ; un second `update` rejoué écraserait la capture
+         d'annulation du premier avec l'état qu'il vient lui-même d'écrire —
+         c'est la leçon d'ADR-042, aggravée par le fait que rien, dehors, ne
+         nous dira que c'est arrivé. */
+      maxRetries: 0,
+      auditEvent: 'CALENDAR_EVENT_UPDATED',
+      requiredSecrets: [],
+      rollback: "Réécrire l'état antérieur DÉCLARÉ PAR LE FOURNISSEUR (STATE_RESTORE).",
+      attemptVerification: 'NONE',
+      effect: 'EXTERNALLY_VERIFIABLE',
+      verifiability: 'OBSERVABLE',
+    },
+
+    inputSchema: CalendarUpdateInput,
+
+    async execute(input, ctx): Promise<Result<ToolExecution>> {
+      if (provider === null) {
+        return err(
+          jarvisError(
+            'PROVIDER_UNAVAILABLE',
+            "Aucun fournisseur d'agenda n'est configuré : l'événement n'a pas "
+              + 'été modifié.',
+          ),
+        );
+      }
+
+      const changes: Partial<{ title: string; startsAt: string; endsAt: string }> = {};
+      if (input.title !== undefined) changes.title = input.title;
+      if (input.startsAt !== undefined) changes.startsAt = input.startsAt;
+      if (input.endsAt !== undefined) changes.endsAt = input.endsAt;
+
+      /* UNE MODIFICATION QUI NE MODIFIE RIEN EST UNE ERREUR, PAS UN SUCCÈS.
+
+         Accepter un appel vide ferait écrire au journal « rendez-vous
+         modifié » sans qu'aucun champ ait bougé — et la capture d'annulation
+         enregistrerait un état antérieur identique à l'état courant, ce qui
+         n'annule rien. */
+      if (Object.keys(changes).length === 0) {
+        return err(
+          jarvisError('VALIDATION', 'Aucun champ à modifier : la demande est vide.'),
+        );
+      }
+
+      if (
+        changes.startsAt !== undefined
+        && changes.endsAt !== undefined
+        && Date.parse(changes.startsAt) >= Date.parse(changes.endsAt)
+      ) {
+        return err(
+          jarvisError('VALIDATION', 'Un événement doit finir après avoir commencé.'),
+        );
+      }
+
+      const result = await provider.updateEvent(input.eventId, changes, ctx.operationId);
+      if (!result.ok) return result;
+
+      const { previous, updated } = result.value;
+
+      /* LE FOURNISSEUR EST VÉRIFIÉ, PAS CRU SUR PAROLE.
+
+         Il vient de nous remettre l'état antérieur sur lequel repose toute
+         possibilité d'annuler. S'il parle d'un autre événement que celui qu'on
+         a demandé, la capture serait une restauration vers l'état d'un TIERS —
+         un dégât pire que l'absence d'annulation.
+
+         Ce n'est pas un échec de l'action : c'est une rupture de contrat de la
+         SOURCE, et elle se nomme comme telle (ADR-038). */
+      if (previous.id !== input.eventId || updated.id !== input.eventId) {
+        return err(
+          jarvisError(
+            'INTEGRITY',
+            `Le fournisseur ${provider.capabilities.id} rend un état antérieur `
+              + `(${previous.id}) ou modifié (${updated.id}) qui ne correspond pas `
+              + `à l'événement demandé (${input.eventId}). L'état antérieur est `
+              + "inutilisable, donc l'action n'est pas annulable.",
+          ),
+        );
+      }
+
+      return ok({
+        output: {
+          eventId: updated.id,
+          title: updated.title,
+          startsAt: updated.startsAt,
+          endsAt: updated.endsAt,
+          source: provider.capabilities.id,
+          /* Rendu explicitement, comme pour `task_complete` : « c'était déjà
+             ainsi » et « je viens de le changer » sont deux réponses. */
+          changed:
+            previous.title !== updated.title
+            || previous.startsAt !== updated.startsAt
+            || previous.endsAt !== updated.endsAt,
+        },
+        resource: { kind: 'calendar_event', id: updated.id },
+        undo: {
+          kind: 'STATE_RESTORE',
+          /* L'état antérieur DÉCLARÉ PAR CELUI QUI L'A REMPLACÉ — jamais
+             celui qu'on aurait lu avant, ni celui qu'on suppose. */
+          priorState: {
+            eventId: previous.id,
+            title: previous.title,
+            startsAt: previous.startsAt,
+            endsAt: previous.endsAt,
+          },
+        },
+      });
+    },
+
+    async readBack(execution, ctx): Promise<Result<VerificationOutcome>> {
+      void ctx;
+      if (provider === null || execution.resource === undefined) {
+        return ok(
+          verificationOutcome.unknown('Aucune ressource à relire.', 'NO_OBSERVATION'),
+        );
+      }
+
+      const found = await provider.verifyEvent(execution.resource.id);
+      if (!found.ok) {
+        return ok(
+          verificationOutcome.unknown(
+            `Relecture impossible chez ${provider.capabilities.id} : ${found.error.message}`,
+            'EXTERNAL_STATE',
+          ),
+        );
+      }
+      if (found.value === null) {
+        /* L'événement a disparu entre l'écriture et la relecture. Ce n'est pas
+           `FAILED` : dehors, l'absence ne prouve rien — et ici elle pourrait
+           même signifier qu'un tiers l'a supprimé APRÈS notre modification
+           réussie. */
+        return ok(
+          verificationOutcome.unknown(
+            `Événement ${execution.resource.id} introuvable chez `
+              + `${provider.capabilities.id} après modification.`,
+            'EXTERNAL_STATE',
+          ),
+        );
+      }
+
+      return ok(
+        verificationOutcome.confirmed({
+          observed: `événement « ${found.value.title} » relu chez `
+            + `${provider.capabilities.id} (${found.value.startsAt})`,
+        }),
+      );
+    },
+  });
+}

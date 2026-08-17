@@ -52,6 +52,8 @@ function fauxAgenda(options: {
       ),
     createEvent: () =>
       Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre de ce test'))),
+    updateEvent: () =>
+      Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre de ce test'))),
     verifyEvent: () =>
       Promise.resolve(err(jarvisError('INTERNAL', 'hors périmètre de ce test'))),
   };

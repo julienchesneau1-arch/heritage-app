@@ -17,7 +17,11 @@ import { memoryAddTool, memorySearchTool } from './memory.js';
 import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
-import { calendarCreateTool, calendarReadTool } from './calendar.js';
+import {
+  calendarCreateTool,
+  calendarReadTool,
+  calendarUpdateTool,
+} from './calendar.js';
 
 export interface ToolDeps {
   readonly guard: MemoryGuard;
@@ -72,6 +76,9 @@ export function registerCoreTools(
        de contrats d'effet existait pour ce cas sans qu'aucun code de
        production ne l'exerce — ADR-044. */
     calendarCreateTool(deps.calendar ?? null),
+    /* Phase 3, point 4. ADR-042 appliqué là où l'état antérieur vit chez
+       quelqu'un d'autre — ADR-045. */
+    calendarUpdateTool(deps.calendar ?? null),
   ];
 
   for (const tool of tools) {
@@ -90,4 +97,5 @@ export {
   noteCreateTool,
   calendarReadTool,
   calendarCreateTool,
+  calendarUpdateTool,
 };
