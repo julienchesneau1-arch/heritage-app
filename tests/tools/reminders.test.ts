@@ -98,9 +98,38 @@ describe.runIf(enabled)('reminder_create — Phase 3 point 8', () => {
        Déclarer « je serai dans le briefing » et ne pas y être serait le même
        mensonge, déplacé d'un cran. La promesse est donc vérifiée là où elle
        est faite : dans le briefing. */
+    /* ⚠ CE TEST NE PASSAIT QUE 23 HEURES SUR 24, ET C'EST LE PRODUIT QUI
+         AVAIT RAISON.
+
+       Il plaçait le rappel « dans une heure » et attendait de le voir dans le
+       briefing. Or le briefing borne à `date_trunc('day', clock_timestamp())
+       + 1 day` : entre 23 h et minuit, « dans une heure » tombe DEMAIN, donc
+       hors fenêtre. Un rappel de demain absent du briefing d'aujourd'hui est
+       le comportement CORRECT.
+
+       Trouvé par accident à 23 h 11 UTC, pendant un balayage sans rapport.
+       Il aurait été classé « flaky » par quiconque l'aurait croisé une fois.
+
+       Le correctif applique la doctrine du dépôt (ADR-036/037) : **la fenêtre
+       est calculée par la BASE**, jamais devinée par le processus. On demande
+       à la base où finit la journée, et on place le rappel à l'intérieur. */
+    const finDuJour = await db.query<{ fin: Date }>(
+      `SELECT date_trunc('day', clock_timestamp()) + interval '1 day' AS fin`,
+    );
+    expect(finDuJour.ok).toBe(true);
+    if (!finDuJour.ok) return;
+    const fin = finDuJour.value.rows[0]?.fin;
+    expect(fin, 'la base doit rendre la fin de journée').toBeDefined();
+    if (fin === undefined) return;
+
+    // Une heure plus tard, OU juste avant minuit s'il reste moins d'une heure.
+    const dansUneHeure = Date.now() + 3_600_000;
+    const avantMinuit = fin.getTime() - 60_000;
+    const echeance = new Date(Math.min(dansUneHeure, avantMinuit)).toISOString();
+
     const texte = `rap-visible-${String(Date.now())}`;
-    const cree = await creer({ text: texte, remindAt: dans(3_600_000) });
-    expect(cree.ok).toBe(true);
+    const cree = await creer({ text: texte, remindAt: echeance });
+    expect(cree.ok, cree.ok ? '' : 'création refusée').toBe(true);
 
     const brief = await stack.gateway.invoke({
       toolId: 'briefing_generate',

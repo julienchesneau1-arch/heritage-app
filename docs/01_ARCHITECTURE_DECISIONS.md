@@ -3940,3 +3940,95 @@ Si `docs/28` cessait d'être tenu à jour, ce test deviendrait un frein plutôt
 qu'une garde : il faudrait alors retirer les chiffres du document plutôt que
 d'assouplir le test. Un chiffre qu'on n'entretient pas doit disparaître, pas
 devenir approximatif.
+
+---
+
+## ADR-059 — Une garde non sabotée n'est pas une garde
+
+**Statut :** accepté (preuve — aucun changement fonctionnel).
+**Référence :** ADR-016, ADR-057, `docs/26 §2.6`, `tests/security/refus-eprouves.test.ts`.
+
+### L'hypothèse, et pourquoi ce n'est pas de la chasse au pourcentage
+
+ADR-057 s'est terminée sur une observation isolée : un sabotage du repli fermé
+de l'arrêt d'urgence n'avait **rien** fait rougir.
+
+> Un chemin d'erreur que rien ne provoque n'est pas éprouvé. Il est seulement
+> écrit.
+
+On en a fait une **hypothèse testable** : prendre les branches non couvertes des
+modules de sécurité, et saboter chacune.
+
+Viser un taux de couverture aurait produit des tests là où c'est facile. La
+question posée est plus étroite et plus utile : *cette garde-ci tient-elle si on
+la retire ?*
+
+### Le résultat — quatre gardes, zéro test
+
+```text
+ledger.ts    validation à la frontière retirée   → 89 tests verts
+vault.ts     inspection rendant le secret NU     → 72 tests verts
+halt.ts      levée sans note acceptée            → 16 tests verts
+event.ts     empreinte sans repli                → 89 tests verts
+```
+
+**La deuxième est la plus grave.** `Secret[inspect.custom]` est la garde
+anti-fuite de la Phase 0 : c'est elle que Node appelle pour
+`console.log(secret)`. `toString()` et `toJSON()` étaient éprouvés — la
+concaténation et la sérialisation. Pas l'affichage, qui est le plus fréquent des
+trois.
+
+**La première est la plus contradictoire.** ADR-016 fait de la validation aux
+frontières une obligation — « un `as` sur une frontière est un défaut ». Le
+journal l'avait ; rien ne prouvait qu'elle tenait.
+
+### Le sabotage qui ne prouvait rien
+
+Le premier sabotage du coffre écrivait `this.value` là où le champ s'appelle
+`#value`. Il rendait `undefined` : les tests restaient verts **pour une raison
+sans rapport**, et j'ai failli conclure. Refait avec `this.#value`, il a
+confirmé le trou.
+
+> Un sabotage qu'on ne vérifie pas est une conclusion qu'on s'offre.
+
+### Ce qui est délibérément laissé sans test
+
+Deux branches non couvertes sont des **gardes sur états impossibles** —
+`INSERT … RETURNING` sans ligne, arrêt inscrit sans identifiant. Elles existent
+parce que `noUncheckedIndexedAccess` l'exige, pas parce que le cas survient.
+
+Les tester demanderait de fabriquer un monde qui n'existe pas ; les supprimer
+transformerait un refus nommé en plantage plus loin. **On les garde et on dit
+pourquoi elles ne sont pas testées** — c'est la seule des trois options qui ne
+mente pas.
+
+Restent ouvertes, nommées : le rejeu dont la relecture échoue (`gateway.ts`), et
+le cas d'un secret manquant, aujourd'hui inatteignable puisque **aucun outil du
+dépôt ne déclare de secret requis**.
+
+### La trouvaille latérale : un test qui ne passait que 23 heures sur 24
+
+Pendant le balayage, `reminders.test.ts` a rougi sans rapport avec le sabotage.
+Cause : il plaçait un rappel « dans une heure » et attendait de le voir dans le
+briefing. Or le briefing borne à `date_trunc('day', clock_timestamp()) +
+1 day`. **Entre 23 h et minuit, « dans une heure » tombe demain.**
+
+Le produit avait raison — un rappel de demain n'est pas dans le briefing
+d'aujourd'hui. C'est le **test** qui supposait que « dans une heure » restait
+aujourd'hui.
+
+Corrigé par la doctrine du dépôt (ADR-036/037) : **la fenêtre est calculée par
+la base**, jamais devinée par le processus. Le test demande à la base où finit
+la journée et place le rappel à l'intérieur.
+
+> Il aurait été classé « flaky » par quiconque l'aurait croisé une fois — et
+> c'est exactement ainsi qu'un défaut d'horloge survit.
+
+Vérification la plus forte possible : le correctif a été validé **à 23 h 12 UTC**,
+dans la fenêtre précise où le test échouait.
+
+### Condition de révision
+
+Si un outil venait à déclarer un `requiredSecrets` non vide, le refus
+correspondant deviendrait atteignable et devrait être éprouvé le jour même —
+pas ajouté à une liste.

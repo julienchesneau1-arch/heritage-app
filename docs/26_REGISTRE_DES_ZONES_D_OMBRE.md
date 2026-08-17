@@ -163,7 +163,61 @@ justifiait de le différer.
 
 **Le chiffre publié n'a pas bougé** — 27/30 avant, 27/30 après. Sa vérité, si.
 
-### 2.5 Deux fichiers à 0 % de couverture — faux positif
+### 2.5 Quatre gardes de sécurité qu'aucun test n'éprouvait
+
+**Trouvé en transformant une anecdote en hypothèse.** ADR-057 s'était terminée
+sur un sabotage qui n'avait rien fait rougir. Plutôt que de corriger et passer,
+on en a fait une question : *combien d'autres ?*
+
+Méthode : prendre les branches non couvertes des modules de sécurité, et
+**saboter chacune**. Pas viser un pourcentage — viser une réponse.
+
+```text
+ledger.ts    validation à la frontière retirée   → 89 tests verts
+vault.ts     inspection rendant le secret NU     → 72 tests verts
+halt.ts      levée sans note acceptée            → 16 tests verts
+event.ts     empreinte sans repli                → 89 tests verts
+```
+
+`Secret[inspect.custom]` est la plus grave : c'est la garde anti-fuite de la
+Phase 0, celle que Node appelle pour `console.log(secret)`. `toString()` et
+`toJSON()` étaient éprouvés — la concaténation et la sérialisation. **Pas
+l'affichage**, qui est le plus fréquent des trois.
+
+Et la validation du journal contredisait ADR-016, qui en fait une obligation.
+
+**Corrigé** : `tests/security/refus-eprouves.test.ts`, 13 tests. Chaque
+sabotage rejoué fait rougir exactement le test visé.
+
+**Restent NON testées, et déclarées :** deux gardes sur états impossibles
+(`INSERT … RETURNING` sans ligne, arrêt inscrit sans identifiant). Les tester
+demanderait de fabriquer un monde qui n'existe pas ; les supprimer
+transformerait un refus nommé en plantage plus loin. On les garde et on dit
+pourquoi (ADR-059).
+
+### 2.6 Un test qui ne passait que 23 heures sur 24
+
+**Trouvé par accident, pendant le balayage ci-dessus.**
+
+`reminders.test.ts` plaçait un rappel « dans une heure » et attendait de le voir
+dans le briefing. Or le briefing borne à `date_trunc('day', clock_timestamp())
++ 1 day`. **Entre 23 h et minuit UTC, « dans une heure » tombe demain.**
+
+Le produit avait raison : un rappel de demain n'est pas dans le briefing
+d'aujourd'hui. C'est le TEST qui supposait que « dans une heure » restait
+aujourd'hui.
+
+> Il aurait été classé « flaky » par quiconque l'aurait croisé une fois — et
+> c'est exactement ainsi qu'un défaut d'horloge survit.
+
+**Corrigé** par la doctrine du dépôt (ADR-036/037) : la fenêtre est calculée par
+la BASE, jamais devinée par le processus. Le test demande à la base où finit la
+journée et place le rappel à l'intérieur.
+
+Vérification la plus forte possible : le correctif a été validé **à 23 h 12
+UTC**, dans la fenêtre précise où le test échouait.
+
+### 2.7 Deux fichiers à 0 % de couverture — faux positif
 
 `src/core/policy/evaluator.ts` et `src/providers/contract.ts` : **types purs**,
 zéro code émis. Vérifié, pas supposé.
@@ -269,7 +323,7 @@ Zones sous 80 %, hors points d'entrée :
 
 | Fichier | Lignes | Ce que ça signifie |
 |---|---|---|
-| `providers/contract.ts` · `policy/evaluator.ts` | 0 % | **types purs** — il n'y a rien à exécuter (§2.5) |
+| `providers/contract.ts` · `policy/evaluator.ts` | 0 % | **types purs** — il n'y a rien à exécuter (§2.7) |
 | `tools/outcome.ts` | 55 % | orphelin déclaré (§4.1) |
 | `tools/identity.ts` | 65 % | `sameOperation` / `isSameOperation` jamais appelés en production |
 | `apps/runtime.ts` | 62 % | assemblage ; le CLI et la passerelle ne sont pas traversés (§4.2) |
