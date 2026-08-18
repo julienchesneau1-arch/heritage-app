@@ -4280,3 +4280,92 @@ Si une troisième surface devait rendre un statut — une application mobile, un
 notification — elle devrait dériver de `headline` et `mark`, jamais recopier.
 Le test compare aujourd'hui **une** surface au CLI ; il faudrait l'étendre, pas
 le dupliquer.
+
+---
+
+## ADR-063 — Ce qu'on montre est ce qui sera fait, en entier
+
+**Statut :** accepté (`docs/03 §3`).
+**Référence :** ADR-041, ADR-061, ADR-062, `src/core/tools/confirmation.ts`.
+
+### Comment c'est arrivé
+
+Après le consentement (ADR-061) et l'annonce (ADR-062), la question a été
+posée à la surface produit entière plutôt qu'à un fichier :
+
+```text
+quels exports de src/apps/ ne sont cités par AUCUN test ?
+```
+
+Neuf. Dont `confirmationPrompt` — la fonction qui montre à l'humain **ce qu'il
+confirme**. Le pendant exact du consentement : la lecture était éprouvée, pas
+ce sur quoi elle porte.
+
+### Deux défauts, et le second était ACTIF
+
+**1. Une liste NOIRE là où il fallait une liste blanche.**
+
+Les valeurs voyageaient dans `error.details`, mêlées aux métadonnées, et
+**deux** consommateurs les triaient chacun de leur côté par
+`key !== 'tool' && key !== 'autonomy'`. Or le Gateway étalait
+`...sensitiveValues` **après** ces clés :
+
+```ts
+{ tool: def.id, autonomy: policy.effectiveAutonomy, ...sensitiveValues }
+```
+
+Un paramètre nommé `tool` aurait écrasé la métadonnée, puis aurait été filtré
+par les deux consommateurs. **L'humain aurait confirmé une valeur qu'il n'a
+jamais vue.** Aucun outil ne porte ce nom aujourd'hui — c'est un piège, pas un
+incident, et un piège qu'on ne déclenche pas est un piège qu'on oublie.
+
+**2. Une troncature SILENCIEUSE — et celle-là était le comportement du jour.**
+
+`.slice(0, 200)` coupait sans le dire. `web_search.query` accepte **256**
+caractères : cinquante-six pouvaient disparaître de ce qu'on confirme.
+
+> Confirmer ce qu'on n'a pas vu n'est pas confirmer.
+
+### La décision
+
+Un module, `src/core/tools/confirmation.ts`, qui **assemble et relit au même
+endroit** — le Gateway écrit, l'Assistant et le CLI lisent.
+
+| | |
+|---|---|
+| **Liste blanche** | les valeurs voyagent sous un préfixe `valeur.` ; tout le reste est de la métadonnée. Une clé inconnue est **ignorée**, pas affichée — défaut fermé appliqué au rendu |
+| **Troncature dite** | `…(tronqué — N caractères au total)`, **dans la chaîne** |
+| **Ordre stable** | trié par nom : un ordre qui bouge fait relire, et ce qu'on relit trop souvent finit par ne plus être lu |
+
+**La mention de troncature est dans le TEXTE, pas dans un drapeau.** Un booléen
+à côté de la valeur suppose que chaque affichage pense à le lire — il y en a
+trois, CLI, passerelle web, et le prochain. Le texte survit à un consommateur
+distrait.
+
+### La doublure de test qui pouvait dériver du vrai
+
+`assistant.test.ts` fabriquait ses clés à la main (`montant: 50`). Elle est
+passée par `confirmableKey` et `renderConfirmable` — **les mêmes fonctions que
+la production**. Une doublure qui écrit son propre format finit par éprouver un
+protocole que personne n'implémente.
+
+Et `gateway.test.ts` lit désormais par `readConfirmables` plutôt que par la clé
+nue : le test éprouve la **propriété** — la valeur est exposée à l'humain — et
+non la forme de transport, qui a justement changé.
+
+### Sabotage
+
+Quatre passes. La dernière reproduit l'**état d'origine exact** — liste noire
+*et* clés nues — et fait rougir le test qui encode précisément la trouvaille
+(« un paramètre nommé `tool` est MONTRÉ »). Les trois premières l'auraient
+laissé vert : une seule moitié du défaut ne suffit pas à le reproduire.
+
+> Un sabotage partiel donne une conclusion partielle. Reproduire l'état
+> d'origine coûte une passe de plus et vaut la différence.
+
+### Condition de révision
+
+Si `error.details` devait un jour porter d'autres familles de données —
+diagnostics, suggestions — chacune aurait son préfixe, jamais une exception
+dans le filtre. Le jour où l'on écrit `key !== …` ici, la liste noire est
+revenue.

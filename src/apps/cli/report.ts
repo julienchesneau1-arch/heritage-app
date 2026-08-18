@@ -123,9 +123,16 @@ export function confirmationPrompt(
   values: Readonly<Record<string, string | number | boolean>>,
 ): string {
   const lines = [reason];
-  const concrete = Object.entries(values).filter(
-    ([key]) => key !== 'tool' && key !== 'autonomy',
-  );
+
+  /* ⚠ CE TRI ÉTAIT UNE LISTE NOIRE — `key !== 'tool' && key !== 'autonomy'`
+     (ADR-063). Il vivait ici ET dans l'Assistant, chacun de son côté, sur des
+     clés qui étaient les noms nus des paramètres.
+
+     L'Assistant a déjà dépréfixé et filtré : ce qui arrive ici est exactement
+     ce qui doit s'afficher. On ne re-trie donc plus — un second tri serait un
+     second registre du même fait, et le jour où ils divergent aucun ne fait
+     autorité. */
+  const concrete = Object.entries(values);
 
   if (concrete.length > 0) {
     lines.push('');

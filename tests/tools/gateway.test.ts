@@ -12,6 +12,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { defineTool } from '../../src/core/tools/contract.js';
+import { readConfirmables } from '../../src/core/tools/confirmation.js';
 import { z } from 'zod';
 import type { Db } from '../../src/core/db/client.js';
 import { appDb, databaseAvailable } from '../helpers/db.js';
@@ -163,8 +164,13 @@ describe.skipIf(skip)('Tool Gateway', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe('CONFIRMATION_REQUIRED');
-    // La confirmation porte sur la VALEUR concrète, pas sur l'intention.
-    expect(result.error.details?.['privacyClass']).toBe('GREEN');
+    /* La confirmation porte sur la VALEUR concrète, pas sur l'intention.
+
+       Lu par `readConfirmables` plutôt que par la clé nue (ADR-063) : le test
+       éprouve la PROPRIÉTÉ — « la valeur est exposée à l'humain » — et non la
+       forme de transport, qui a justement changé. */
+    const valeurs = readConfirmables(result.error.details);
+    expect(valeurs.find((v) => v.nom === 'privacyClass')?.rendu).toBe('GREEN');
   });
 
   it('un paramètre non déclaré est traité comme non fiable', async () => {

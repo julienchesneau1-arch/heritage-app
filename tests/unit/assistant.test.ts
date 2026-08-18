@@ -10,6 +10,7 @@
  * celui qui protège des actions irréversibles de demain.
  */
 import { describe, expect, it } from 'vitest';
+import { confirmableKey, renderConfirmable } from '../../src/core/tools/confirmation.js';
 import { createAssistant } from '../../src/core/assistant.js';
 import { err, ok, jarvisError, type Result } from '../../src/core/types/result.js';
 import type { IntentEngine, IntentProposal } from '../../src/core/intent/engine.js';
@@ -55,11 +56,18 @@ function gatewayRequiringConfirmation(calls: ToolCall[]): ToolGateway {
       if (!call.context.userConfirmed) {
         return Promise.resolve(
           err(
+            /* ⚠ CETTE DOUBLURE FABRIQUAIT SES CLÉS À LA MAIN, ET C'EST
+               EXACTEMENT AINSI QU'UNE DOUBLURE DÉRIVE DU VRAI.
+
+               Elle écrivait `montant: 50` là où le Gateway écrit désormais
+               `valeur.montant` (ADR-063). Elle passe par les MÊMES fonctions
+               que la production : le jour où la forme de transport rechange,
+               elle suit sans qu'on y pense. */
             jarvisError('CONFIRMATION_REQUIRED', 'Confirmer ce virement ?', {
               tool: 'payment_send',
               autonomy: 'L3',
-              montant: 50,
-              destinataire: 'Paul',
+              [confirmableKey('montant')]: renderConfirmable(50),
+              [confirmableKey('destinataire')]: renderConfirmable('Paul'),
             }),
           ),
         );

@@ -23,6 +23,7 @@
  */
 import { mint, type OperationIdentity } from './tools/identity.js';
 import type { IntentEngine } from './intent/engine.js';
+import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
 import type { Mode, VerificationStatus } from './types/domain.js';
 
@@ -113,10 +114,12 @@ export function createAssistant(deps: AssistantDeps): Assistant {
 
         if (!result.ok) {
           if (result.error.kind === 'CONFIRMATION_REQUIRED') {
+            /* LISTE BLANCHE PARTAGÉE — ADR-063. Ce tri existait ici ET dans
+               le CLI, chacun par `key !== 'tool' && key !== 'autonomy'`. Deux
+               tris du même fait finissent par diverger. */
             const values: Record<string, string> = {};
-            for (const [key, value] of Object.entries(result.error.details ?? {})) {
-              if (key === 'tool' || key === 'autonomy') continue;
-              values[key] = String(value);
+            for (const v of readConfirmables(result.error.details)) {
+              values[v.nom] = v.rendu;
             }
             return {
               kind: 'CONFIRM',

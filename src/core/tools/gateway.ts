@@ -28,6 +28,7 @@ import { createSnapshotStore } from '../undo/snapshots.js';
 import { floorFor } from '../privacy/classify.js';
 import { sealExternal } from '../quarantine/processor.js';
 import { createEmergencyHalt } from '../safety/halt.js';
+import { confirmableKey, renderConfirmable } from './confirmation.js';
 import type { OperationIdentity } from './identity.js';
 import type { UnknownReason, VerificationEngine } from '../verification/engine.js';
 import { verificationOutcome } from '../verification/engine.js';
@@ -886,12 +887,13 @@ export function createToolGateway(deps: {
           if (!spec.sensitive) continue;
           const value = (input as Record<string, unknown>)[spec.name];
           if (value !== undefined) {
-            // La confirmation doit porter sur la valeur CONCRÈTE. On la
-            // sérialise sans supposer qu'elle est une chaîne : un objet
-            // rendu « [object Object] » ne permettrait de confirmer rien.
-            const rendered =
-              typeof value === 'string' ? value : JSON.stringify(value);
-            sensitiveValues[spec.name] = (rendered ?? '').slice(0, 200);
+            /* CLÉ PRÉFIXÉE, et troncature DÉCLARÉE — ADR-063.
+
+               Avant : la clé était le nom nu du paramètre, et le `.slice(0, 200)`
+               coupait en silence. Un paramètre nommé `tool` aurait écrasé la
+               métadonnée puis disparu du tri des consommateurs ; et une requête
+               de 256 caractères perdait les cinquante-six derniers sans un mot. */
+            sensitiveValues[confirmableKey(spec.name)] = renderConfirmable(value);
           }
         }
       }

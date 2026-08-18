@@ -239,6 +239,27 @@ symbole du plus bénin.**
 **Corrigé** (ADR-062) : `headline()` extraite comme source unique, le web
 dérive ses tables de l'**énumération**. Seize tests, six sabotages rattrapés.
 
+### 2.6-ter L'utilisateur confirmait une valeur tronquée en silence
+
+**Trouvé en systématisant la méthode** : plutôt que de deviner le prochain
+fichier, la question a été posée à la surface entière — *quels exports de
+`src/apps/` ne sont cités par aucun test ?* Neuf. Dont `confirmationPrompt`.
+
+Deux défauts, et le second était **actif** :
+
+| | |
+|---|---|
+| liste **noire** (`key !== 'tool'`) dans DEUX consommateurs | un paramètre nommé `tool` aurait écrasé la métadonnée puis disparu du tri — confirmé sans être vu. Latent |
+| `.slice(0, 200)` **silencieux** | `web_search.query` accepte 256 caractères : cinquante-six disparaissaient de ce qu'on confirme. **Comportement du jour** |
+
+**Corrigé** (ADR-063) : un module partagé, liste **blanche** par préfixe,
+troncature dite **dans le texte** — un drapeau supposerait que chacun des trois
+affichages pense à le lire.
+
+Quatre sabotages ; seul le dernier, qui reproduit l'**état d'origine exact**,
+fait rougir le test qui encode la trouvaille. *Un sabotage partiel donne une
+conclusion partielle.*
+
 ### 2.7 Deux fichiers à 0 % de couverture — faux positif
 
 `src/core/policy/evaluator.ts` et `src/providers/contract.ts` : **types purs**,
