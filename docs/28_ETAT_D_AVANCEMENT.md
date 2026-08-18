@@ -53,17 +53,17 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 78 %**
+## 2. Profondeur de preuve — **≈ 80 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
-| **Invariants de sécurité S1–S15** (`docs/03`) | **8 des 15** nommément référencés dans les tests | **53 %** |
+| **Invariants de sécurité S1–S15** (`docs/03`) | **9 des 15** nommément référencés dans les tests | **60 %** |
 | **Tests dorés A·B·C** (`docs/05`) | **28 des 30** référencés, 2 déclarés bloqués | **93 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 78 %** |
+| **Moyenne** | | **≈ 80 %** |
 
 ### Le chiffre des invariants était FAUX, et dans le sens qui flatte
 
@@ -71,8 +71,8 @@ Ce document affirmait « **9 des 15** ». La mesure — `grep -E "\bS[0-9]+\b"` 
 `tests/`, frontières de mot comprises — en donne **sept** :
 
 ```text
-référencés   S1 · S2 · S3 · S6 · S7 · S12 · S14 · S15
-absents      S4 · S5 · S8 · S9 · S10 · S11 · S13
+référencés   S1 · S2 · S3 · S6 · S7 · S12 · S13 · S14 · S15
+absents      S4 · S5 · S8 · S9 · S10 · S11
 ```
 
 **S12 a rejoint les nommés avec l'Undo Engine** (ADR-066) — sans perdre sa
@@ -95,7 +95,7 @@ lequel des deux on lit.
 **Le lien est désormais mécanique là aussi** (ADR-054).
 `tests/security/invariants-contract.test.ts` lit `docs/03 §2`, en extrait les
 quinze identifiants, et échoue si l'un n'est ni nommé, ni rattaché à une preuve
-désignée, ni exempté par une absence **vérifiée**. Le taux de 53 % y est écrit
+désignée, ni exempté par une absence **vérifiée**. Le taux de 60 % y est écrit
 en dur : il ne peut plus dériver sans passer par ce fichier.
 
 Deux réserves y sont chiffrées plutôt que fondues dans « tracé » :
@@ -103,10 +103,14 @@ Deux réserves y sont chiffrées plutôt que fondues dans « tracé » :
 | | Ce que la preuve ne couvre pas |
 |---|---|
 | **S12** | capture et exécution du défaire prouvées pour **quatre outils inverses sur cinq** (ADR-066/067) ; restent `calendar_delete` — seul effet externe — et **aucun mécanisme ne rejoue un `STATE_RESTORE`** |
-| **S13** | le cloud est éteint **en dur** ; `cloud.enabled` n'a aucun effet. L'invariant dit que l'**utilisateur** peut l'éteindre |
 
-S13 est le motif « CostGate » une deuxième fois : **tenu par absence, pas par
-mécanisme.**
+**S13 A QUITTÉ CE TABLEAU — ADR-069.** Il y disait : *« le cloud est éteint en
+dur ; `cloud.enabled` n'a aucun effet »*. C'était le motif « CostGate » une
+deuxième fois — tenu par absence, pas par mécanisme. La clé est désormais lue,
+et le défaut de `config/default.json` reste `false` : ce qui change n'est pas le
+comportement, c'est que le choix de l'utilisateur soit honoré.
+
+> Un interrupteur qui n'interrompt pas est pire que pas d'interrupteur.
 
 ### Ce que la mesure a révélé sur `docs/05` — et qui est CORRIGÉ
 
@@ -241,7 +245,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **68 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **69 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
@@ -295,7 +299,7 @@ entier, et aucun ne renforce ce qui existe.
 
 ```text
 ÉTENDUE FONCTIONNELLE   ≈ 64 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 78 %     ce qu'on peut en démontrer
+PROFONDEUR DE PREUVE    ≈ 80 %     ce qu'on peut en démontrer
 ```
 
 > ⚠ **CETTE SECTION A CONTREDIT LE RESTE DU DOCUMENT.** Elle affichait encore

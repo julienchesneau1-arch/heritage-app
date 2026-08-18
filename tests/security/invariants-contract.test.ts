@@ -119,9 +119,14 @@ const RESERVES: Readonly<Record<string, string>> = {
     'capture et exécution du défaire prouvées pour QUATRE outils inverses sur ' +
     'cinq (ADR-065/066/067) ; `calendar_delete` reste non écrit — seul effet ' +
     'externe — et aucun mécanisme ne rejoue une capture STATE_RESTORE',
-  S13:
-    'le cloud est éteint EN DUR : `cloud.enabled` n’a aucun effet, l’invariant ' +
-    'dit pourtant que l’UTILISATEUR peut l’éteindre',
+  /* ⚠ S13 A QUITTÉ CE REGISTRE — ADR-069, et c'est le mouvement qu'on attend
+     d'une réserve. Elle disait : « le cloud est éteint EN DUR, la clé de
+     configuration n'a aucun effet, donc l'invariant est tenu par absence et non
+     par un contrôle utilisateur. »
+
+     La clé est désormais LUE. La réserve est LEVÉE, pas déplacée — la
+     distinction compte : une réserve qu'on déménage sans la lever finit par
+     décrire un état qui n'existe plus. */
 };
 
 const TRACES: Readonly<Record<string, Trace>> = {
@@ -157,20 +162,6 @@ const TRACES: Readonly<Record<string, Trace>> = {
     par: ['tests/contracts/provider-isolation.test.ts'],
     marqueur: "PROVIDER_DIRS: readonly string[] = ['src/providers']",
     reserve: null,
-  },
-  S13: {
-    /* TENU PAR ABSENCE, PAS PAR INTERRUPTEUR — et c'est le motif « CostGate »
-       une deuxième fois. `config/default.json` expose `cloud.enabled`, mais le
-       runtime écrit `cloudEnabled: false` en littéral : la clé n'a aucun effet.
-
-       Le résultat va aujourd'hui dans le bon sens — le cloud est éteint — mais
-       l'invariant dit que l'UTILISATEUR peut l'éteindre. Ce n'est pas la même
-       phrase, et `wiring.test.ts` le démontre plutôt qu'il ne le corrige. */
-    par: ['tests/redteam/offline.test.ts', 'tests/redteam/wiring.test.ts'],
-    marqueur: '`cloudEnabled` est codé en dur',
-    reserve:
-      'le cloud est éteint EN DUR : la clé de configuration n’a aucun effet, ' +
-      'donc l’invariant est tenu par absence et non par un contrôle utilisateur',
   },
 };
 
@@ -211,14 +202,14 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
    * LE CHIFFRE, ÉCRIT DANS UN TEST PLUTÔT QUE DANS UN RAPPORT
    * ================================================================== */
 
-  it('HUIT invariants sont nommés — et le chiffre est ici, pas dans un rapport', () => {
+  it('NEUF invariants sont nommés — et le chiffre est ici, pas dans un rapport', () => {
     const nommes = ids.filter(estNomme);
 
     /* `docs/28` a dit « neuf » pendant plusieurs sprints parce qu'un rapport se
        recopie sans se revérifier. Un test, lui, échoue. Ce chiffre doit monter
        — et le faire monter oblige à passer ici, ce qui est exactement le point. */
-    expect(nommes).toEqual(['S1', 'S2', 'S3', 'S6', 'S7', 'S12', 'S14', 'S15']);
-    expect(nommes.length).toBe(8);
+    expect(nommes).toEqual(['S1', 'S2', 'S3', 'S6', 'S7', 'S12', 'S13', 'S14', 'S15']);
+    expect(nommes.length).toBe(9);
   });
 
   it('AUCUN invariant n\'est sans trace : ni nommé, ni désigné, ni exempté', () => {
@@ -302,7 +293,7 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
 
        Les compter les rend impossibles à oublier. Les fondre dans « tracé »
        aurait produit un registre plus flatteur et moins vrai. */
-    expect(avecReserve.map(([id]) => id).sort()).toEqual(['S12', 'S13']);
+    expect(avecReserve.map(([id]) => id).sort()).toEqual(['S12']);
     for (const [id, t] of avecReserve) {
       expect(t.length, `${id} : réserve trop vague`).toBeGreaterThan(40);
     }
@@ -314,11 +305,11 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
     const exemptes = Object.keys(NON_EXIGIBLES).length;
 
     expect(nommes + traces + exemptes).toBe(ids.length);
-    expect(traces).toBe(6);
+    expect(traces).toBe(5);
     expect(exemptes).toBe(1);
 
     // Le taux publié par `docs/28`. Il est ici pour ne plus pouvoir dériver.
-    expect(Math.round((nommes / ids.length) * 100)).toBe(53);
+    expect(Math.round((nommes / ids.length) * 100)).toBe(60);
   });
 
   /* ================================================================== *

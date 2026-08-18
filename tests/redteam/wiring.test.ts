@@ -246,7 +246,7 @@ describe('RED TEAM — code mort en production', () => {
     await Promise.resolve();
   });
 
-  it('DÉMONSTRATION — 6 clés de configuration sur 16 n\'ont aucun effet', () => {
+  it('DÉMONSTRATION — 5 clés de configuration sur 16 n\'ont aucun effet', () => {
     // `06` impose « aucune configuration critique cachée dans le code ». Le
     // dépôt fait l'inverse du reproche attendu : la configuration existe, est
     // validée par Zod… et n'est lue par personne. Une clé décorative est pire
@@ -277,11 +277,12 @@ describe('RED TEAM — code mort en production', () => {
       expect(sources.includes(key), key).toBe(true);
     }
 
-    // `policy.directory` et `cloud.enabled` sont contournés autrement : le
-    // runtime écrit la valeur en dur au lieu de lire la configuration.
+    /* `policy.directory` reste contourné : le runtime prend le chemin en dur.
+       `cloud.enabled`, LUI, A ÉTÉ CÂBLÉ (ADR-069) — il quitte donc cette liste,
+       et le compteur passe de six à cinq. */
     const runtime = readFileSync(join(ROOT, 'src', 'apps', 'runtime.ts'), 'utf8');
     expect(runtime).toContain("join(process.cwd(), 'policies')");
-    expect(runtime).toContain('cloudEnabled: false');
+    expect(runtime).toContain('config.value.public.cloud.enabled');
   });
 
   it('`poolMax` et `statementTimeoutMs` sont désormais transmis à la base', () => {
@@ -303,13 +304,22 @@ describe('RED TEAM — code mort en production', () => {
     expect(ci).not.toContain('pnpm test:policy');
   });
 
-  it('DÉMONSTRATION — `cloudEnabled` est codé en dur, la configuration ne le pilote pas', () => {
-    // `config/default.json` expose `cloud.enabled`. Le runtime écrit `false`
-    // en littéral et l'Assistant aussi. La clé de configuration n'a donc
-    // aucun effet — dans le bon sens aujourd'hui, mais c'est un piège : elle
-    // laisse croire qu'un interrupteur existe.
+  it('`cloudEnabled` est PILOTÉ par la configuration — S13', () => {
+    /* ⚠ CE TEST A CHANGÉ DE CAMP — ADR-069.
+       Il démontrait le défaut : « le runtime écrit `false` en littéral et
+       l'Assistant aussi ; la clé n'a aucun effet — dans le bon sens
+       aujourd'hui, mais c'est un piège : elle laisse croire qu'un interrupteur
+       existe. »
+
+       L'interrupteur existe désormais. Le défaut restait invisible dans tout
+       comportement observable, puisque le résultat était le bon : c'est la
+       LECTURE de la configuration qui fait la différence, et c'est elle qu'on
+       vérifie. Détail dans `tests/security/interrupteur-cloud.test.ts`. */
     const runtime = readFileSync(join(ROOT, 'src', 'apps', 'runtime.ts'), 'utf8');
-    expect(runtime).toContain('cloudEnabled: false');
-    expect(runtime).not.toContain('config.value.public.cloud');
+    expect(runtime).toContain('config.value.public.cloud.enabled');
+    expect(runtime).not.toContain('cloudEnabled: false,');
+
+    const assistant = readFileSync(join(ROOT, 'src', 'core', 'assistant.ts'), 'utf8');
+    expect(assistant).not.toContain('cloudEnabled: false');
   });
 });

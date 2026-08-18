@@ -68,6 +68,28 @@ export interface AssistantDeps {
   readonly gateway: ToolGateway;
   /** Pilote la confirmation côté Memory Guard (voir `src/tools/index.ts`). */
   setGuardConfirmed(value: boolean): void;
+  /**
+   * L'INTERRUPTEUR CLOUD DE L'UTILISATEUR — invariant S13, ADR-069.
+   *
+   * Ce champ valait `false` EN DUR ici, et dans le runtime. La politique
+   * `00_hard_security.cedar` interdit toute égression quand il est faux, avec
+   * ce commentaire : *« L'utilisateur doit pouvoir couper le cloud, et cela
+   * doit être vrai. »*
+   *
+   * Ça ne l'était pas. `config/default.json` expose `cloud.enabled`, et la clé
+   * ne pilotait RIEN : la protection tenait par un littéral — le bon résultat
+   * pour la mauvaise raison, ce que ce dépôt refuse partout ailleurs.
+   *
+   * **Un interrupteur qui n'interrompt pas est pire que pas d'interrupteur :
+   * l'utilisateur se croit protégé par son choix alors qu'il l'est par un
+   * hasard d'écriture.** Le jour où quelqu'un remplace le littéral, plus rien
+   * ne le signale.
+   *
+   * Fourni par l'appelant, jamais deviné. Le défaut de `config/default.json`
+   * reste `false` : ce qui change n'est pas le comportement par défaut, c'est
+   * que le choix de l'utilisateur soit HONORÉ.
+   */
+  readonly cloudEnabled: boolean;
 }
 
 export function createAssistant(deps: AssistantDeps): Assistant {
@@ -106,7 +128,7 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           actor: 'USER',
           context: {
             mode: options.mode ?? 'NORMAL',
-            cloudEnabled: false,
+            cloudEnabled: deps.cloudEnabled,
             proactive: false,
             userConfirmed: confirm,
           },

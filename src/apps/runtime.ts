@@ -59,7 +59,20 @@ export interface Runtime {
   close(): Promise<void>;
 }
 
-export function buildRuntime(db: Db, options: { policyDir?: string } = {}): Result<Runtime> {
+export function buildRuntime(
+  db: Db,
+  options: {
+    policyDir?: string;
+    /**
+     * L'INTERRUPTEUR CLOUD DE L'UTILISATEUR — S13, ADR-069.
+     *
+     * Défaut `false`, comme `config/default.json`. Ce qui change avec ADR-069
+     * n'est pas le défaut : c'est que la clé de configuration soit désormais
+     * LUE. Elle ne l'était pas — la protection tenait par un littéral.
+     */
+    cloudEnabled?: boolean;
+  } = {},
+): Result<Runtime> {
   const source = loadPolicySource(options.policyDir ?? join(process.cwd(), 'policies'));
   if (!source.ok) return source;
 
@@ -105,10 +118,11 @@ export function buildRuntime(db: Db, options: { policyDir?: string } = {}): Resu
       intent: createIntentEngine(),
       gateway,
       setGuardConfirmed: setUserConfirmed,
+      cloudEnabled: options.cloudEnabled ?? false,
     }),
     undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
     embeddingsAvailable: false,
-    cloudEnabled: false,
+    cloudEnabled: options.cloudEnabled ?? false,
     setUserConfirmed,
     close: () => db.close(),
   });
@@ -140,7 +154,13 @@ export function openRuntime(
     },
   });
 
-  const runtime = buildRuntime(db);
+  /* LA CLÉ DE CONFIGURATION EST ENFIN LUE — S13, ADR-069.
+     `loadConfig()` était appelé pour la base et la politique ; `cloud.enabled`
+     n'en sortait jamais. Une clé déclarée que rien ne consulte est la famille
+     de défaut que `docs/26 §2` recense huit fois. */
+  const runtime = buildRuntime(db, {
+    cloudEnabled: config.value.public.cloud.enabled,
+  });
   if (!runtime.ok) {
     void db.close();
     return err(

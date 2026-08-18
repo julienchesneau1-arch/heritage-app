@@ -84,6 +84,8 @@ describe('Assistant', () => {
       intent: intentOf({ kind: 'CLARIFY', question: 'Quoi retenir ?', understood: '' }),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     const reply = await assistant.say('Note que');
@@ -100,6 +102,8 @@ describe('Assistant', () => {
       }),
       gateway: gatewayRequiringConfirmation([]),
       setGuardConfirmed: () => undefined,
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     const reply = await assistant.say('Envoie un mail à Paul');
@@ -115,6 +119,8 @@ describe('Assistant', () => {
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation([]),
       setGuardConfirmed: () => undefined,
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -135,6 +141,8 @@ describe('Assistant', () => {
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     const asked = await assistant.say('Vire 50 € à Paul');
@@ -158,6 +166,8 @@ describe('Assistant', () => {
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     await assistant.say('Vire 50 € à Paul');
@@ -179,6 +189,8 @@ describe('Assistant', () => {
         invoke: () => Promise.resolve(ok(success())),
       },
       setGuardConfirmed: (value: boolean) => states.push(value),
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     await assistant.say('Vire 50 € à Paul', { confirm: true });
@@ -198,6 +210,8 @@ describe('Assistant', () => {
         invoke: () => Promise.reject(new Error('base injoignable')),
       },
       setGuardConfirmed: (value: boolean) => states.push(value),
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     await expect(assistant.say('Vire 50 € à Paul', { confirm: true })).rejects.toThrow();
@@ -217,6 +231,8 @@ describe('Assistant', () => {
           Promise.resolve(err(jarvisError('POLICY_DENIED', 'Interdit par politique dure.'))),
       },
       setGuardConfirmed: () => undefined,
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -238,6 +254,8 @@ describe('Assistant', () => {
         invoke: () => Promise.resolve(ok(success())),
       },
       setGuardConfirmed: (value: boolean) => states.push(value),
+      // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
+      cloudEnabled: false,
     });
 
     await assistant.say('Retiens que Jean travaille chez Orano');

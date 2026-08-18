@@ -848,7 +848,20 @@ serait un second chemin d'écriture hors politique et hors journal.
 `invariants-contract.test.ts` — et elle a survécu au passage de S12 de « tracé »
 à « nommé », ce qui est précisément le piège qu'ADR-066 a fermé.
 
-### 4.11 S13 — le cloud est éteint EN DUR, il n'y a pas d'interrupteur
+### 4.11 ~~S13~~ — LEVÉE : l'interrupteur cloud existe (ADR-069)
+
+> ⚠ **CETTE ZONE EST LEVÉE — ADR-069.** Elle disait : *« le motif CostGate une
+> deuxième fois : tenu par ABSENCE, pas par mécanisme. »* `cloud.enabled` est
+> désormais lu par le runtime et transmis à l'Assistant ; le défaut de
+> `config/default.json` reste `false`.
+>
+> **Et elle contenait une erreur de cadrage, de moi.** J'avais classé S13
+> « bloqué sur une décision utilisateur ». Seule la moitié l'était : « quel
+> fournisseur cloud » est un choix produit, « l'interrupteur fonctionne-t-il »
+> est un défaut. Les confondre a retardé la correction de plusieurs sprints.
+
+Ce qui suit décrit l'état AVANT correction, conservé parce que le raisonnement
+reste vrai du CostGate — même motif, même endroit, une troisième fois.
 
 **Le motif « CostGate » une deuxième fois : tenu par ABSENCE, pas par mécanisme.**
 

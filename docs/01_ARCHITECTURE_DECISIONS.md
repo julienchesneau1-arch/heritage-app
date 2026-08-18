@@ -4858,3 +4858,95 @@ Le jour où `erased()` acquiert un consommateur réel de son évidence — un ou
 qui projette ses cibles depuis la fabrique plutôt qu'à la main — le test de
 conséquence devient redondant avec le comportement, et c'est tant mieux : il
 faudra alors vérifier que le CONSOMMATEUR est saboté, pas la fabrique.
+
+---
+
+## ADR-069 — Un interrupteur qui n'interrompt pas est pire que pas d'interrupteur
+
+**Statut :** accepté (invariant S13, `docs/03`).
+**Référence :** ADR-040, ADR-055, `policies/00_hard_security.cedar`,
+`src/apps/runtime.ts`, `src/core/assistant.ts`.
+
+### La décision, et ce qu'elle ne décide PAS
+
+**Décidé ici :** `cloud.enabled` est désormais LU par le runtime et transmis à
+l'Assistant. Le défaut de `config/default.json` reste `false`.
+
+**Pas décidé ici :** rien sur le fournisseur cloud — quel service, à quel prix,
+sous quelles conditions. C'est une décision produit, et elle reste entière.
+
+La confusion entre les deux avait un coût réel : **j'avais classé S13 comme
+« bloqué sur une décision utilisateur » alors que seule la moitié l'était.**
+« Quel fournisseur » est un choix ; « l'interrupteur fonctionne-t-il » est un
+défaut.
+
+### Le défaut
+
+`policies/00_hard_security.cedar` porte cette règle, avec ce commentaire :
+
+```cedar
+// L'utilisateur doit pouvoir couper le cloud, et cela doit être vrai.
+forbid(principal, action, resource)
+when { context.egress == true && context.cloudEnabled == false };
+```
+
+**Ça ne l'était pas.** `runtime.ts` et `assistant.ts` écrivaient
+`cloudEnabled: false` en littéral. La clé de configuration ne pilotait rien.
+
+Le résultat allait dans le bon sens — le cloud était éteint — mais par un
+littéral, pas par un mécanisme. C'est le motif « tenu par ABSENCE, pas par
+mécanisme » que `docs/26 §4.11` avait déjà nommé pour le CostGate, et la
+**neuvième** occurrence de la famille recensée en `docs/26 §2`.
+
+> Un interrupteur qui n'interrompt pas est pire que pas d'interrupteur :
+> l'utilisateur se croit protégé par son choix alors qu'il l'est par un hasard
+> d'écriture. Le jour où quelqu'un remplace le littéral, plus rien ne le
+> signale.
+
+### Pourquoi c'est le bon arbitrage pour Jarvis
+
+| | |
+|---|---|
+| **C'est un défaut** | une clé déclarée, validée par Zod, et consultée par personne |
+| **S13 est un invariant de SÉCURITÉ** | il dit que l'utilisateur *peut* éteindre — ce qui suppose que l'interrupteur agisse |
+| **Le défaut reste fermé** | `enabled: false` dans `config/default.json`, inchangé |
+| **Aucune dépendance ajoutée** | pas un euro, pas un fournisseur, pas un paquet |
+
+L'objection sérieuse — *« honorer la configuration ouvre une porte que le
+littéral tenait fermée »* — se retourne : refuser d'honorer le choix de
+l'utilisateur au motif qu'il pourrait mal choisir, c'est exactement ce que
+l'invariant interdit. Et l'ouverture n'est pas un blanc-seing : le Data
+Firewall, `mayEgress` et le reste de la politique continuent de s'appliquer.
+
+### Le champ est REQUIS, pas optionnel
+
+`AssistantDeps.cloudEnabled` n'a pas de valeur par défaut. Le compilateur a donc
+exigé que chaque doublure de test le déclare — et c'est voulu : **un champ
+optionnel est un champ qu'on oublie**, le raisonnement d'ADR-055 sur
+`outputProvenance`.
+
+### Ce que la preuve ne peut pas être
+
+Le défaut ne se voyait dans AUCUN comportement observable : les deux chemins
+donnaient `false`. La preuve du câblage est donc la LECTURE de la configuration,
+vérifiée dans la source. C'est une preuve plus faible qu'un comportement, et il
+faut le dire plutôt que de faire semblant.
+
+Le comportement, lui, est éprouvé sur la vraie politique Cedar, avec un contrôle
+négatif : **une politique qui refuserait tout passerait le test « éteint →
+refusé »**. On vérifie donc que le verdict CHANGE — c'est ce qui distingue un
+interrupteur d'un mur peint en forme d'interrupteur.
+
+### Sabotage
+
+```text
+retour au littéral dans le runtime  → 1 rouge (la lecture)
+règle Cedar neutralisée             → 2 rouges (le comportement)
+```
+
+### Condition de révision
+
+Le jour où un fournisseur cloud est branché, `enabled: true` cesse d'être
+inerte : il autorisera des sorties réelles. La revue à faire alors n'est pas
+celle de cet ADR mais celle du **CostGate**, qui reste tenu par absence — le
+même motif, au même endroit, une troisième fois.
