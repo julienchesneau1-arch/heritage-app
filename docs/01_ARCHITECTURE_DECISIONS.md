@@ -4032,3 +4032,92 @@ dans la fenêtre précise où le test échouait.
 Si un outil venait à déclarer un `requiredSecrets` non vide, le refus
 correspondant deviendrait atteignable et devrait être éprouvé le jour même —
 pas ajouté à une liste.
+
+---
+
+## ADR-060 — Une porte qui éprouve un module ne franchit pas une phase
+
+**Statut :** accepté (correction de mesure — aucun changement fonctionnel).
+**Référence :** `docs/02 §Phase 1`, `docs/26 §4.12`, ADR-004, ADR-058.
+
+### Ce qui a été cherché, et ce qui a été trouvé à la place
+
+La question posée était : *reste-t-il une zone d'ombre avant de continuer ?*
+Le candidat suivant était le **Model Router**, dernier ✗ de la Phase 4.
+
+**Il n'est pas justifié, et l'argument tient en une ligne.** `docs/05 §C5`
+demande « fournisseur cloud indisponible → **Jarvis fonctionne** ». C'est déjà
+vrai, trivialement : aucun modèle n'est dans la boucle. Écrire un routeur pour
+le prouver serait circulaire — prouver une propriété d'un composant hors du
+chemin produit — et ajouterait un sixième module orphelin.
+
+La position déjà écrite dans `exfiltration.test.ts` — « les simuler ne
+prouverait que la simulation » — **tient**. Ma contestation a échoué, et c'est
+le résultat.
+
+### Le vrai trou était ailleurs, et il était dans un chiffre
+
+`docs/02` liste parmi les livrables de la **Phase 1** : « Context Engine :
+résolution … détection d'ambiguïté ». Sa porte coche :
+
+> Face à trois « Pierre » connus, **Jarvis** demande — il ne choisit pas.
+
+Or `ops/gates/phase1.ts` appelle `createEntityResolver` **directement**. Son
+libellé est honnête — « **le résolveur** demande » — mais la case du document
+dit **Jarvis**.
+
+> Une porte qui éprouve un module ne franchit pas une phase dont le livrable est
+> un comportement. Les deux ne se confondent que si on lit vite.
+
+**Cinquième occurrence** de la famille ADR-054 / 055 / 057 / 058 : une
+affirmation que le mécanisme censé l'établir n'établit pas.
+
+### Et le registre décrivait mal sa propre zone d'ombre
+
+`docs/26 §4.1` disait : « la boucle réelle ne résout pas les entités »,
+condition de réouverture « `QUICKSTART` promet la levée d'ambiguïté ».
+
+**Les deux moitiés étaient fausses.**
+
+`QUICKSTART` ne promet rien — il déclare l'absence, mot pour mot : « la
+désambiguïsation … n'existe **pas encore** ». Et « pas branché » n'est pas la
+cause :
+
+```text
+resolveAnaphora  lit session_turns.mentioned_entity_ids
+                 → les DEUX appelants du produit l'omettent
+                   (http.ts:141, cli/main.ts:271)
+resolveMention   lit entities / entity_aliases
+                 → AUCUN INSERT hors des tests
+```
+
+Brancher le résolveur aujourd'hui le ferait répondre `NOT_FOUND` à chaque
+appel. **On aurait retiré deux orphelins du compteur sans rien rendre
+possible** — la pire façon de payer une dette : celle qui change le tableau de
+bord et pas le produit.
+
+### La décision
+
+1. **La Phase 1 passe de 100 % à 90 %.** L'étendue fonctionnelle mesure *ce que
+   Jarvis sait faire* ; il ne désambiguïse pas. Le total passe de 65 % à 64 %.
+2. **La condition de réouverture est réécrite** : une capacité de
+   reconnaissance d'entités dans du texte libre — donc un modèle, or l'Intent
+   Engine est **Tier 0 par conception**. C'est un chantier de Phase 5+ ou d'un
+   Tier 1, pas un oubli de câblage.
+3. **Le blocage doré A2 devient falsifiable** : `tableJamaisPeuplee: 'entities'`.
+   Le jour où du code de `src/` y insère, le test rougit en le nommant.
+   Sabotage vérifié.
+
+### Ce que cette ADR ne prétend pas
+
+Elle ne dit pas que la Phase 1 est mal faite. Le Memory Engine, le Memory
+Guard, la recherche hybride et le hors-ligne sont livrés et éprouvés. Elle dit
+qu'**un** de ses six livrables n'est pas atteignable, et que le compter comme
+acquis rendait le chiffre faux.
+
+### Condition de révision
+
+Si un jour la reconnaissance d'entités arrive par un chemin non prévu — un
+outil qui crée explicitement une entité sur demande de l'utilisateur, sans
+modèle — alors A2 se débloquerait sans Tier 1, et cette ADR devrait être
+reprise.

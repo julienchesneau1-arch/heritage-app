@@ -254,7 +254,7 @@ jamais atteints par le produit**.
 | Module | Ce qui manque | Condition de réouverture |
 |---|---|---|
 | ~~`quarantine/processor.ts`~~ | **LEVÉE (ADR-055)** — `web_search` est la première ingestion du dépôt, et le Tool Gateway appelle `sealExternal` | — |
-| `context/packet.ts` · `resolver.ts` | la boucle réelle ne résout pas les entités | `QUICKSTART` promet la levée d'ambiguïté — dette visible |
+| `context/packet.ts` · `resolver.ts` | **rien ne crée d'entité** — voir §4.12, la cause est plus profonde que « pas branché » | une capacité d'extraction d'entités, donc un modèle (Tier 1+) |
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
 | `tools/outcome.ts` | le Gateway n'a pas de notion de cible | dès qu'un outil multi-cibles existe |
@@ -636,6 +636,55 @@ ment dans l'autre sens.
 **Condition de levée :** au premier fournisseur cloud branché, `cloud.enabled`
 doit piloter `cloudEnabled` — au même moment que le branchement du CostGate
 (§4.1), et pour la même raison.
+
+### 4.12 Le Context Engine n'est pas « pas branché » — il n'a RIEN à résoudre
+
+**Ce registre décrivait mal sa propre zone d'ombre**, et la description
+importait plus qu'il n'y paraît : elle désignait un chantier de câblage là où
+il y a un chantier de capacité.
+
+Ce que disait §4.1 : « la boucle réelle ne résout pas les entités », condition
+de réouverture « `QUICKSTART` promet la levée d'ambiguïté — dette visible ».
+**Les deux moitiés étaient fausses.**
+
+`QUICKSTART` ne promet rien — il déclare l'absence, mot pour mot :
+
+> ⚠ La désambiguïsation entre deux homonymes (« quel Jean ? ») n'existe **pas
+> encore** : le Context Engine est écrit et testé, mais pas branché.
+
+Et « pas branché » n'est pas la cause. Mesuré :
+
+```text
+resolveAnaphora  lit session_turns.mentioned_entity_ids
+                 → AUCUN appelant du produit ne le renseigne
+                   (`http.ts:141`, `cli/main.ts:271` : les deux l'omettent)
+resolveMention   lit entities / entity_aliases
+                 → AUCUN `INSERT` hors des tests
+```
+
+Brancher le résolveur aujourd'hui le ferait répondre `NOT_FOUND` à chaque
+appel. On aurait retiré deux orphelins du compteur **sans rien rendre possible**
+— la pire façon de payer une dette : celle qui change le tableau de bord et pas
+le produit.
+
+**La vraie condition de réouverture** : une capacité de **reconnaissance
+d'entités** dans du texte libre. Elle demande un modèle, or l'Intent Engine est
+**Tier 0 par conception** (règles, aucun modèle). C'est donc un chantier de
+Phase 5+ ou d'un Tier 1, pas un oubli de câblage.
+
+**Conséquence assumée sur le chiffre :** `docs/28` marquait la Phase 1 à 100 %.
+Un livrable de cette phase — « Context Engine : résolution ; détection
+d'ambiguïté » — n'est pas atteignable par l'utilisateur. L'étendue
+fonctionnelle mesure *ce que Jarvis sait faire* : la phase redescend à 90 %.
+
+**Et la porte de sortie mérite d'être lue avec ça en tête.** `docs/02` coche
+« Face à trois « Pierre » connus, **Jarvis** demande ». Or `ops/gates/phase1.ts`
+appelle `createEntityResolver` **directement** : la porte éprouve le MODULE, et
+son propre libellé le dit honnêtement (« le résolveur »). C'est la case du
+document qui promet le produit.
+
+> Une porte qui éprouve un module ne franchit pas une phase dont le livrable
+> est un comportement. Les deux ne se confondent que si on lit vite.
 
 ---
 

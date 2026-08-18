@@ -71,16 +71,27 @@ function testSources(): readonly { file: string; content: string }[] {
  */
 type Blocage =
   | { readonly motif: string; readonly absentDuRegistre: string }
-  | { readonly motif: string; readonly moduleOrphelin: string };
+  | { readonly motif: string; readonly moduleOrphelin: string }
+  /** Le blocage tient tant qu'AUCUN code de `src/` ne peuple cette table. */
+  | { readonly motif: string; readonly tableJamaisPeuplee: string };
 
 const BLOQUES: Readonly<Record<string, Blocage>> = {
   A2: {
+    /* ⚠ CE MOTIF DÉCRIVAIT MAL SON PROPRE BLOCAGE — `docs/26 §4.12`.
+
+       Il disait « Context Engine hors circuit — `resolver.ts` n'est atteint par
+       aucun point d'entrée », ce qui désigne un chantier de CÂBLAGE. La cause
+       est plus profonde : **rien ne crée d'entité**. `entities` n'est peuplée
+       par aucun `INSERT` de `src/`, et les deux appelants d'`appendTurn`
+       omettent `mentionedEntityIds`.
+
+       Brancher le résolveur aujourd'hui le ferait répondre `NOT_FOUND` à chaque
+       appel : on aurait retiré deux orphelins du compteur sans rien rendre
+       possible. */
     motif:
-      "Context Engine hors circuit — `resolver.ts` n'est atteint par aucun point d'entrée (docs/26 §4.1)",
-    /* Vérifié contre la liste FIGÉE de `wiring.test.ts` : tant que ce module y
-       figure, il est bien hors circuit. Le jour où on le branche, il quitte
-       cette liste et ce test rougit. */
-    moduleOrphelin: 'src/core/context/resolver.ts',
+      "rien ne crée d'entité — `entities` n'est peuplée par aucun INSERT de src/ ; " +
+      "résoudre exige une reconnaissance d'entités, donc un modèle (docs/26 §4.12)",
+    tableJamaisPeuplee: 'entities',
   },
   A8: {
     motif: "aucun outil d'email n'existe — Phase 3",
@@ -93,6 +104,22 @@ const BLOQUES: Readonly<Record<string, Blocage>> = {
     absentDuRegistre: 'memoryForget',
   },
 };
+
+/** Tous les sources de `src/`, pour vérifier ce que le PRODUIT fait vraiment. */
+function sourcesDeSrc(): readonly { file: string; content: string }[] {
+  const found: { file: string; content: string }[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (full.endsWith('.ts')) {
+        found.push({ file: full, content: readFileSync(full, 'utf8') });
+      }
+    }
+  };
+  walk('src');
+  return found;
+}
 
 /** Le registre réel des outils : ce qui est ENREGISTRÉ, pas ce qui est écrit. */
 const REGISTRE = readFileSync('src/tools/index.ts', 'utf8');
@@ -177,7 +204,18 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
     const wiring = readFileSync('tests/redteam/wiring.test.ts', 'utf8');
 
     for (const [id, blocage] of Object.entries(BLOQUES)) {
-      if ('absentDuRegistre' in blocage) {
+      if ('tableJamaisPeuplee' in blocage) {
+        /* Le blocage tombe le jour où le produit peuple la table — et il
+           tombera TOUT SEUL, sans qu'on ait à s'en souvenir. */
+        const producteurs = sourcesDeSrc().filter((f) =>
+          new RegExp(`INSERT\\s+INTO\\s+${blocage.tableJamaisPeuplee}\\b`, 'i').test(f.content),
+        );
+        expect(
+          producteurs.map((f) => f.file),
+          `${id} est déclaré bloqué parce que rien ne peuple ` +
+            `\`${blocage.tableJamaisPeuplee}\` — or du code de src/ le fait désormais.`,
+        ).toEqual([]);
+      } else if ('absentDuRegistre' in blocage) {
         expect(
           REGISTRE.includes(blocage.absentDuRegistre),
           `${id} est déclaré bloqué, or « ${blocage.absentDuRegistre} » est ` +

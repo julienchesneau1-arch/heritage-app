@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 65 %**
+## 1. Étendue fonctionnelle — **≈ 64 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -29,14 +29,14 @@ nombre de cases à cocher.
 |---|---|---|---|---|
 | −1 Audit du terrain | 3 % | **100 %** | 3,0 | `docs/08`, `docs/10` |
 | 0 Fondations | 12 % | **100 %** | 12,0 | `gate:phase0` ✅ |
-| 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ |
+| 1 Mémoire et Contexte | 12 % | **90 %** | 10,8 | `gate:phase1` ✅ — mais **le Context Engine n'est pas atteignable** : rien ne crée d'entité, donc rien à résoudre (`docs/26 §4.12`). La porte éprouve le MODULE ; la case de `docs/02` promet « **Jarvis** demande » |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
 | 3 Les 10 outils restants | 12 % | **100 %** | 12,0 | **15 outils sur 15** (+`egress_review`, hors liste, en Phase 4). `web_search` livré (ADR-055) — et il met en circuit la séparation Privileged/Quarantined, hors circuit depuis ADR-004 |
 | 4 Confidentialité, coût, indépendance | 13 % | **80 %** | 10,4 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router ✗** |
 | 5 Voix | 10 % | **0 %** | 0,0 | rien |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 65 %** | |
+| **TOTAL** | 100 % | | **≈ 64 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -135,6 +135,30 @@ Deux contrôles négatifs protègent l'extracteur — dont celui du mode de pann
 plus dangereux : **rendre zéro identifiant et déclarer la couverture
 parfaite.**
 
+### La Phase 1 n'était pas à 100 %, et la porte ne le disait pas
+
+**CINQUIÈME occurrence de la même famille**, trouvée en cherchant s'il restait
+une zone d'ombre avant de continuer.
+
+`docs/02` liste parmi les livrables de la Phase 1 : « Context Engine :
+résolution … **détection d'ambiguïté** ». Sa porte de sortie coche « Face à
+trois « Pierre » connus, **Jarvis** demande — il ne choisit pas. »
+
+Or `ops/gates/phase1.ts` appelle `createEntityResolver` **directement**. Son
+propre libellé est honnête — « **le résolveur** demande » — mais la case du
+document dit **Jarvis**. La porte éprouve un module ; la case promet un
+comportement produit.
+
+Et le module n'a rien à résoudre : `entities` n'est alimentée par **aucun**
+`INSERT` de `src/`, et les deux appelants de `appendTurn` omettent
+`mentionedEntityIds`. Détail en `docs/26 §4.12`.
+
+**L'étendue fonctionnelle mesure ce que Jarvis SAIT FAIRE.** La phase passe donc
+à 90 %, et le total de 65 % à 64 %.
+
+> Une porte qui éprouve un module ne franchit pas une phase dont le livrable est
+> un comportement. Les deux ne se confondent que si on lit vite.
+
 ### TROISIÈME dérive de la même famille : un CRITIQUE compté par collision
 
 `docs/05 §C2` — **Arrêt d'urgence**, `CRITIQUE` — figurait dans les 27/30.
@@ -193,7 +217,7 @@ enregistré fait rougir le test **en le nommant**.
 
 | | |
 |---|---|
-| **La qualité de ce qui est fait** | 65 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
+| **La qualité de ce qui est fait** | 64 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
 | **La difficulté restante** | la Phase 5 (voix) est plus longue que la Phase 3, à poids presque égal. |
 | **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 36 %. |
 | **Ce qui est irréductible** | `docs/26 §5` — six limites qu'aucun pourcentage ne fera bouger. |
@@ -209,7 +233,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **59 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **60 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
@@ -262,7 +286,7 @@ entier, et aucun ne renforce ce qui existe.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 65 %     ce que Jarvis sait faire
+ÉTENDUE FONCTIONNELLE   ≈ 64 %     ce que Jarvis sait faire
 PROFONDEUR DE PREUVE    ≈ 76 %     ce qu'on peut en démontrer
 ```
 
