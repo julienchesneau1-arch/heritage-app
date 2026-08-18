@@ -73,25 +73,74 @@ type Blocage =
   | { readonly motif: string; readonly absentDuRegistre: string }
   | { readonly motif: string; readonly moduleOrphelin: string }
   /** Le blocage tient tant qu'AUCUN code de `src/` ne peuple cette table. */
-  | { readonly motif: string; readonly tableJamaisPeuplee: string };
+  | { readonly motif: string; readonly tableJamaisPeuplee: string }
+  /**
+   * Le blocage tient tant qu'AUCUN code de `src/` ne renseigne ce champ.
+   *
+   * ⚠ QUATRIÈME FORME, AJOUTÉE PAR ADR-071 — et elle est née d'un blocage qui
+   * a perdu la moitié de son motif. A2 reposait sur DEUX faits : rien ne peuple
+   * `entities`, et aucun appelant ne renseigne `mentionedEntityIds`. Le premier
+   * est tombé avec `entity_create` ; le second tient.
+   *
+   * Sans cette forme, il aurait fallu soit débloquer A2 à tort, soit garder un
+   * motif devenu faux. Les deux auraient menti — le premier au produit, le
+   * second au registre.
+   */
+  | {
+      readonly motif: string;
+      readonly champJamaisRenseigne: {
+        /** Le champ que personne ne renseigne. */
+        readonly champ: string;
+        /**
+         * La fonction dont on cherche les APPELANTS.
+         *
+         * Sans elle, la vérification attrapait `session.ts` — qui DÉCLARE le
+         * champ sans le renseigner. Un blocage qui tombe sur le module
+         * propriétaire du champ ne mesure rien.
+         */
+        readonly parUnAppelantDe: string;
+        /**
+         * Le module qui DÉCLARE le champ, exclu nommément.
+         *
+         * Il contient forcément le nom du champ et la définition de la
+         * fonction : sans exclusion, le blocage tomberait sur son propre
+         * propriétaire et ne mesurerait rien. L'exclusion est NOMMÉE plutôt
+         * qu'heuristique — une heuristique finirait par excuser un vrai
+         * appelant.
+         */
+        readonly declarePar: string;
+      };
+    };
 
 const BLOQUES: Readonly<Record<string, Blocage>> = {
   A2: {
-    /* ⚠ CE MOTIF DÉCRIVAIT MAL SON PROPRE BLOCAGE — `docs/26 §4.12`.
+    /* ⚠ CE MOTIF A CHANGÉ DEUX FOIS, ET C'EST LE SIGNE QU'IL EST SUIVI.
 
-       Il disait « Context Engine hors circuit — `resolver.ts` n'est atteint par
-       aucun point d'entrée », ce qui désigne un chantier de CÂBLAGE. La cause
-       est plus profonde : **rien ne crée d'entité**. `entities` n'est peuplée
-       par aucun `INSERT` de `src/`, et les deux appelants d'`appendTurn`
-       omettent `mentionedEntityIds`.
+       D'ABORD il décrivait mal son blocage : « Context Engine hors circuit »,
+       ce qui désignait un chantier de câblage. La cause était plus profonde —
+       rien ne créait d'entité (`docs/26 §4.12`).
 
-       Brancher le résolveur aujourd'hui le ferait répondre `NOT_FOUND` à chaque
-       appel : on aurait retiré deux orphelins du compteur sans rien rendre
-       possible. */
+       ENSUITE cette cause est TOMBÉE : `entity_create` peuple `entities`
+       (ADR-071), et le résolveur d'anaphore rend désormais `RESOLVED` là où il
+       rendait toujours `NOT_FOUND`. Éprouvé dans `tests/tools/entities.test.ts`.
+
+       CE QUI TIENT ENCORE est l'autre moitié, jamais levée : **aucun appelant
+       ne renseigne `mentionedEntityIds`**. Le mécanisme sait résoudre ; la
+       boucle produit n'évoque aucune entité, donc Jarvis n'a rien à résoudre
+       de lui-même.
+
+       Déclarer A2 débloqué parce que le MODULE marche répéterait mot pour mot
+       la faute de `docs/26 §4.12` : la porte éprouvait le module, la case du
+       document promet **Jarvis**. */
     motif:
-      "rien ne crée d'entité — `entities` n'est peuplée par aucun INSERT de src/ ; " +
-      "résoudre exige une reconnaissance d'entités, donc un modèle (docs/26 §4.12)",
-    tableJamaisPeuplee: 'entities',
+      "le mécanisme de résolution fonctionne depuis ADR-071, mais AUCUN appelant " +
+      "ne renseigne `mentionedEntityIds` : la boucle produit n'évoque aucune " +
+      'entité, donc le scénario reste hors de portée de Jarvis lui-même',
+    champJamaisRenseigne: {
+      champ: 'mentionedEntityIds',
+      parUnAppelantDe: 'appendTurn(',
+      declarePar: 'src/core/session/session.ts',
+    },
   },
   A8: {
     motif: "aucun outil d'email n'existe — Phase 3",
@@ -209,6 +258,29 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
           producteurs.map((f) => f.file),
           `${id} est déclaré bloqué parce que rien ne peuple ` +
             `\`${blocage.tableJamaisPeuplee}\` — or du code de src/ le fait désormais.`,
+        ).toEqual([]);
+      } else if ('champJamaisRenseigne' in blocage) {
+        /* Même discipline : le blocage tombe le jour où un appelant renseigne
+           le champ, sans qu'on ait à s'en souvenir. */
+        const { champ, parUnAppelantDe, declarePar } = blocage.champJamaisRenseigne;
+        /* Le module propriétaire doit exister : une exclusion qui ne désigne
+           rien masquerait le blocage entier le jour où le fichier est renommé. */
+        expect(
+          sourcesDeSrc().some((f) => f.file === declarePar),
+          `${id} exclut \`${declarePar}\`, qui n'existe pas.`,
+        ).toBe(true);
+
+        const renseignants = sourcesDeSrc().filter(
+          (f) =>
+            f.file !== declarePar &&
+            f.content.includes(parUnAppelantDe) &&
+            f.content.includes(champ),
+        );
+        expect(
+          renseignants.map((f) => f.file),
+          `${id} est déclaré bloqué parce qu'aucun appelant de ` +
+            `\`${parUnAppelantDe}\` ne renseigne \`${champ}\` — or du code de ` +
+            'src/ le fait désormais.',
         ).toEqual([]);
       } else if ('absentDuRegistre' in blocage) {
         expect(

@@ -144,7 +144,7 @@ S'y ajoutent le Tool Gateway et ses contrats, le Verification Engine, la
 séparation Privileged/Quarantined (ADR-004) — désormais EN CIRCUIT, depuis
 que `web_search` ingère du contenu de tiers (ADR-055) — et les outils écrits :
 `memory_add`, `memory_search`, `memory_forget`, `task_create`, `task_list`, `task_cancel`,
-`note_create`, `note_delete`, `reminder_cancel`,
+`note_create`, `note_delete`, `reminder_cancel`, `entity_create`, `entity_delete`,
 `audit_query`, qui rend le journal interrogeable (ADR-041), et `task_complete`,
 premier outil qui MODIFIE une ligne et donc le premier dont l'annulation exige
 de restaurer l'état observé (ADR-042), et `calendar_read`, premier outil qui

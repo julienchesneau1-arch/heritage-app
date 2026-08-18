@@ -45,7 +45,7 @@ elle n'est donc pas un dû.
 
 | Affirmation | Mesure |
 |---|---|
-| 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ 5 hors liste : `egress_review` en Phase 4, et **`memory_forget`, `note_delete`, `task_cancel`, `reminder_cancel`** avec l'Undo Engine) |
+| 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ 7 hors liste : `egress_review` en Phase 4, **`memory_forget`, `note_delete`, `task_cancel`, `reminder_cancel`** avec l'Undo Engine, et **`entity_create`, `entity_delete`** avec le Context Engine sans modèle — ADR-071) |
 | Model Router absent | aucun fichier de `src/` ne contient « router » |
 | Voix absente | aucun module STT/TTS/VAD |
 | Update Engine absent | aucun module canary/rollback/twin |
@@ -254,7 +254,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **70 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **71 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |

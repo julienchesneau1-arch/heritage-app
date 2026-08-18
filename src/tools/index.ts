@@ -16,6 +16,7 @@ import type { CalendarProvider, SearchProvider } from '../providers/contract.js'
 import { ok, type Result } from '../core/types/result.js';
 import { memoryAddTool, memoryForgetTool, memorySearchTool } from './memory.js';
 import { taskCancelTool, taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
+import { entityCreateTool, entityDeleteTool } from './entities.js';
 import { noteCreateTool, noteDeleteTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
 import { fileSearchTool } from './files.js';
@@ -94,6 +95,8 @@ export function registerCoreTools(
        la capture d'annulation y devient une restauration, pas une
        suppression — ADR-042. */
     taskCompleteTool(),
+    entityCreateTool(),
+    entityDeleteTool(),
     noteCreateTool(),
     noteDeleteTool(),
     /* Premier outil de Phase 3, et celui qui tient la promesse de `docs/12` :
@@ -150,6 +153,8 @@ export {
   taskCancelTool,
   taskListTool,
   taskCompleteTool,
+  entityCreateTool,
+  entityDeleteTool,
   noteCreateTool,
   noteDeleteTool,
   calendarReadTool,

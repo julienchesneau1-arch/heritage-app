@@ -169,6 +169,8 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
       'note_delete', // Undo Engine — ADR-067
       'task_cancel', // Undo Engine — ADR-067
       'reminder_cancel', // Undo Engine — ADR-067
+      'entity_create', // Context Engine sans modèle — ADR-071
+      'entity_delete', // son inverse, écrit en même temps — ADR-071
     ]);
 
     const outils = outilsEnregistres();

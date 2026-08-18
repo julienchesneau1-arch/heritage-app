@@ -5026,3 +5026,87 @@ Le jour où un fournisseur d'agenda expose une suppression **synchrone et
 confirmée** — un `204` qui ferme la fenêtre —, la question n'est pas de lever
 cette bride mais de savoir si l'outil peut se déclarer `VERIFIABLE`. C'est la
 déclaration qui doit changer, jamais la contrainte.
+
+---
+
+## ADR-071 — Le Context Engine sans modèle : l'utilisateur nomme, Jarvis enregistre
+
+**Statut :** accepté.
+**Référence :** ADR-017, `docs/05 §A2`, `docs/26 §4.12`,
+`src/tools/entities.ts`, `src/core/context/resolver.ts`.
+
+### La condition de révision que le pack s'était écrite
+
+`docs/26 §4.12` avait établi que le Context Engine n'est pas atteignable :
+`resolver.ts` sait résoudre, `entities` n'est peuplée par **aucun `INSERT` de
+`src/`**. Un moteur qui tourne à vide.
+
+L'ADR correspondante concluait qu'il faudrait une reconnaissance d'entités dans
+du texte libre — donc un modèle, donc un Tier 1. Et elle écrivait ceci :
+
+> *Si un jour la reconnaissance d'entités arrive par un chemin non prévu — un
+> outil qui crée explicitement une entité **sur demande de l'utilisateur**, sans
+> modèle — alors A2 se débloquerait sans Tier 1.*
+
+C'est ce chemin. **Zéro modèle, zéro euro, zéro dépendance.**
+
+### Ce que l'outil ne fait pas, et c'est le point
+
+`entity_create` n'EXTRAIT rien. Il ne devine aucune entité dans une phrase.
+**L'utilisateur nomme ce qu'il veut voir exister** ; la déclaration vient de
+l'humain, jamais d'une inférence.
+
+C'est exactement ce qui le rend compatible avec `Tier 0` : la reconnaissance
+reste hors de portée, la **résolution** cesse de tourner à vide. Mesuré —
+`resolveAnaphora` rend désormais `RESOLVED` là où il rendait invariablement
+`NOT_FOUND`.
+
+### L'inverse est ÉCRIT, pas déclaré
+
+`entity_create` capture `INVERSE_OPERATION → entity_delete`, et
+`entity_delete` existe. Annoncer un défaire qui n'existe pas est la faute
+qu'ADR-067 venait de corriger cinq fois ; la répéter le jour même n'aurait eu
+aucune excuse.
+
+`entity_delete` est `L4` — et pas seulement parce qu'une ligne disparaît :
+`relations` et `entity_aliases` cascadent. **Supprimer une entité efface aussi
+ce qu'on savait d'elle.**
+
+### A2 N'EST PAS DÉBLOQUÉ, ET LE DIRE EST LA MOITIÉ DU TRAVAIL
+
+Le blocage reposait sur **deux** faits. Le premier est tombé. Le second tient :
+**aucun appelant ne renseigne `mentionedEntityIds`.** Le mécanisme sait
+résoudre ; la boucle produit n'évoque aucune entité, donc Jarvis n'a rien à
+résoudre de lui-même.
+
+> Déclarer A2 débloqué parce que le MODULE fonctionne répéterait mot pour mot la
+> faute de `docs/26 §4.12` : la porte éprouvait le module, la case du document
+> promet **Jarvis**.
+
+### Une quatrième forme falsifiable
+
+`Blocage` n'avait pas de forme pour « ce champ n'est renseigné par personne ».
+Sans elle, il aurait fallu **soit débloquer A2 à tort, soit garder un motif
+devenu faux** — le premier mentirait au produit, le second au registre.
+
+`champJamaisRenseigne` désigne le champ, la fonction dont on cherche les
+appelants, et **le module qui déclare le champ, exclu nommément**. L'exclusion
+est nommée plutôt qu'heuristique : une heuristique finirait par excuser un vrai
+appelant. Le blocage tombe seul le jour où un appelant renseigne le champ —
+sabotage vérifié.
+
+### Ce que le dépôt m'a repris
+
+Mon premier test créait une entité nommée « Pierre Dupont ».
+`tests/context/resolver.test.ts`, qui vérifie que **trois** homonymes
+déclenchent une demande, en a trouvé quatre.
+
+> Un test qui peuple une table commune avec un nom significatif fabrique des
+> faux positifs ailleurs. Le test existant avait raison contre le mien.
+
+### Condition de révision
+
+Le jour où la boucle renseignera `mentionedEntityIds` — parce qu'un outil crée
+une entité et que l'Assistant l'enregistre dans le tour —, A2 se débloque et ce
+blocage tombe de lui-même. C'est un chantier de câblage, désormais : plus un
+chantier de modèle.

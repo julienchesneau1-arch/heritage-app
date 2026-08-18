@@ -884,7 +884,22 @@ ment dans l'autre sens.
 doit piloter `cloudEnabled` — au même moment que le branchement du CostGate
 (§4.1), et pour la même raison.
 
-### 4.12 Le Context Engine n'est pas « pas branché » — il n'a RIEN à résoudre
+### 4.12 Le Context Engine — il a désormais quelque chose à résoudre
+
+> ⚠ **MOITIÉ LEVÉE — ADR-071.** Ce qui suit disait : *« il n'a RIEN à
+> résoudre »*. `entity_create` peuple `entities` sur demande explicite de
+> l'utilisateur — **zéro modèle, zéro euro** — et `resolveAnaphora` rend
+> maintenant `RESOLVED` là où il rendait invariablement `NOT_FOUND`.
+>
+> C'est la condition de révision que l'ADR d'origine s'était écrite, et elle
+> s'est réalisée par le chemin qu'elle avait prévu.
+>
+> **CE QUI TIENT :** aucun appelant ne renseigne `mentionedEntityIds`. Le
+> mécanisme sait résoudre, la boucle produit n'évoque aucune entité. A2 reste
+> donc bloqué — mais c'est désormais un chantier de CÂBLAGE, plus un chantier
+> de modèle. La distinction est tout ce que cette section a jamais défendu.
+
+Le diagnostic d'origine, conservé parce qu'il reste exact sur la seconde moitié :
 
 **Ce registre décrivait mal sa propre zone d'ombre**, et la description
 importait plus qu'il n'y paraît : elle désignait un chantier de câblage là où
