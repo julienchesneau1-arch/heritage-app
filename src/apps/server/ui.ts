@@ -11,6 +11,36 @@
  * de requête.
  */
 
+import { VerificationStatus } from '../../core/types/domain.js';
+import { headline, mark } from '../cli/report.js';
+
+/**
+ * LES TABLES DU CLIENT, DÉRIVÉES — jamais recopiées (ADR-062).
+ *
+ * Elles étaient écrites à la main dans le script servi au navigateur, et elles
+ * avaient divergé : le web connaissait **quatre** statuts sur sept. `PARTIAL`,
+ * `NOT_ATTEMPTED` et `PROVIDER_CONTRACT_VIOLATION` tombaient sur un repli —
+ * identifiant brut affiché à l'utilisateur, et marqueur `·`, qui est dans le
+ * CLI celui de `NOT_ATTEMPTED`.
+ *
+ * Le signal le plus fort du système portait donc le symbole du plus bénin.
+ *
+ * On les construit ici depuis `report.ts`, à partir de l'ÉNUMÉRATION : un
+ * statut ajouté demain apparaît des deux côtés sans que personne y pense.
+ */
+function tablesDeStatut(): string {
+  const statuts = VerificationStatus.options;
+  const say = Object.fromEntries(statuts.map((s) => [s, headline(s)]));
+  const marque = Object.fromEntries(statuts.map((s) => [s, mark(s)]));
+  /* `JSON.stringify` échappe ce qu'il faut pour un littéral JavaScript, y
+     compris les apostrophes des phrases françaises et les retours à la ligne
+     de `PROVIDER_CONTRACT_VIOLATION`. */
+  return (
+    `  const MARK = ${JSON.stringify(marque)};\n` +
+    `  const SAY = ${JSON.stringify(say)};`
+  );
+}
+
 export const HTML = `<!doctype html>
 <html lang="fr">
 <head>
@@ -161,13 +191,7 @@ export const JS = `(() => {
   }
   function jarvis() { return push(el('div', 'turn jarvis')); }
 
-  const MARK = { CONFIRMED: '✓', PROBABLE: '~', UNKNOWN: '?', FAILED: '✗' };
-  const SAY = {
-    CONFIRMED: "C'est fait.",
-    PROBABLE: "Probablement fait — je n'ai pas pu le vérifier.",
-    UNKNOWN: "Je ne sais pas si ça a abouti.",
-    FAILED: "Ça n'a pas marché.",
-  };
+${tablesDeStatut()}
 
   async function api(path, body) {
     const res = await fetch(path, {
@@ -229,6 +253,8 @@ export const JS = `(() => {
       /* Une lecture ne s'annonce pas « C'est fait » : rien n'a été fait. */
       const readOnly = reply.toolId === 'memory_search' || reply.toolId === 'task_list';
       const head = el('div');
+      /* Les tables couvrent l'ENUMERATION entière (ADR-062) : le repli ne
+         devrait jamais servir. Il reste comme filet, pas comme mécanisme. */
       head.appendChild(el('span', 'mark', MARK[reply.status] || '·'));
       head.appendChild(document.createTextNode(
         readOnly && reply.status === 'CONFIRMED'

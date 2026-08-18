@@ -4199,3 +4199,84 @@ Si la passerelle web venait à lire un consentement en texte libre — elle pren
 aujourd'hui un booléen typé, donc elle n'en lit pas — elle devrait passer par
 la même fonction. Deux lectures du consentement finiraient par diverger, et le
 jour où elles divergent, aucune ne fait autorité (ADR-041).
+
+---
+
+## ADR-062 — Le statut peut être juste et la phrase mentir
+
+**Statut :** accepté (`CLAUDE.md` règle 3, `docs/12`).
+**Référence :** ADR-030, ADR-041, ADR-061, `tests/unit/annonce.test.ts`.
+
+### Le fait
+
+```text
+case 'UNKNOWN' → return "C'est fait."   → 752 tests VERTS
+```
+
+Toute la machinerie de vérification — Verification Engine,
+`constrainToVerifiability`, la distinction `UNKNOWN` / `FAILED` d'ADR-030, le
+contrat d'effet d'ADR-033 — existe pour établir **quel statut est vrai**. Puis
+ce statut devient une phrase, dans le fichier qu'aucun test ne référençait.
+
+> **Le statut peut être juste et la phrase mentir.** Ce sont deux choses, et
+> une seule était éprouvée.
+
+C'est la règle 3 de `CLAUDE.md` — celle qui ne se négocie pas — rompue au
+dernier pouce.
+
+### Et la passerelle web disait autre chose que le CLI
+
+`ui.ts` portait sa **propre** table statut → phrase, écrite à la main dans le
+script servi au navigateur. Elle connaissait **quatre statuts sur sept** :
+
+| Statut | CLI | Web (avant) |
+|---|---|---|
+| `PARTIAL` | `±` + phrase | **absent** → `·` + « PARTIAL » brut |
+| `NOT_ATTEMPTED` | `·` + phrase | **absent** → `·` + brut |
+| `PROVIDER_CONTRACT_VIOLATION` | `⚠` + phrase complète | **absent** → `·` + brut |
+
+`·` est, dans le CLI, le marqueur de `NOT_ATTEMPTED`. **Le signal le plus fort
+du système portait donc, sur le web, le symbole du plus bénin** — et
+l'utilisateur lisait l'identifiant d'énumération brut.
+
+ADR-041 l'avait déjà tranché pour les données : *le jour où deux sources
+divergent, aucune ne fait autorité.* Ici elles avaient divergé.
+
+### La décision
+
+1. **`headline(status)`** — la phrase seule, extraite d'`announce`. Une table,
+   deux rendus : le CLI y ajoute le détail, le web l'affiche séparément.
+2. **Le web DÉRIVE** ses tables de `report.ts`, en itérant l'**énumération**.
+   Un statut ajouté demain apparaît des deux côtés sans que personne y pense.
+
+### Ce que les tests vérifient — et ce qu'ils évitent de figer
+
+**Pas la formulation.** Geler « C'est fait. » interdirait de reformuler sans
+rien garantir. Ce qui est éprouvé, ce sont des **propriétés** :
+
+- seul `CONFIRMED` produit la phrase qui affirme le succès, *quelle qu'elle
+  soit* — la phrase est lue depuis le code, pas recopiée dans le test ;
+- tout statut non confirmé porte le détail ;
+- l'incertitude a plus de mots que la réussite — la règle que le fichier se
+  donne à lui-même, rendue vérifiable ;
+- les sept phrases et les sept signes sont **distincts** ;
+- le web dit **exactement** ce que dit le CLI.
+
+Six sabotages, tous rattrapés. Le plus grave — `UNKNOWN` annonçant le succès —
+en déclenche cinq.
+
+### Un test rouge doit s'expliquer
+
+La première version laissait remonter « Expected property name or '}' in
+JSON » : exact, et inutilisable. Le message dit désormais *quelle* table,
+*pourquoi* c'est grave, et *ce qui* a probablement été fait.
+
+> Un test rouge qu'on ne comprend pas finit désactivé. L'expliquer fait partie
+> de la garde, pas de son confort.
+
+### Condition de révision
+
+Si une troisième surface devait rendre un statut — une application mobile, une
+notification — elle devrait dériver de `headline` et `mark`, jamais recopier.
+Le test compare aujourd'hui **une** surface au CLI ; il faudrait l'étendre, pas
+le dupliquer.

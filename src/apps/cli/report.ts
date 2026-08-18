@@ -21,42 +21,50 @@ export interface Reportable {
 }
 
 /**
- * Phrase d'annonce d'un résultat d'action.
+ * LA PHRASE SEULE — sans le détail, et c'est ce qui la rend PARTAGEABLE.
  *
  * Volontairement laconique sur le succès, explicite sur tout le reste :
  * l'incertitude mérite plus de mots que la réussite.
+ *
+ * POURQUOI SÉPARÉE D'`announce` — ADR-062
+ * ----------------------------------------
+ * La passerelle web portait sa PROPRE table statut → phrase, écrite à la main
+ * dans le script client (`ui.ts`). Deux tables pour le même fait, et elles
+ * avaient divergé : le web en connaissait **quatre** sur sept.
+ *
+ * `PARTIAL`, `NOT_ATTEMPTED` et `PROVIDER_CONTRACT_VIOLATION` y tombaient sur
+ * un repli — l'identifiant brut affiché à l'utilisateur, et le marqueur `·`,
+ * qui est dans le CLI celui de `NOT_ATTEMPTED`. **Le signal le plus fort du
+ * système portait le symbole du plus bénin.**
+ *
+ * ADR-041 l'avait déjà tranché pour les données : *le jour où deux sources
+ * divergent, aucune ne fait autorité.* Le web dérive donc désormais ses tables
+ * d'ici, au lieu de les recopier.
  */
-export function announce(result: Reportable): string {
-  switch (result.status) {
+export function headline(status: VerificationStatus): string {
+  switch (status) {
     case 'CONFIRMED':
       return 'C\'est fait.';
 
     case 'PROBABLE':
-      return (
-        'Probablement fait — je n\'ai pas pu le vérifier indépendamment.\n' +
-        `  ${result.detail}`
-      );
+      return 'Probablement fait — je n\'ai pas pu le vérifier indépendamment.';
 
     case 'UNKNOWN':
-      return (
-        'Je ne sais pas si ça a abouti.\n' +
-        `  ${result.detail}`
-      );
+      return 'Je ne sais pas si ça a abouti.';
 
     case 'PARTIAL':
       return (
         'Partiellement fait — le détail par destinataire compte plus que ce ' +
-        'résumé.\n' +
-        `  ${result.detail}`
+        'résumé.'
       );
 
     case 'NOT_ATTEMPTED':
-      return `Je n'ai rien tenté.\n  ${result.detail}`;
+      return 'Je n\'ai rien tenté.';
 
     case 'FAILED':
       // Le mot est fort, et il ne s'emploie que sur PREUVE d'absence d'effet
       // (ADR-030). Un timeout ou un 500 ne l'autorisent pas.
-      return `Ça n'a pas marché.\n  ${result.detail}`;
+      return 'Ça n\'a pas marché.';
 
     case 'PROVIDER_CONTRACT_VIOLATION':
       /* La formulation la plus difficile du fichier, et elle doit dire DEUX
@@ -65,12 +73,21 @@ export function announce(result: Reportable): string {
          la première perdrait l'information la plus importante ; ne dire que
          la seconde laisserait croire que l'action a échoué. */
       return (
-        "Je ne sais pas ce qui s'est passé, et le service ne s'est pas " +
-        "comporté comme il l'annonce.\n" +
-        `  ${result.detail}\n` +
+        'Je ne sais pas ce qui s\'est passé, et le service ne s\'est pas ' +
+        'comporté comme il l\'annonce.\n' +
         "  Je n'engagerai plus rien par ce service tant que ce n'est pas levé."
       );
   }
+}
+
+/**
+ * Phrase d'annonce complète : la phrase, puis le détail.
+ *
+ * `CONFIRMED` n'en porte pas — il n'y a rien à instruire quand c'est fait.
+ */
+export function announce(result: Reportable): string {
+  if (result.status === 'CONFIRMED') return headline(result.status);
+  return `${headline(result.status)}\n  ${result.detail}`;
 }
 
 /** Préfixe visuel, pour repérer un statut d'un coup d'œil dans le terminal. */

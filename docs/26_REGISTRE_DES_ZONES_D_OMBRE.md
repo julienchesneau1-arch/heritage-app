@@ -217,6 +217,28 @@ journée et place le rappel à l'intérieur.
 Vérification la plus forte possible : le correctif a été validé **à 23 h 12
 UTC**, dans la fenêtre précise où le test échouait.
 
+### 2.6-bis Le statut était juste, la phrase pouvait mentir
+
+**Suite directe de §4.2.** Après avoir sorti le consentement du shell, même
+question posée à la couche d'affichage : *que décide-t-elle d'autre ?*
+
+```text
+case 'UNKNOWN' → return "C'est fait."   → 752 tests VERTS
+```
+
+La règle 3 de `CLAUDE.md` — « jamais de succès non vérifié » — rompue au
+dernier pouce, dans le fichier qu'aucun test ne référençait.
+
+**Et la passerelle web disait autre chose que le CLI.** `ui.ts` portait sa
+propre table, écrite à la main, qui connaissait **quatre statuts sur sept**.
+`PARTIAL`, `NOT_ATTEMPTED` et `PROVIDER_CONTRACT_VIOLATION` tombaient sur un
+repli : l'identifiant brut affiché à l'utilisateur, et le marqueur `·` — celui
+de `NOT_ATTEMPTED` dans le CLI. **Le signal le plus fort du système portait le
+symbole du plus bénin.**
+
+**Corrigé** (ADR-062) : `headline()` extraite comme source unique, le web
+dérive ses tables de l'**énumération**. Seize tests, six sabotages rattrapés.
+
 ### 2.7 Deux fichiers à 0 % de couverture — faux positif
 
 `src/core/policy/evaluator.ts` et `src/providers/contract.ts` : **types purs**,
