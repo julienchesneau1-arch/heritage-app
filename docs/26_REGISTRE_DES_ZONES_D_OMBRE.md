@@ -440,6 +440,37 @@ Le reste va **jusqu'à l'œil** : CLI et passerelle web disent tous deux
 « … et N autre(s) ». C'est la leçon d'ADR-063, où le pipeline avait été réparé
 et l'affichage oublié.
 
+### 4.2 ter Ce que le balayage « export non cité » ne dit PAS
+
+Le balayage qui a trouvé §4.2 bis mesure **« ce nom apparaît-il dans un
+test ? »**. C'est un bon *chercheur* et un mauvais *verdict*, et il faut le dire
+avant que quelqu'un lise sa liste comme un inventaire de lacunes.
+
+Étendu à `src/core` et `src/tools`, il rend une cinquantaine de noms. La
+plupart sont du bruit : un outil est éprouvé par son `id` (`web_search`), jamais
+par le nom de sa constante ; un schéma Zod est consommé par inférence.
+
+**Éprouvé plutôt que supposé.** `leavesMachine` — prédicat du Data Firewall,
+appelé par `briefing.ts` et `calendar.ts`, cité par aucun test — a été saboté
+(`return false` : plus rien ne sort jamais de la machine) :
+
+```text
+3 tests rouges, dans 2 fichiers
+  « une sortie REFUSÉE ne compte pas comme une sortie »
+  « un fournisseur LOCAL ne déclare AUCUNE égression »
+  « §6.4 — un agenda CLOUD est refusé, MÊME cloud activé »
+```
+
+Il est donc **couvert par ses appelants**, sans porter son nom nulle part.
+
+> Un export non nommé par un test n'est pas un export non éprouvé. La
+> différence se tranche par sabotage, pas par lecture de la liste.
+
+Ce qui reste vraiment sans filet, après cette distinction : les **orphelins
+déclarés** (§4.1) — du code qu'aucun appelant de production n'atteint. Non
+testés *et* non appelés, ils ne sont pas une lacune de couverture mais une
+question d'existence.
+
 ### 4.3 Couverture globale — 83,89 % des lignes
 
 > ⚠ **MESURE DATÉE, ET C'EST UN CHOIX ASSUMÉ.** Contrairement aux autres
