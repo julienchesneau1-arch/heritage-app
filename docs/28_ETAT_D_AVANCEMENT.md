@@ -76,9 +76,10 @@ absents      S4 · S5 · S8 · S9 · S10 · S11 · S13
 ```
 
 **S12 a rejoint les nommés avec l'Undo Engine** (ADR-066) — sans perdre sa
-réserve pour autant : quatre outils inverses restent non écrits et aucun
-mécanisme ne rejoue un `STATE_RESTORE`. Gagner une capacité ne doit pas faire
-cesser de surveiller ce qui manque encore.
+réserve pour autant : `calendar_delete` reste non écrit et aucun mécanisme ne
+rejoue un `STATE_RESTORE`. Gagner une capacité ne doit pas faire cesser de
+surveiller ce qui manque encore, et c'est pourquoi `RESERVES` a été sorti de
+`TRACES` : une réserve appartient à l'invariant, pas au tiroir où il est rangé.
 
 Le neuf avait été hérité d'un rapport antérieur et recopié sans être revérifié —
 exactement la dérive que `tests/golden/contract.test.ts` a été écrit pour rendre
@@ -128,7 +129,9 @@ creux :
 existe (ADR-041), donc le blocage n'a plus de motif, donc le test l'exige. Le
 compteur `couverts/bloqués` est passé de 23/7 à **24/6**, puis **25/5** avec
 `briefing_generate`, **26/4** avec `egress_review`, et **27/3** avec
-`web_search` (ADR-055), et **28/2** avec `memory_forget` — le droit à l'oubli, premier outil inverse écrit (ADR-065).
+`web_search` (ADR-055), et **28/2** avec `memory_forget` — le droit à l'oubli,
+premier des cinq outils inverses écrit (ADR-065) ; trois autres ont suivi
+(ADR-067).
 
 **Et surtout, le lien est désormais MÉCANIQUE.**
 `tests/golden/contract.test.ts` lit `docs/05`, en extrait les identifiants, et
@@ -238,7 +241,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **67 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **68 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |

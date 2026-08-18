@@ -162,6 +162,46 @@ function refus(snapshot: Snapshot): string | null {
   return null;
 }
 
+/**
+ * LA CAPTURE EST-ELLE CONSOMMÉE PAR CE RÉSULTAT ?
+ *
+ * ⚠ CETTE FONCTION REMPLACE UN `hasAnyEffect` DIRECT, ET LES DEUX RAISONS
+ *   VIENNENT D'UN SABOTAGE — pas d'une relecture. En faisant rendre `true` à
+ *   `hasAnyEffect`, **les trente-sept tests d'annulation restaient verts.**
+ *
+ * **1. Ce que la garde protégeait n'était pas éprouvé.** Marquer une capture
+ * dont l'annulation a ÉCHOUÉ la brûle : elle devient « annulée » alors que
+ * l'action tient toujours, et plus rien ne permet de réessayer. Tout le
+ * raisonnement « exécuter puis marquer » repose là-dessus, et rien ne le
+ * vérifiait.
+ *
+ * **2. `hasAnyEffect` seul BLOQUAIT `undoLast`.** Une annulation qui ne trouve
+ * rien à défaire rend `NOT_ATTEMPTED` — cas réel : la note a été supprimée par
+ * un autre chemin avant qu'on annule sa création. Ce n'est pas un échec, c'est
+ * un sans-objet. Or `lastUndoable` rend la capture non annulée la plus récente :
+ * une capture qu'on ne marque jamais serait resservie à chaque « annule la
+ * dernière action », indéfiniment.
+ *
+ * D'où trois cas, et non deux :
+ *
+ * ```text
+ * CONFIRMED · PARTIAL   l'annulation a eu lieu        → consommée
+ * NOT_ATTEMPTED         il n'y avait rien à défaire   → consommée (sans objet)
+ * FAILED · UNKNOWN      l'action peut tenir toujours  → RESTE annulable
+ * ```
+ *
+ * La ligne du bas est la seule qui compte pour la sûreté ; celle du milieu
+ * empêche la boucle.
+ */
+function captureConsommee(status: VerificationStatus): boolean {
+  /* `hasAnyEffect` est la fonction CANONIQUE — la recopier ici en comparant des
+     littéraux serait un second registre du même fait (ADR-041), et le test
+     structurel de `redteam/failure-modes` le refuse d'ailleurs : aucun module
+     du noyau ne manipule ce vocabulaire hors du Verification Engine. */
+  if (hasAnyEffect(status)) return true;
+  return status === 'NOT_ATTEMPTED';
+}
+
 export function createUndoEngine(deps: UndoDeps): UndoEngine {
   async function rejouer(
     snapshot: Snapshot,
@@ -207,24 +247,7 @@ export function createUndoEngine(deps: UndoDeps): UndoEngine {
     });
     if (!resultat.ok) return resultat;
 
-    /* ON NE MARQUE QUE CE QUI A EU UN EFFET. Marquer une capture dont
-       l'annulation a échoué la brûlerait : elle deviendrait « annulée » alors
-       que l'action tient toujours.
-
-       ⚠ `hasAnyEffect` PLUTÔT QU'UNE COMPARAISON ÉCRITE ICI. La première
-       version comparait le statut aux deux valeurs qui dénotent un effet — soit
-       la définition de `hasAnyEffect`, recopiée. Le test structurel de
-       `redteam/failure-modes` l'a refusée : aucun module du noyau ne manipule
-       ce vocabulaire hors du Verification Engine.
-
-       Il avait raison deux fois. Un second endroit qui décide « il s'est passé
-       quelque chose » finirait par diverger du premier (ADR-041) — et la
-       fonction canonique n'avait, elle, aucun appelant de production.
-
-       Le détecteur lit le TEXTE du fichier, commentaires compris : ce
-       paragraphe est donc écrit sans citer les valeurs. Rendre le détecteur
-       plus malin pour se laisser passer aurait coûté sa raison d'être. */
-    if (!hasAnyEffect(resultat.value.status)) {
+    if (!captureConsommee(resultat.value.status)) {
       return ok({
         snapshotId: snapshot.id,
         undoneOperationId: snapshot.operationId,

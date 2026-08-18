@@ -474,6 +474,35 @@ déclarés** (§4.1) — du code qu'aucun appelant de production n'atteint. Non
 testés *et* non appelés, ils ne sont pas une lacune de couverture mais une
 question d'existence.
 
+### 4.2 quater M'auditer moi-même : trois gardes qui ne gardaient rien
+
+**HUITIÈME occurrence de la famille de §2, et la plus instructive : les trois
+défauts sont de moi, écrits trois commits plus tôt.**
+
+Plutôt que d'ajouter le cinquième outil inverse, j'ai appliqué à
+`memory_forget`, à l'Undo Engine et aux trois outils inverses le traitement
+adverse réservé jusque-là au code ancien. Dans cette session, c'est la mesure
+qui a trouvé — jamais la relecture ; il n'y avait aucune raison que mon propre
+code fasse exception.
+
+| Garde | Sabotage | Ce qui rougissait |
+|---|---|---|
+| `erased()` porte `POSITIVE_ABSENCE` | rendre `POSITIVE_PRESENCE` | **rien — 818 tests verts** |
+| `previewLast()` n'exécute rien | y faire marquer la capture | **rien — seul un grep sur le texte du CLI le « citait »** |
+| `hasAnyEffect` empêche de brûler une capture | rendre `true` | **rien — 37 tests d'annulation verts** |
+
+**Les trois portaient un commentaire qui décrivait correctement la protection.
+Dans les trois cas, la protection n'existait pas.**
+
+> Une garde qu'aucun sabotage ne fait rougir n'est pas une garde : c'est un
+> commentaire avec une syntaxe exécutable.
+
+**Et le troisième en cachait un quatrième.** En cherchant pourquoi rien ne
+rougissait, il est apparu que `hasAnyEffect` seul **bloquait `undoLast`** : une
+annulation sans objet rend `NOT_ATTEMPTED`, la capture n'était jamais marquée,
+et `lastUndoable` l'aurait resservie indéfiniment. D'où `captureConsommee` et
+trois cas au lieu de deux (ADR-068).
+
 ### 4.3 Couverture globale — 83,89 % des lignes
 
 > ⚠ **MESURE DATÉE, ET C'EST UN CHOIX ASSUMÉ.** Contrairement aux autres

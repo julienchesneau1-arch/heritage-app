@@ -4764,3 +4764,97 @@ plutôt que masqué :** à trop classer `L4`, la confirmation forte devient un
 réflexe et cesse de protéger ce qui compte — un paiement. Si le pack finit par
 distinguer les suppressions par enjeu, cette décision est la première à
 rouvrir.
+
+---
+
+## ADR-068 — Une garde qu'aucun sabotage ne fait rougir ne garde rien
+
+**Statut :** accepté.
+**Référence :** ADR-041, ADR-063, ADR-065, ADR-066, ADR-067,
+`src/core/undo/engine.ts`, `src/core/verification/engine.ts`.
+
+### Le geste : s'auditer soi-même avant d'ajouter
+
+Trois commits venaient d'ajouter du code porteur de sûreté — `memory_forget`,
+l'Undo Engine, trois outils inverses. Plutôt que d'écrire le cinquième, je leur
+ai appliqué le traitement adverse réservé jusque-là au code ancien.
+
+> Dans cette session, c'est la MESURE qui a trouvé, jamais la relecture. Il n'y
+> avait aucune raison que mon propre code fasse exception.
+
+Trois trous, tous invisibles à la lecture, tous rendus par le sabotage.
+
+### 1. `erased()` pouvait mentir sur sa preuve — 818 tests verts
+
+En lui faisant rendre `POSITIVE_PRESENCE` au lieu de `POSITIVE_ABSENCE`, **la
+suite entière restait verte.**
+
+C'est pourtant toute la raison d'être de la fabrique (ADR-065) : un outil dont
+le succès EST une absence doit pouvoir le dire *avec la bonne preuve*. Évidence
+fausse, la fabrique redevient un `confirmed()` déguisé — exactement ce qu'elle
+existait pour éviter.
+
+Pourquoi rien ne rougissait : **personne ne consomme encore cette évidence.**
+`memory_forget` construit ses cibles à la main pour la projection, sans repasser
+par `erased`. La valeur était de la documentation, pas un mécanisme — la
+famille recensée sept fois par `docs/26 §2`, cette fois écrite par moi trois
+commits plus tôt.
+
+Le test montre désormais la **conséquence** plutôt que la constante : avec la
+bonne preuve un effacement se projette en `CONFIRMED`, avec la mauvaise il tombe
+en `UNKNOWN` — un oubli réussi annoncé comme incertain.
+
+### 2. `previewLast()` n'était « cité » que par un grep
+
+`wiring.test.ts` vérifiait que le TEXTE du CLI contient
+`runtime.undo.previewLast()`. C'est un test de câblage, pas de comportement : il
+prouve que la fonction est appelée, jamais qu'elle dit vrai.
+
+Or c'est elle qui décide de ce que l'humain lit **avant de confirmer un acte
+irréversible**. Le défaut d'ADR-063 — pipeline réparé, affichage oublié — une
+seconde fois dans la même session.
+
+Le test le plus important du bloc n'est pas qu'elle montre la bonne capture,
+c'est qu'elle **n'exécute rien** : un aperçu qui agirait lancerait un `L4` avant
+toute confirmation.
+
+### 3. `hasAnyEffect` pouvait rendre `true` — 37 tests d'annulation verts
+
+Le plus coûteux. Cette garde empêche de **brûler une capture** : la marquer
+annulée alors que l'action tient toujours, et rendre l'annulation définitivement
+impossible. Tout le raisonnement « exécuter puis marquer » d'ADR-066 repose sur
+elle, et rien ne la vérifiait.
+
+**Et en cherchant ce défaut, un second est apparu.** `hasAnyEffect` seul
+**bloquait `undoLast`** : une annulation sans objet rend `NOT_ATTEMPTED` — cas
+réel, la note supprimée par un autre chemin avant qu'on annule sa création. Ce
+n'est pas un échec. Or `lastUndoable` rend la capture non annulée la plus
+récente : jamais marquée, elle serait resservie à chaque « annule la dernière
+action », indéfiniment.
+
+D'où `captureConsommee`, et **trois** cas au lieu de deux :
+
+```text
+CONFIRMED · PARTIAL   l'annulation a eu lieu        → consommée
+NOT_ATTEMPTED         il n'y avait rien à défaire   → consommée (sans objet)
+FAILED · UNKNOWN      l'action peut tenir toujours  → RESTE annulable
+```
+
+La dernière ligne est celle qui compte pour la sûreté ; celle du milieu empêche
+la boucle.
+
+### Ce que ces trois trous ont en commun
+
+Aucun n'était visible en relisant. Les trois portaient un commentaire qui
+DÉCRIVAIT correctement la protection — et dans les trois cas, la protection
+n'existait pas.
+
+> Une garde qu'aucun sabotage ne fait rougir n'est pas une garde : c'est un
+> commentaire avec une syntaxe exécutable.
+
+### Condition de révision
+
+Le jour où `erased()` acquiert un consommateur réel de son évidence — un outil
+qui projette ses cibles depuis la fabrique plutôt qu'à la main — le test de
+conséquence devient redondant avec le comportement, et c'est tant mieux : il
+faudra alors vérifier que le CONSOMMATEUR est saboté, pas la fabrique.
