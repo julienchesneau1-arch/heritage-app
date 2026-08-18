@@ -21,6 +21,7 @@
  * tard — c'était le comportement du jour.
  */
 import { describe, expect, it } from 'vitest';
+import { confirmationPrompt } from '../../src/apps/cli/report.js';
 import {
   CONFIRM_MAX,
   CONFIRM_PREFIX,
@@ -176,5 +177,64 @@ describe('ce qui est montré est ce qui sera fait', () => {
     expect(CONFIRM_PREFIX.length).toBeGreaterThan(0);
     expect(CONFIRM_MAX).toBeGreaterThan(50);
     expect(confirmableKey('x')).toBe(`${CONFIRM_PREFIX}x`);
+  });
+});
+
+/* ====================================================================== *
+ * LE RENDU — ce que l'humain lit VRAIMENT avant de dire oui
+ * ====================================================================== */
+
+describe('l’invite de confirmation montre tout, et demande clairement', () => {
+  /* ⚠ CE BLOC EXISTE PARCE QUE LE BALAYAGE M'A ATTRAPÉ.
+
+     `confirmationPrompt` figurait dans « exports non cités par un test », j'ai
+     corrigé le PIPELINE (préfixe, troncature, liste blanche) et laissé le RENDU
+     sans test. Le balayage suivant l'a redonné, mot pour mot.
+
+     Une méthode qui ne trouve que ce qu'on avait déjà vu ne vaut rien ; celle-ci
+     a trouvé sa propre application incomplète. */
+
+  it('montre CHAQUE valeur reçue — aucune ne disparaît en chemin', () => {
+    const rendu = confirmationPrompt('Confirmer ce virement ?', {
+      montant: '50 €',
+      destinataire: 'Paul',
+    });
+    expect(rendu).toContain('50 €');
+    expect(rendu).toContain('Paul');
+    expect(rendu).toContain('Confirmer ce virement ?');
+  });
+
+  it('DEMANDE explicitement, et dit quelles réponses il attend', () => {
+    /* Une invite qui ne dit pas ce qu'elle attend transforme le doute en
+       hasard. `readConfirmation` classe « peut-être » en `UNCLEAR` — encore
+       faut-il que l'utilisateur sache qu'on attend « oui » ou « non ». */
+    const rendu = confirmationPrompt('Confirmer ?', {});
+    expect(rendu.toLowerCase()).toContain('oui');
+    expect(rendu.toLowerCase()).toContain('non');
+  });
+
+  it('SANS valeur concrète, il montre au moins la raison', () => {
+    /* Cas réel : un outil `L3` sans paramètre sensible. Il n'y a rien de
+       concret à afficher, et une invite vide serait pire qu'une invite
+       laconique — on ne confirme pas un écran blanc. */
+    const rendu = confirmationPrompt('Cette action est irréversible.', {});
+    expect(rendu).toContain('Cette action est irréversible.');
+    expect(rendu.trim().length).toBeGreaterThan(20);
+  });
+
+  it('la MENTION DE TRONCATURE survit jusqu’à l’écran', () => {
+    /* Le bout de la chaîne : `renderConfirmable` l'a mise dans le texte
+       précisément pour qu'aucun affichage n'ait à y penser. On le vérifie
+       plutôt que de le supposer. */
+    const rendu = confirmationPrompt('Confirmer ?', {
+      query: renderConfirmable('x'.repeat(300)),
+    });
+    expect(rendu).toContain('tronqué');
+    expect(rendu).toContain('300');
+  });
+
+  it('CONTRÔLE NÉGATIF — une invite vide serait détectée', () => {
+    // Sans lui, « montre la raison » passerait sur une fonction qui rend ''.
+    expect(confirmationPrompt('', {}).trim().length).toBeGreaterThan(0);
   });
 });

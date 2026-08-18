@@ -361,10 +361,23 @@ rend `CONFIRM` / `REFUSE` / `UNCLEAR` — trois issues parce que `PRD §135` dit
 que *le doute n'est pas une confirmation*, et qu'un booléen forcerait à ranger
 « peut-être » d'un côté. Huit tests, deux sabotages qui rougissent.
 
+**Puis le RENDU, attrapé par le balayage lui-même.** ADR-063 a corrigé le
+*pipeline* de ce qui est confirmé — préfixe de transport, liste blanche,
+troncature qui se dit. `confirmationPrompt`, qui met ces valeurs à l'écran, est
+resté sans test : le balayage « quels exports de `src/apps/` ne sont cités par
+aucun test ? » l'a redonné mot pour mot au tour suivant.
+
+C'est le seul résultat de ce registre où la méthode a trouvé **sa propre
+application incomplète**, et c'est ce qui la distingue d'une relecture : une
+relecture ne trouve que ce qu'on avait déjà vu. Cinq tests couvrent désormais
+l'invite ; trois sabotages la font rougir de trois façons distinctes —
+valeurs masquées, question muette sur ce qu'elle attend, invite vide.
+
 **Ce qui reste vrai :** la BOUCLE du CLI — affichage, lecture d'entrée,
 commandes — n'est toujours traversée par aucun test. Mais ce n'est plus « de
 l'ergonomie » par défaut : c'est ce qui reste **après** avoir sorti la seule
-décision de sûreté qui s'y trouvait.
+décision de sûreté qui s'y trouvait, et après avoir éprouvé l'écran sur lequel
+elle se joue.
 
 **Condition :** à couvrir avant toute promesse de disponibilité produit.
 
