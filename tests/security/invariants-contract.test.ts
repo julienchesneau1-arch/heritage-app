@@ -117,8 +117,10 @@ interface Trace {
 const RESERVES: Readonly<Record<string, string>> = {
   S12:
     'capture et exécution du défaire prouvées pour QUATRE outils inverses sur ' +
-    'cinq (ADR-065/066/067) ; `calendar_delete` reste non écrit — seul effet ' +
-    'externe — et aucun mécanisme ne rejoue une capture STATE_RESTORE',
+    'cinq (ADR-065/066/067). `calendar_delete` reste non écrit, et ADR-070 a ' +
+    'établi pourquoi : la capacité manque à la frontière fournisseur, et un ' +
+    'effacement chez autrui ne peut jamais dépasser UNKNOWN. Aucun mécanisme ' +
+    'ne rejoue par ailleurs une capture STATE_RESTORE',
   /* ⚠ S13 A QUITTÉ CE REGISTRE — ADR-069, et c'est le mouvement qu'on attend
      d'une réserve. Elle disait : « le cloud est éteint EN DUR, la clé de
      configuration n'a aucun effet, donc l'invariant est tenu par absence et non

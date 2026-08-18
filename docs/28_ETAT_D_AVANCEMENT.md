@@ -67,8 +67,17 @@ C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 ### Le chiffre des invariants était FAUX, et dans le sens qui flatte
 
-Ce document affirmait « **9 des 15** ». La mesure — `grep -E "\bS[0-9]+\b"` sur
-`tests/`, frontières de mot comprises — en donne **sept** :
+Ce document affirmait « **9 des 15** » sans l'avoir mesuré. La mesure —
+`grep -E "\bS[0-9]+\b"` sur `tests/`, frontières de mot comprises — en donnait
+alors **sept**, et le neuf avait été hérité d'un rapport antérieur.
+
+> ⚠ **ET CE PARAGRAPHE A LUI-MÊME DÉRIVÉ.** Il a continué d'annoncer « sept »
+> au-dessus d'un bloc qui en listait neuf, parce que j'ai mis à jour le chiffre
+> sans relire la phrase qui l'explique. Même famille, dans le document qui la
+> recense.
+
+État MESURÉ aujourd'hui — **neuf**, et le chemin y est écrit : S12 avec l'Undo
+Engine (ADR-066), S13 avec l'interrupteur cloud (ADR-069).
 
 ```text
 référencés   S1 · S2 · S3 · S6 · S7 · S12 · S13 · S14 · S15
@@ -81,9 +90,9 @@ rejoue un `STATE_RESTORE`. Gagner une capacité ne doit pas faire cesser de
 surveiller ce qui manque encore, et c'est pourquoi `RESERVES` a été sorti de
 `TRACES` : une réserve appartient à l'invariant, pas au tiroir où il est rangé.
 
-Le neuf avait été hérité d'un rapport antérieur et recopié sans être revérifié —
-exactement la dérive que `tests/golden/contract.test.ts` a été écrit pour rendre
-impossible sur `docs/05`. **Aucun mécanisme équivalent ne protégeait `docs/03`.**
+Le neuf initial avait été recopié sans être revérifié — exactement la dérive que
+`tests/golden/contract.test.ts` a été écrit pour rendre impossible sur
+`docs/05`. **Aucun mécanisme équivalent ne protégeait `docs/03`.**
 
 Et il faut le dire dans les deux sens : « non nommé » n'est pas « non prouvé ».
 S8 (*toute sortie réseau est contrôlée par la politique*) est aujourd'hui tenu
@@ -98,11 +107,11 @@ quinze identifiants, et échoue si l'un n'est ni nommé, ni rattaché à une pre
 désignée, ni exempté par une absence **vérifiée**. Le taux de 60 % y est écrit
 en dur : il ne peut plus dériver sans passer par ce fichier.
 
-Deux réserves y sont chiffrées plutôt que fondues dans « tracé » :
+Une réserve y est chiffrée plutôt que fondue dans « tracé » :
 
 | | Ce que la preuve ne couvre pas |
 |---|---|
-| **S12** | capture et exécution du défaire prouvées pour **quatre outils inverses sur cinq** (ADR-066/067) ; restent `calendar_delete` — seul effet externe — et **aucun mécanisme ne rejoue un `STATE_RESTORE`** |
+| **S12** | capture et exécution prouvées pour **quatre outils inverses sur cinq** (ADR-066/067). `calendar_delete` reste non écrit, et **ADR-070 a établi pourquoi** : la capacité manque à la frontière fournisseur, et un effacement chez autrui ne peut jamais dépasser `UNKNOWN`. Aucun mécanisme ne rejoue par ailleurs un `STATE_RESTORE` |
 
 **S13 A QUITTÉ CE TABLEAU — ADR-069.** Il y disait : *« le cloud est éteint en
 dur ; `cloud.enabled` n'a aucun effet »*. C'était le motif « CostGate » une
@@ -245,7 +254,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **69 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **70 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |

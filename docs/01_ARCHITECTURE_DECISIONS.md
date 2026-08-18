@@ -4950,3 +4950,79 @@ Le jour où un fournisseur cloud est branché, `enabled: true` cesse d'être
 inerte : il autorisera des sorties réelles. La revue à faire alors n'est pas
 celle de cet ADR mais celle du **CostGate**, qui reste tenu par absence — le
 même motif, au même endroit, une troisième fois.
+
+---
+
+## ADR-070 — Supprimer chez autrui ne se prouve pas
+
+**Statut :** accepté.
+**Référence :** ADR-030, ADR-065, `src/core/verification/engine.ts`,
+`src/providers/contract.ts`.
+
+### Trouvé en préparant `calendar_delete`, pas en relisant
+
+Le cinquième outil inverse déclaré est le seul dont l'effet **sort de la
+machine**. En préparant son écriture, deux faits sont apparus — le second est un
+trou que j'avais créé trois ADR plus tôt.
+
+### 1. La capacité n'existe pas à la frontière fournisseur
+
+`CalendarProvider` déclare `listEvents`, `createEvent`, `updateEvent`,
+`verifyEvent`. **Pas de `deleteEvent`.** `calendar_delete` n'est donc pas « un
+outil de plus » : il suppose d'étendre une interface fournisseur — et **aucune
+implémentation de production n'existe**, seulement des doublures de test.
+
+### 2. Le trou : un succès-par-absence échappait à la bride
+
+`constrainToVerifiability` bride ce qu'un outil a le droit d'affirmer. Elle
+traitait `FAILED` — l'absence d'EFFET — et laissait passer `CONFIRMED`.
+
+C'était **juste** tant que « succès » voulait dire « présence » : un outil
+`OBSERVABLE` peut prouver une présence, c'est sa définition même.
+
+**ADR-065 a introduit `erased()`** — un succès dont la preuve est une ABSENCE —
+**et cette fonction n'a pas été revisitée.** Un `calendar_delete` déclaré
+`OBSERVABLE` aurait donc annoncé « supprimé, vérifié » sur un fournisseur
+explicitement incapable de prouver une absence.
+
+Le raisonnement de `FAILED` s'applique mot pour mot :
+
+> « Je ne vois plus rien » n'est pas « il n'y a plus rien ». La requête de
+> suppression peut être encore en vol, ou le fournisseur traiter en file.
+
+### La conséquence, et elle n'est pas un défaut à corriger
+
+**Un outil de suppression chez un fournisseur externe ne peut JAMAIS annoncer un
+succès vérifié.** Le verdict honnête plafonne à `UNKNOWN` : *« le fournisseur
+l'annonce, rien ne le recoupe. »*
+
+Ce n'est pas une limite de l'implémentation, c'est la vérité de l'acte.
+Supprimer sur une machine qu'on ne possède pas ne se prouve pas — cela
+s'annonce. `memory_forget` et `note_delete` peuvent conclure parce que
+PostgreSQL ferme la fenêtre d'observation ; un agenda distant, non.
+
+### Ce que cela change pour `calendar_delete`
+
+Il reste écrivable, et il devra déclarer ce qu'il est : `OBSERVABLE`, `L4`,
+`NOT_UNDOABLE`, et un verdict qui **ne dépassera jamais `UNKNOWN`**. Écrit
+autrement, il mentirait — et c'est précisément pour ne pas l'écrire vite que ce
+tour s'est arrêté sur le moteur.
+
+### La fonction est désormais exportée
+
+`constrainToVerifiability` n'était atteignable qu'au travers du moteur, ce qui
+rendait ses cas limites indistinguables du reste. Le trou y a vécu depuis
+ADR-065 **sans qu'aucun test ne puisse le viser.** Une fonction qui décide seule
+de ce qu'un outil a le droit d'affirmer mérite d'être éprouvée seule.
+
+### Sabotage
+
+Retirer la bride reproduit l'état d'avant : un effacement `OBSERVABLE`
+redevient `CONFIRMED`. Un rouge, ciblé.
+
+### Condition de révision
+
+Le jour où un fournisseur d'agenda expose une suppression **synchrone et
+confirmée** — un `204` qui ferme la fenêtre —, la question n'est pas de lever
+cette bride mais de savoir si l'outil peut se déclarer `VERIFIABLE`. C'est la
+déclaration qui doit changer, jamais la contrainte.

@@ -38,7 +38,10 @@ import { appDb, databaseAvailable } from '../helpers/db.js';
 import { buildStack, callContext, operationId, type Stack } from '../helpers/stack.js';
 import { createUndoEngine, type UndoEngine } from '../../src/core/undo/engine.js';
 import { createSnapshotStore, type SnapshotStore } from '../../src/core/undo/snapshots.js';
-import { verificationOutcome } from '../../src/core/verification/engine.js';
+import {
+  constrainToVerifiability as brider,
+  verificationOutcome,
+} from '../../src/core/verification/engine.js';
 import { projectStatus } from '../../src/core/tools/outcome.js';
 import type { Db } from '../../src/core/db/client.js';
 
@@ -341,5 +344,72 @@ describe.runIf(enabled)('quand une capture est-elle CONSOMMÉE ?', () => {
     // LA CAPTURE EST CONSOMMÉE : `undoLast` passera à la suivante.
     const apres = await snapshots.forOperation(op);
     expect(apres.ok && apres.value?.undoneAt).not.toBeNull();
+  });
+});
+
+/* ====================================================================== *
+ * 4. SUPPRIMER CHEZ AUTRUI NE SE PROUVE PAS — ADR-070
+ * ====================================================================== */
+
+describe('un succès-par-absence est bridé par la vérifiabilité', () => {
+  /* ⚠ CE TROU EST NÉ D'ADR-065, ET JE NE L'AI PAS VU EN L'ÉCRIVANT.
+     Il est apparu en préparant `calendar_delete` — le cinquième outil inverse,
+     le seul dont l'effet sort de la machine.
+
+     `constrainToVerifiability` bridait `FAILED` — l'absence d'EFFET — et
+     laissait passer `CONFIRMED`. C'était juste tant que « succès » voulait dire
+     « présence » : un outil OBSERVABLE peut prouver une présence, c'est sa
+     définition. `erased()` a introduit un succès dont la preuve est une
+     ABSENCE, et la fonction n'a pas été revisitée.
+
+     Conséquence concrète : un `calendar_delete` OBSERVABLE aurait annoncé
+     « supprimé, vérifié » sur un fournisseur incapable de prouver une absence. */
+
+  /** Un outil minimal, dont on ne fait varier que la vérifiabilité. */
+  function outil(verifiability: 'VERIFIABLE' | 'OBSERVABLE' | 'UNVERIFIABLE') {
+    return {
+      definition: { id: 'suppression_ailleurs', verifiability },
+    } as unknown as Parameters<typeof brider>[0];
+  }
+
+  it('VERIFIABLE — l’effacement vérifié PASSE, c’est le cas de memory_forget', () => {
+    const rendu = brider(
+      outil('VERIFIABLE'),
+      verificationOutcome.erased({
+        observed: 'la ligne a disparu',
+        conclusiveBecause: 'lecture transactionnelle après commit',
+      }),
+    );
+    expect(rendu.status).toBe('CONFIRMED');
+  });
+
+  it('OBSERVABLE — l’effacement est DÉGRADÉ en UNKNOWN', () => {
+    /* « Je ne vois plus rien » n'est pas « il n'y a plus rien ». La requête de
+       suppression peut être en vol, ou le fournisseur traiter en file.
+
+       CE N'EST PAS UN DÉFAUT À CORRIGER : supprimer sur une machine qu'on ne
+       possède pas ne se prouve pas. Cela s'annonce, et le verdict honnête
+       plafonne ici. */
+    const rendu = brider(
+      outil('OBSERVABLE'),
+      verificationOutcome.erased({
+        observed: "l'agenda ne rend plus l'événement",
+        conclusiveBecause: 'le fournisseur a répondu 204',
+      }),
+    );
+    expect(rendu.status).toBe('UNKNOWN');
+    expect(rendu.unknownReason).toBe('EXTERNAL_STATE');
+    expect(rendu.detail).toMatch(/ne peut pas prouver une absence/i);
+  });
+
+  it('CONTRÔLE NÉGATIF — un succès par PRÉSENCE n’est PAS dégradé', () => {
+    /* Sans lui, une fonction qui dégraderait tout passerait le test précédent.
+       Un outil OBSERVABLE qui observe une présence est exactement dans son
+       domaine : `calendar_create` en dépend. */
+    const rendu = brider(
+      outil('OBSERVABLE'),
+      verificationOutcome.confirmed({ observed: "l'événement est là" }),
+    );
+    expect(rendu.status).toBe('CONFIRMED');
   });
 });

@@ -207,7 +207,16 @@ function contractViolation(breach: ContractBreach): VerificationOutcome {
  * C'est un DURCISSEMENT, jamais un assouplissement : cette fonction ne peut
  * que dégrader un verdict, exactement comme `strictest()` dans le Policy Gate.
  */
-function constrainToVerifiability(
+/**
+ * ⚠ EXPORTÉ POUR ÊTRE ÉPROUVÉ SEUL — ADR-070.
+ *
+ * Cette fonction porte une règle de sûreté à elle seule : elle décide de ce
+ * qu'un outil a le DROIT d'affirmer. Elle n'était atteignable qu'au travers du
+ * moteur, ce qui rendait ses cas limites indistinguables du reste. Le trou du
+ * succès-par-absence y a vécu depuis ADR-065 sans qu'aucun test ne puisse le
+ * viser.
+ */
+export function constrainToVerifiability(
   tool: RegisteredTool,
   outcome: VerificationOutcome,
 ): VerificationOutcome {
@@ -228,6 +237,36 @@ function constrainToVerifiability(
       `${id} conclut à l'absence d'effet, mais se déclare ${verifiability} : ` +
         'il ne peut pas prouver qu\'un effet différé n\'arrivera pas. ' +
         'Je ne peux donc pas affirmer que l\'action a échoué.',
+      'EXTERNAL_STATE',
+    );
+  }
+
+  /* UN SUCCÈS DONT LA PREUVE EST UNE ABSENCE TOMBE SOUS LA MÊME RÈGLE — ADR-070.
+     
+     ⚠ CE TROU EST NÉ D'ADR-065, ET IL N'A PAS ÉTÉ VU EN L'ÉCRIVANT.
+     
+     Cette fonction bridait `FAILED` — l'absence d'EFFET — et laissait passer
+     `CONFIRMED`. C'était juste tant que « succès » voulait dire « présence » :
+     un outil OBSERVABLE peut prouver une présence, c'est sa définition même.
+     
+     ADR-065 a introduit `erased()`, un succès dont la preuve est une ABSENCE.
+     Un outil OBSERVABLE l'utilisant aurait donc affirmé une absence vérifiée —
+     exactement ce que sa déclaration lui interdit — et rien ne l'aurait
+     rattrapé.
+     
+     Le raisonnement de `FAILED` s'applique mot pour mot : « je ne vois plus
+     rien » n'est pas « il n'y a plus rien ». La requête de suppression peut
+     être encore en vol, ou le fournisseur traiter en file d'attente.
+     
+     CONSÉQUENCE, ET ELLE N'EST PAS UN DÉFAUT : un outil de SUPPRESSION chez un
+     fournisseur externe ne peut JAMAIS annoncer un succès vérifié. Supprimer
+     sur une machine qu'on ne possède pas ne se prouve pas — cela s'annonce, et
+     le verdict honnête plafonne à `UNKNOWN`. */
+  if (outcome.status === 'CONFIRMED' && outcome.evidence === 'POSITIVE_ABSENCE') {
+    return unknown(
+      `${id} affirme un effacement vérifié, mais se déclare ${verifiability} : ` +
+        'il ne peut pas prouver une absence. Le fournisseur l\'annonce, ' +
+        'rien ne le recoupe.',
       'EXTERNAL_STATE',
     );
   }
