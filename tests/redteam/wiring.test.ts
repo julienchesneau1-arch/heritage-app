@@ -195,10 +195,42 @@ describe('RED TEAM — code mort en production', () => {
       'src/core/memory/guard.ts',
       'src/core/secrets/vault.ts',
       'src/core/undo/snapshots.ts',
+      /* AJOUTÉ PAR ADR-066 — et ce que cette ligne prouve est PLUS ÉTROIT que
+         ce que le premier commentaire prétendait.
+
+         Mesuré par sabotage : en remplaçant l'appel `createUndoEngine(...)` du
+         runtime par `undefined`, ce test est resté VERT. `reachable` suit le
+         graphe d'IMPORTS ; un import conservé suffit à rendre un module
+         « atteint », même si plus rien ne l'appelle.
+
+         La ligne garde donc sa valeur — elle attrape la disparition complète —
+         mais c'est le test suivant qui vérifie que le moteur arrive jusqu'à
+         l'utilisateur. */
+      'src/core/undo/engine.ts',
       'src/providers/policy/cedar.ts',
     ]) {
       expect(reachable.has(join(ROOT, required)), required).toBe(true);
     }
+  });
+
+  it('l’Undo Engine arrive jusqu’à la SURFACE PRODUIT, pas seulement au graphe', () => {
+    /* LA LEÇON D'ADR-063, APPLIQUÉE À UN MOTEUR ENTIER. On y avait réparé le
+       pipeline de la confirmation et oublié le rendu ; ici le risque est le
+       même à plus grande échelle — un Undo Engine complet, éprouvé, et qu'aucune
+       commande n'appelle.
+
+       On vérifie donc les deux bouts : le runtime l'EXPOSE, et le CLI l'APPELLE.
+       Un test qui ne regarderait que le premier laisserait passer exactement le
+       sabotage qui a rendu la ligne ci-dessus verte à tort. */
+    const runtime = readFileSync(join(ROOT, 'src/apps/runtime.ts'), 'utf8');
+    expect(runtime).toContain('createUndoEngine(');
+
+    const cli = readFileSync(join(ROOT, 'src/apps/cli/main.ts'), 'utf8');
+    expect(cli).toContain('runtime.undo.previewLast()');
+    expect(cli).toContain('runtime.undo.undoLast(');
+    // Et la commande est ANNONCÉE : une capacité que l'aide ne cite pas
+    // n'existe que pour qui a lu le code.
+    expect(cli).toContain('/annule');
   });
 
   it('DÉMONSTRATION — la boucle réelle ne résout aucune entité, donc ne lève aucune ambiguïté', async () => {

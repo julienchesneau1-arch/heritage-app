@@ -53,17 +53,17 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 77 %**
+## 2. Profondeur de preuve — **≈ 78 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
-| **Invariants de sécurité S1–S15** (`docs/03`) | **7 des 15** nommément référencés dans les tests | **47 %** |
+| **Invariants de sécurité S1–S15** (`docs/03`) | **8 des 15** nommément référencés dans les tests | **53 %** |
 | **Tests dorés A·B·C** (`docs/05`) | **28 des 30** référencés, 2 déclarés bloqués | **93 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 77 %** |
+| **Moyenne** | | **≈ 78 %** |
 
 ### Le chiffre des invariants était FAUX, et dans le sens qui flatte
 
@@ -71,9 +71,14 @@ Ce document affirmait « **9 des 15** ». La mesure — `grep -E "\bS[0-9]+\b"` 
 `tests/`, frontières de mot comprises — en donne **sept** :
 
 ```text
-référencés   S1 · S2 · S3 · S6 · S7 · S14 · S15
-absents      S4 · S5 · S8 · S9 · S10 · S11 · S12 · S13
+référencés   S1 · S2 · S3 · S6 · S7 · S12 · S14 · S15
+absents      S4 · S5 · S8 · S9 · S10 · S11 · S13
 ```
+
+**S12 a rejoint les nommés avec l'Undo Engine** (ADR-066) — sans perdre sa
+réserve pour autant : quatre outils inverses restent non écrits et aucun
+mécanisme ne rejoue un `STATE_RESTORE`. Gagner une capacité ne doit pas faire
+cesser de surveiller ce qui manque encore.
 
 Le neuf avait été hérité d'un rapport antérieur et recopié sans être revérifié —
 exactement la dérive que `tests/golden/contract.test.ts` a été écrit pour rendre
@@ -89,14 +94,14 @@ lequel des deux on lit.
 **Le lien est désormais mécanique là aussi** (ADR-054).
 `tests/security/invariants-contract.test.ts` lit `docs/03 §2`, en extrait les
 quinze identifiants, et échoue si l'un n'est ni nommé, ni rattaché à une preuve
-désignée, ni exempté par une absence **vérifiée**. Le taux de 47 % y est écrit
+désignée, ni exempté par une absence **vérifiée**. Le taux de 53 % y est écrit
 en dur : il ne peut plus dériver sans passer par ce fichier.
 
 Deux réserves y sont chiffrées plutôt que fondues dans « tracé » :
 
 | | Ce que la preuve ne couvre pas |
 |---|---|
-| **S12** | la capture est prouvée ; l'**exécution** l'est désormais pour UN outil sur cinq — `memory_forget` (ADR-065). Restent `calendar_delete`, `note_delete`, `reminder_cancel`, `task_cancel` |
+| **S12** | la capture ET l'exécution du défaire sont prouvées (ADR-066) — mais pour UN outil inverse sur cinq, et **aucun mécanisme ne rejoue un `STATE_RESTORE`** |
 | **S13** | le cloud est éteint **en dur** ; `cloud.enabled` n'a aucun effet. L'invariant dit que l'**utilisateur** peut l'éteindre |
 
 S13 est le motif « CostGate » une deuxième fois : **tenu par absence, pas par
@@ -233,7 +238,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **65 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **66 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
@@ -287,7 +292,7 @@ entier, et aucun ne renforce ce qui existe.
 
 ```text
 ÉTENDUE FONCTIONNELLE   ≈ 64 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 77 %     ce qu'on peut en démontrer
+PROFONDEUR DE PREUVE    ≈ 78 %     ce qu'on peut en démontrer
 ```
 
 > ⚠ **CETTE SECTION A CONTREDIT LE RESTE DU DOCUMENT.** Elle affichait encore

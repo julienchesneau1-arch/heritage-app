@@ -101,6 +101,29 @@ interface Trace {
   readonly reserve: string | null;
 }
 
+/**
+ * CE QU'UNE PREUVE NE COUVRE PAS — indépendant de la CATÉGORIE.
+ *
+ * ⚠ CE REGISTRE A ÉTÉ SORTI DE `TRACES` PAR ADR-066, ET LA RAISON VAUT D'ÊTRE
+ *   LUE. S12 y vivait comme réserve d'une entrée TRACÉE. Le jour où
+ *   `tests/undo/engine.test.ts` l'a NOMMÉ, S12 a changé de catégorie — et sa
+ *   réserve serait partie avec, alors que quatre outils inverses manquent
+ *   toujours et qu'aucun moteur ne rejoue un `STATE_RESTORE`.
+ *
+ * > Gagner une capacité aurait fait CESSER DE SURVEILLER ce qui manque encore.
+ *
+ * Une réserve appartient à l'invariant, pas au tiroir dans lequel il est rangé.
+ */
+const RESERVES: Readonly<Record<string, string>> = {
+  S12:
+    'la capture est prouvée, et l’exécution du défaire l’est désormais pour UN ' +
+    'outil inverse sur cinq (`memory_forget`, ADR-065/066) ; quatre restent non ' +
+    'écrits, et aucun mécanisme ne rejoue une capture STATE_RESTORE',
+  S13:
+    'le cloud est éteint EN DUR : `cloud.enabled` n’a aucun effet, l’invariant ' +
+    'dit pourtant que l’UTILISATEUR peut l’éteindre',
+};
+
 const TRACES: Readonly<Record<string, Trace>> = {
   S4: {
     par: ['tests/tools/gateway.test.ts'],
@@ -134,24 +157,6 @@ const TRACES: Readonly<Record<string, Trace>> = {
     par: ['tests/contracts/provider-isolation.test.ts'],
     marqueur: "PROVIDER_DIRS: readonly string[] = ['src/providers']",
     reserve: null,
-  },
-  S12: {
-    /* LA RÉSERVE LA PLUS IMPORTANTE DU FICHIER.
-
-       `src/core/undo/` ne contient que `snapshots.ts` : la CAPTURE de quoi
-       défaire existe et est éprouvée, l'EXÉCUTION du défaire n'existe pas. Cinq
-       outils inverses sont déclarés dans les contrats — `task_cancel`,
-       `note_delete`, `memory_forget`, `calendar_delete`, `reminder_cancel` — et
-       AUCUN n'est écrit.
-
-       « Le rollback reste possible » est donc vrai au sens des données, faux au
-       sens de l'action. L'écrire ici plutôt que de compter S12 comme acquis est
-       la seule lecture honnête. */
-    par: ['tests/undo/snapshots.test.ts'],
-    marqueur: "une création capture l'appel inverse, pas la donnée",
-    reserve:
-      'la capture est prouvée, pas l’exécution : aucun outil inverse n’est écrit ' +
-      '(cinq déclarés), et aucun moteur ne rejoue une capture',
   },
   S13: {
     /* TENU PAR ABSENCE, PAS PAR INTERRUPTEUR — et c'est le motif « CostGate »
@@ -206,14 +211,14 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
    * LE CHIFFRE, ÉCRIT DANS UN TEST PLUTÔT QUE DANS UN RAPPORT
    * ================================================================== */
 
-  it('SEPT invariants sont nommés — et le chiffre est ici, pas dans un rapport', () => {
+  it('HUIT invariants sont nommés — et le chiffre est ici, pas dans un rapport', () => {
     const nommes = ids.filter(estNomme);
 
     /* `docs/28` a dit « neuf » pendant plusieurs sprints parce qu'un rapport se
        recopie sans se revérifier. Un test, lui, échoue. Ce chiffre doit monter
        — et le faire monter oblige à passer ici, ce qui est exactement le point. */
-    expect(nommes).toEqual(['S1', 'S2', 'S3', 'S6', 'S7', 'S14', 'S15']);
-    expect(nommes.length).toBe(7);
+    expect(nommes).toEqual(['S1', 'S2', 'S3', 'S6', 'S7', 'S12', 'S14', 'S15']);
+    expect(nommes.length).toBe(8);
   });
 
   it('AUCUN invariant n\'est sans trace : ni nommé, ni désigné, ni exempté', () => {
@@ -289,7 +294,7 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
    * ================================================================== */
 
   it('les preuves PARTIELLES sont comptées — S12 et S13 ne sont pas des acquis', () => {
-    const avecReserve = Object.entries(TRACES).filter(([, t]) => t.reserve !== null);
+    const avecReserve = Object.entries(RESERVES);
 
     /* Deux invariants sont tenus autrement qu'ils ne le prétendent :
          S12  la capture existe, l'exécution du défaire n'existe pas
@@ -299,7 +304,7 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
        aurait produit un registre plus flatteur et moins vrai. */
     expect(avecReserve.map(([id]) => id).sort()).toEqual(['S12', 'S13']);
     for (const [id, t] of avecReserve) {
-      expect(t.reserve?.length ?? 0, `${id} : réserve trop vague`).toBeGreaterThan(40);
+      expect(t.length, `${id} : réserve trop vague`).toBeGreaterThan(40);
     }
   });
 
@@ -309,11 +314,11 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
     const exemptes = Object.keys(NON_EXIGIBLES).length;
 
     expect(nommes + traces + exemptes).toBe(ids.length);
-    expect(traces).toBe(7);
+    expect(traces).toBe(6);
     expect(exemptes).toBe(1);
 
     // Le taux publié par `docs/28`. Il est ici pour ne plus pouvoir dériver.
-    expect(Math.round((nommes / ids.length) * 100)).toBe(47);
+    expect(Math.round((nommes / ids.length) * 100)).toBe(53);
   });
 
   /* ================================================================== *

@@ -49,6 +49,7 @@ const HELP = `
   Commandes :
 
     /audit          ce que j'ai fait, depuis le journal
+    /annule         défaire la dernière action annulable
     /inbox          les mémoires en attente de ta confirmation
     /diagnostic     état du système
     /aide           ce message
@@ -176,6 +177,67 @@ async function showInbox(runtime: Runtime): Promise<void> {
         `(${String(report.value.total)} en attente au total).\n`,
     );
   }
+}
+
+/**
+ * « Annule la dernière action. » — `docs/09 §2.1`, ADR-066.
+ *
+ * TROIS TEMPS, ET L'ORDRE EST LE SUJET : montrer, demander, agir.
+ *
+ * Annuler passe par le Policy Gate comme toute action. `memory_add` est `L2` ;
+ * son inverse `memory_forget` est `L4`. **Défaire coûte donc plus cher que
+ * faire**, et c'est l'humain qui paie la différence — pas le moteur en se
+ * confirmant lui-même.
+ */
+async function annulerDerniere(
+  runtime: Runtime,
+  ask: (question: string) => Promise<string>,
+): Promise<void> {
+  const apercu = await runtime.undo.previewLast();
+  if (!apercu.ok) {
+    stdout.write(`  Annulation indisponible : ${apercu.error.message}\n`);
+    return;
+  }
+  if (apercu.value === null) {
+    stdout.write('  Rien à annuler.\n');
+    return;
+  }
+
+  // Un empêchement se dit AVANT la question : demander un accord pour une
+  // action qu'on sait refusée fait perdre le temps de l'utilisateur et use la
+  // confirmation.
+  if (apercu.value.empechement !== null) {
+    stdout.write(`  Impossible d'annuler : ${apercu.value.empechement}.\n`);
+    return;
+  }
+
+  const quoi =
+    `${apercu.value.resource.kind} ${apercu.value.resource.id} ` +
+    `(par ${apercu.value.inverseToolId ?? '?'})`;
+  stdout.write(
+    `\n${confirmationPrompt('Annuler la dernière action ?', { cible: quoi })}\n`,
+  );
+
+  const reponse = await ask('');
+  // Le refus est lu EN PREMIER (ADR-061) : « non » ne doit jamais tomber dans
+  // la branche « oui » par contenance.
+  if (readConfirmation(reponse) !== 'CONFIRM') {
+    stdout.write("  Annulation abandonnée. Rien n'a été défait.\n");
+    return;
+  }
+
+  const fait = await runtime.undo.undoLast({
+    mode: 'NORMAL',
+    cloudEnabled: runtime.cloudEnabled,
+    proactive: false,
+    // L'humain vient de dire oui, ici, sur cette cible précise.
+    userConfirmed: true,
+  });
+  if (!fait.ok) {
+    stdout.write(`  ${mark('FAILED')} ${fait.error.message}\n`);
+    return;
+  }
+  stdout.write(`  ${mark(fait.value.status)} ${fait.value.detail}\n`);
 }
 
 async function showDiagnostic(runtime: Runtime): Promise<void> {
@@ -332,6 +394,17 @@ async function main(): Promise<void> {
       }
       if (line === '/audit') {
         await showAudit(runtime.value);
+        continue;
+      }
+      if (line === '/annule' || /^annule la derni[eè]re action/iu.test(line)) {
+        /* « Annule la dernière action. » est la formulation de `docs/09 §2.1`.
+           Elle est reconnue en toutes lettres autant que par la commande : le
+           scénario du document est écrit en français, pas en slash. */
+        await annulerDerniere(runtime.value, async (q: string) => {
+          const answer = await nextLine(`\n  ${q}\n  > `);
+          // Fin d'entrée pendant une confirmation : ce n'est pas un oui.
+          return answer ?? '';
+        });
         continue;
       }
       if (line === '/inbox') {

@@ -64,6 +64,16 @@ export interface Snapshot {
   readonly privacyClass: PrivacyClass;
   readonly createdAt: string;
   readonly undoneAt: string | null;
+  /**
+   * PÉRIMÉ — calculé PAR LA BASE, jamais par l'appelant (ADR-064).
+   *
+   * `lastUndoable` filtrait déjà sur `expires_at > now()`, mais `forOperation`
+   * rendait la capture sans rien en dire : annuler une opération nommée
+   * ignorait donc l'échéance. Exposer `expiresAt` et laisser chacun comparer
+   * aurait rouvert ADR-037 — deux horloges pour un même fait. On rend le
+   * VERDICT, pas la date.
+   */
+  readonly expired: boolean;
 }
 
 interface SnapshotRow {
@@ -78,6 +88,7 @@ interface SnapshotRow {
   privacy_class: string;
   created_at: Date;
   undone_at: Date | null;
+  expired: boolean;
 }
 
 function toSnapshot(row: SnapshotRow): Snapshot {
@@ -93,12 +104,14 @@ function toSnapshot(row: SnapshotRow): Snapshot {
     privacyClass: row.privacy_class as PrivacyClass,
     createdAt: row.created_at.toISOString(),
     undoneAt: row.undone_at?.toISOString() ?? null,
+    expired: row.expired,
   };
 }
 
 const SELECT_COLUMNS = `
   id, operation_id, resource_kind, resource_id, undo_kind, inverse_tool_id,
-  inverse_input, prior_state, privacy_class, created_at, undone_at
+  inverse_input, prior_state, privacy_class, created_at, undone_at,
+  (expires_at <= now()) AS expired
 `;
 
 export interface SnapshotStore {

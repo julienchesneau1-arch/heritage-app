@@ -69,6 +69,31 @@ export function sameOperation(identity: OperationIdentity): OperationIdentity {
 }
 
 /**
+ * L'identité de l'ANNULATION d'une capture — ADR-066.
+ *
+ * Annuler est une action neuve : elle a son effet, sa politique, son entrée au
+ * journal. Le réflexe est donc `mint()` — et c'est le défaut. `mint()` frappe
+ * une clé aléatoire, si bien que deux demandes d'annulation de la même capture
+ * deviennent **deux actions**, et l'inverse s'exécute deux fois.
+ *
+ * L'identité est donc DÉRIVÉE de la capture, sans aléa :
+ *
+ * ```
+ * une capture  →  une annulation  →  une clé
+ * ```
+ *
+ * Le doublement est alors fermé là où ce dépôt le ferme toujours — par le
+ * journal d'intention du Tool Gateway, atomiquement (ADR-029) — et non par une
+ * garde applicative que deux appels concurrents contourneraient.
+ *
+ * Même esprit que `sameOperation` : une fonction nommée au point du code où le
+ * mauvais réflexe serait invisible.
+ */
+export function forUndo(snapshotId: string): OperationIdentity {
+  return `undo-${snapshotId}` as OperationIdentity;
+}
+
+/**
  * Restaure une identité lue en base.
  *
  * Réservée à la couche de persistance : PostgreSQL rend des `string`, et il

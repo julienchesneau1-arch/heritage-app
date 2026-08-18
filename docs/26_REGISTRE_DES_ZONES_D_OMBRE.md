@@ -762,7 +762,7 @@ fournisseur, pas cru sur parole. C'est la même discipline que
 `PROVIDER_CONTRACT_VIOLATION` : un fournisseur qui ment sur lui-même est un
 problème de SOURCE, et il se constate.
 
-### 4.10 S12 — la capture existe ; le défaire n'existe QUE pour un outil sur cinq
+### 4.10 S12 — le défaire EXISTE, pour un outil inverse sur cinq
 
 **Trouvée en rendant `docs/03` mécanique (ADR-054).** L'invariant S12 dit « le
 rollback reste possible ». Mesure :
@@ -772,7 +772,7 @@ rollback reste possible ». Mesure :
 | `src/core/undo/` | **un seul fichier** — `snapshots.ts`, la capture |
 | Outils inverses déclarés | `task_cancel` · `note_delete` · `memory_forget` · `calendar_delete` · `reminder_cancel` |
 | Outils inverses **écrits** | **un** — `memory_forget` (ADR-065) |
-| Moteur qui rejoue une capture | **aucun** |
+| Moteur qui rejoue une capture | **`src/core/undo/engine.ts`** (ADR-066) — rejoue par le Tool Gateway, jamais en écrivant lui-même |
 
 L'invariant est donc vrai au sens des **données** — on sait quoi défaire, et
 `ADR-019` garantit 7 jours de rétention — et faux au sens de l'**action** :
@@ -796,14 +796,29 @@ Il a fallu commencer par lui, et pas par commodité : `docs/05 §C3` est
 > rendant `POSITIVE_ABSENCE` était `failed()`. **Un outil dont le succès est
 > une absence ne pouvait pas annoncer son succès honnêtement.**
 
-**Ce qui reste :** quatre outils inverses non écrits — `calendar_delete`,
-`note_delete`, `reminder_cancel`, `task_cancel` — et **aucun moteur qui rejoue
-une capture**. `memory_forget` est `NOT_UNDOABLE` par construction : il ne
-démontre donc rien du rejeu, seulement de l'exécution du défaire.
+**LE MOTEUR EXISTE DÉSORMAIS — ADR-066.** `undoLast` / `undoOperation` rejouent
+une capture `INVERSE_OPERATION` **par le Tool Gateway**, donc par la politique,
+l'outil typé, la vérification et le journal. La boucle complète est éprouvée sur
+`memory_add → memory_forget`, jusqu'à la commande `/annule` du CLI.
 
-**Condition de levée complète :** un moteur qui reprend une capture
-`INVERSE_OPERATION` ou `STATE_RESTORE` et l'exécute. La réserve reste chiffrée
-dans `invariants-contract.test.ts`.
+Et la propriété qui compte : **annuler peut coûter plus cher que faire.**
+`memory_add` est `L2`, son inverse `L4` — le moteur ne fabrique aucun
+consentement, il transmet celui de son appelant.
+
+**Ce qui reste, et qui reste chiffré :**
+
+| | |
+|---|---|
+| Outils inverses non écrits | `calendar_delete` · `note_delete` · `reminder_cancel` · `task_cancel` |
+| `STATE_RESTORE` | **refusé en nommant ce qui manque** — réappliquer les valeurs antérieures exigerait un outil de restauration par type de ressource ; aucun n'existe |
+
+Le refus est délibéré : restaurer « directement, puisqu'on a les données »
+serait un second chemin d'écriture hors politique et hors journal.
+
+**Condition de levée complète :** un outil de restauration d'état, et les quatre
+outils inverses manquants. La réserve reste chiffrée dans
+`invariants-contract.test.ts` — et elle a survécu au passage de S12 de « tracé »
+à « nommé », ce qui est précisément le piège qu'ADR-066 a fermé.
 
 ### 4.11 S13 — le cloud est éteint EN DUR, il n'y a pas d'interrupteur
 

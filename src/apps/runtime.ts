@@ -27,6 +27,8 @@ import { createIntentEngine, type IntentEngine } from '../core/intent/engine.js'
 import { createEnvSecretVault } from '../core/secrets/vault.js';
 import { createToolGateway, type ToolGateway } from '../core/tools/gateway.js';
 import { createVerificationEngine } from '../core/verification/engine.js';
+import { createUndoEngine, type UndoEngine } from '../core/undo/engine.js';
+import { createSnapshotStore } from '../core/undo/snapshots.js';
 import { createAssistant, type Assistant } from '../core/assistant.js';
 import { createCedarEvaluator, loadPolicySource } from '../providers/policy/cedar.js';
 import { registerCoreTools } from '../tools/index.js';
@@ -42,6 +44,14 @@ export interface Runtime {
   readonly sessions: SessionStore;
   readonly intent: IntentEngine;
   readonly assistant: Assistant;
+  /**
+   * « Annule la dernière action. » — `docs/09 §2.1`, ADR-066.
+   *
+   * Exposé au runtime plutôt que gardé dans le noyau : un moteur d'annulation
+   * qu'aucune surface n'atteint est un module hors circuit, c'est-à-dire
+   * exactement la dette que ce commit vient de payer ailleurs.
+   */
+  readonly undo: UndoEngine;
   /** Aucun fournisseur d'embeddings n'est câblé aujourd'hui — dit, pas masqué. */
   readonly embeddingsAvailable: boolean;
   readonly cloudEnabled: boolean;
@@ -96,6 +106,7 @@ export function buildRuntime(db: Db, options: { policyDir?: string } = {}): Resu
       gateway,
       setGuardConfirmed: setUserConfirmed,
     }),
+    undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
     embeddingsAvailable: false,
     cloudEnabled: false,
     setUserConfirmed,

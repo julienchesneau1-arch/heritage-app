@@ -4568,3 +4568,112 @@ esthétique avec `failed()`.
 Et si un second outil d'effacement apparaît, `PARTIAL` doit rester **projeté**.
 Le jour où quelqu'un écrit `status: 'PARTIAL'` en dur dans un `readBack`, la
 discipline de `docs/19 §2` est perdue.
+
+---
+
+## ADR-066 — L'Undo Engine : rejouer la capture, jamais écrire soi-même
+
+**Statut :** accepté (`docs/09 §2.1`, invariant S12).
+**Référence :** ADR-019, ADR-029, ADR-030, ADR-041, ADR-064, ADR-065,
+`src/core/undo/engine.ts`, `src/core/undo/snapshots.ts`.
+
+### L'autre moitié d'une phrase écrite il y a longtemps
+
+`snapshots.ts` s'ouvre ainsi : **« CE MODULE N'ANNULE RIEN. Il capture de quoi
+annuler. »** L'invariant S12 — *le rollback reste possible* — était donc vrai au
+sens des DONNÉES et faux au sens de l'ACTION : on savait quoi défaire, rien ne
+pouvait le faire.
+
+`memory_forget` (ADR-065) se trouve être l'inverse déclaré de `memory_add`. La
+boucle est donc démontrable de bout en bout **sans écrire un outil de plus** :
+
+```
+memory_add → capture INVERSE_OPERATION → undoLast → memory_forget → vérifié
+```
+
+### Le moteur ne défait rien lui-même
+
+Il n'écrit pas, ne supprime pas, ne restaure pas. Il **rejoue la capture par le
+Tool Gateway** — donc par la politique, l'outil typé, la vérification et le
+journal.
+
+> Un moteur qui supprimerait « directement, puisqu'on sait ce qu'on fait »
+> serait un second chemin d'écriture échappant à tout. Ce serait la porte
+> dérobée que le dépôt entier existe pour ne pas avoir.
+
+C'est aussi pourquoi `STATE_RESTORE` est **refusé en nommant ce qui manque**
+plutôt que simulé : réappliquer les valeurs antérieures exigerait d'écrire hors
+du Gateway. La capture existe, l'outil de restauration n'existe pas, et le refus
+le dit.
+
+### Annuler peut coûter plus cher que faire
+
+`memory_add` est `L2`. Son inverse `memory_forget` est `L4`. **Défaire une
+action de niveau 2 exige donc une confirmation de niveau 4** — et c'est correct :
+ce qu'on défait est un souvenir, et l'effacement est définitif.
+
+Le moteur ne fabrique aucun consentement : il transmet le contexte de son
+appelant tel quel. Un moteur qui poserait `userConfirmed: true` « pour faire
+passer l'annulation » contournerait la dernière décision humaine de la chaîne.
+Le sabotage correspondant fait rougir le test.
+
+### Le double défaire, fermé là où ce dépôt le ferme toujours
+
+`forUndo(snapshotId)` dérive la clé d'annulation de la capture, **sans aléa**.
+Le réflexe aurait été `mint()` — qui frappe une clé aléatoire, transformant deux
+demandes en deux actions.
+
+```
+une capture  →  une annulation  →  une clé
+```
+
+Le doublement est alors fermé par le journal d'intention du Gateway,
+atomiquement (ADR-029), et non par une garde applicative que deux appels
+concurrents contourneraient.
+
+**Et cette redondance a été MESURÉE, pas supposée.** En retirant la garde
+`undoneAt`, le second défaire ne double toujours pas — il retombe sur le refus
+de rejeu du Gateway. Ce qui se dégrade est le MESSAGE, devenu obscur. Le test
+qui n'assertait que le message rougissait donc pour la mauvaise raison ; une
+assertion sur l'effet a été ajoutée.
+
+> Un test qui rougit pour la mauvaise raison surveille la mauvaise chose.
+
+### Ordre : exécuter, puis marquer
+
+Marquer d'abord paraît plus prudent et ne l'est pas : si l'exécution échouait
+ensuite, la capture serait **brûlée** — marquée annulée alors que l'action tient
+toujours, et plus rien ne permettrait de réessayer. Entre « l'annulation reste
+réessayable » et « l'annulation est perdue », on prend le réessayable, puisque
+la clé déterministe ferme déjà le double effet.
+
+### Trois choses que les tests m'ont refusées
+
+| | Ce qui a été refusé | Ce que c'était vraiment |
+|---|---|---|
+| Compilateur | quatre valeurs de `Mode` réécrites à la main | un second registre du même fait (ADR-041) |
+| `failure-modes` | une comparaison littérale de statuts dans le noyau | `hasAnyEffect` **recopiée** — une fonction canonique qui n'avait, elle, aucun appelant de production |
+| Sabotage | une assertion d'accessibilité présentée comme une preuve de câblage | `reachable` suit le graphe d'IMPORTS : l'appel supprimé, le test restait vert |
+
+Le troisième est le plus instructif : le premier commentaire de cette ligne
+promettait plus qu'elle ne prouvait. Un test vérifie désormais que le runtime
+**expose** et que le CLI **appelle** — les deux sabotages le font rougir.
+
+### `RESERVES` sort de `TRACES`
+
+S12 est passé de « tracé » à « nommé » le jour où `tests/undo/engine.test.ts`
+l'a cité. Sa réserve serait partie avec le changement de tiroir — alors que
+quatre outils inverses manquent toujours et qu'aucun mécanisme ne rejoue un
+`STATE_RESTORE`.
+
+> Gagner une capacité aurait fait **cesser de surveiller** ce qui manque encore.
+
+Une réserve appartient à l'invariant, pas au tiroir dans lequel il est rangé.
+
+### Condition de révision
+
+Le jour où un outil de restauration par type de ressource existe,
+`STATE_RESTORE` cesse d'être un refus et le motif doit disparaître d'ici — pas
+être laissé en place « au cas où ». Et si un appelant frappe un jour une clé
+d'annulation par `mint()`, le double défaire revient sans qu'aucune garde
+applicative ne le voie.
