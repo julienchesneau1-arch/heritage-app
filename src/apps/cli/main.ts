@@ -345,9 +345,14 @@ async function handleText(
   show(reply);
 
   if (reply.kind === 'DONE') {
+    /* LE TOUR PORTE CE QUI A ÉTÉ ÉVOQUÉ — ADR-072, `docs/05 §A2`.
+       Sans cette ligne, `resolveAnaphora` ne trouve jamais rien : le
+       mécanisme de résolution existait, la boucle ne lui donnait aucune
+       matière. C'est la moitié du blocage d'A2 qui restait après ADR-071. */
     await runtime.sessions.appendTurn(sessionId, {
       speaker: 'JARVIS',
       content: `${reply.toolId} → ${reply.status}`,
+      mentionedEntityIds: reply.mentionedEntityIds,
     });
   }
 }

@@ -5110,3 +5110,82 @@ Le jour où la boucle renseignera `mentionedEntityIds` — parce qu'un outil cr�
 une entité et que l'Assistant l'enregistre dans le tour —, A2 se débloque et ce
 blocage tombe de lui-même. C'est un chantier de câblage, désormais : plus un
 chantier de modèle.
+
+---
+
+## ADR-072 — La boucle évoque ce qu'elle touche, et A2 change de motif une troisième fois
+
+**Statut :** accepté.
+**Référence :** ADR-055, ADR-071, `docs/05 §A2`, `docs/26 §4.12`,
+`src/core/tools/gateway.ts`, `src/core/assistant.ts`.
+
+### Le maillon qui manquait
+
+ADR-071 a peuplé `entities`. Restait l'autre moitié du blocage d'A2 : **aucun
+appelant ne renseignait `mentionedEntityIds`**, donc `resolveAnaphora` n'avait
+jamais rien à lire.
+
+En le câblant, un obstacle est apparu : **`GatewayResult` ne portait pas la
+ressource touchée.** L'Assistant aurait dû fouiller `output`, dont la forme
+appartient à chaque outil — connaître `entityId` pour l'un, `noteId` pour
+l'autre. C'est-à-dire porter la connaissance de chaque outil, ce que le contrat
+existe précisément pour éviter.
+
+### `null` plutôt qu'optionnel
+
+`GatewayResult.resource` est **toujours présent**, `null` quand il n'y a rien.
+Une lecture ne touche aucune ressource, et cette absence est un **fait**, pas un
+oubli. Un champ optionnel est un champ qu'on oublie (ADR-055).
+
+Sur un **rejeu**, la valeur est `null` avec une raison distincte : rien n'a été
+réexécuté, donc rien n'a été observé. `null` dit *« je ne l'ai pas vue »*, pas
+*« il n'y en a pas »* — et on ne recompose pas une ressource depuis un verdict
+déjà écrit.
+
+### Aucune inférence
+
+`mentionedEntityIds` est rempli parce que l'outil **déclare** avoir touché une
+ressource de genre `entity`. Jamais parce qu'un nom a été reconnu dans une
+phrase. C'est la frontière qui garde tout ce chemin compatible `Tier 0`.
+
+### A2 N'EST TOUJOURS PAS DÉBLOQUÉ — et le motif change pour la troisième fois
+
+```text
+1. « Context Engine hors circuit »        → mauvais diagnostic (docs/26 §4.12)
+2. rien ne peuple `entities`              → TOMBÉ (ADR-071)
+3. aucun appelant ne renseigne le champ   → TOMBÉ (ADR-072)
+4. aucune règle Tier 0 ne mène à l'outil  → TIENT
+```
+
+**Aucune règle du moteur d'intention ne mène à `entity_create`.** L'utilisateur
+ne peut rien DIRE qui crée une entité : l'outil n'est atteignable que par un
+appel direct à la passerelle — donc par un test, jamais par une conversation.
+
+> Un outil que la conversation n'atteint pas est un outil que le **produit** n'a
+> pas.
+
+**Et une seconde raison, architecturale :** `propose(text)` est **synchrone**,
+quand le résolveur est asynchrone et sur base. Résoudre « ça » ne peut donc pas
+se faire dans l'étape d'intention ; il faudrait une passe de résolution **entre**
+l'intention et l'appel d'outil. C'est un chantier, pas une règle à ajouter.
+
+### Ce que chaque motif successif vaut
+
+Chacun est tombé pour de bon, et chacun a été remplacé par un plus précis. C'est
+le contraire d'une dette qui stagne : la question « pourquoi A2 ne marche pas ? »
+a aujourd'hui une réponse d'une phrase, vérifiable, et qui ne parle plus de
+modèle.
+
+### Une cinquième forme falsifiable
+
+`outilHorsIntention` : le blocage tient tant que l'identifiant de l'outil
+n'apparaît pas dans le moteur d'intention. Il tombe seul le jour où une règle
+l'atteint — sabotage vérifié dans les deux sens.
+
+### Condition de révision
+
+Deux gestes lèveront A2, dans cet ordre : une règle `Tier 0` pour une
+déclaration explicite d'entité, puis une passe de résolution entre intention et
+outil. Le second suppose de rendre `propose` asynchrone **ou** de sortir la
+résolution du moteur — c'est cette décision-là qu'il faudra prendre, et elle
+n'est pas prise ici.

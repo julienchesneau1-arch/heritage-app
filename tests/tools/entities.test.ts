@@ -224,23 +224,39 @@ describe.runIf(enabled)('entity_create / entity_delete', () => {
    * CE QUI RESTE BLOQUÉ — mesuré, pas supposé
    * ==================================================================== */
 
-  it('A2 reste bloqué au niveau PRODUIT — la boucle n’évoque aucune entité', () => {
-    /* ⚠ L'ASSERTION LA PLUS IMPORTANTE DU FICHIER, ET C'EST UNE LIMITE.
+  it('A2 reste bloqué — mais plus DU TOUT pour la même raison', () => {
+    /* ⚠ CE TEST A CHANGÉ DEUX FOIS EN DEUX COMMITS, ET C'EST LE SIGNE QU'IL
+       SUIT QUELQUE CHOSE DE RÉEL.
 
-       Le mécanisme de résolution fonctionne (test ci-dessus). Mais `docs/05 §A2`
-       décrit un SCÉNARIO PRODUIT : « une note vient d'être évoquée » →
-       « Ajoute ça à mes tâches ». Pour que Jarvis y arrive seul, la boucle
-       devrait renseigner `mentionedEntityIds` à chaque tour — ce qu'elle ne
-       fait pas.
+       Il vérifiait d'abord qu'aucun appelant ne renseigne `mentionedEntityIds`.
+       ADR-072 l'a câblé : la boucle enregistre désormais ce que l'échange a
+       évoqué, et `resolveAnaphora` a de la matière.
 
-       Déclarer A2 débloqué parce que le module marche répéterait exactement la
-       faute de `docs/26 §4.12` : la porte éprouvait le MODULE, la case du
-       document promettait **Jarvis**.
+       CE QUI TIENT est en amont : **aucune règle du moteur d'intention ne mène
+       à `entity_create`.** L'utilisateur ne peut rien DIRE qui crée une entité.
+       L'outil n'est atteignable que par un appel direct — donc par un test,
+       jamais par une conversation.
 
-       Ce test tombera le jour où un appelant renseignera le champ. */
-    const assistant = readFileSync('src/core/assistant.ts', 'utf8');
+       Un outil que la conversation n'atteint pas est un outil que le PRODUIT
+       n'a pas. Le distinguer de « l'outil existe » est tout ce que
+       `docs/26 §4.12` a jamais défendu. */
+    const moteur = readFileSync('src/core/intent/engine.ts', 'utf8');
+    expect(moteur).not.toContain('entity_create');
+
+    /* ET LA SECONDE RAISON, ARCHITECTURALE. `propose(text)` est synchrone ; le
+       résolveur est asynchrone et sur base. Résoudre « ça » exigerait une passe
+       de résolution ENTRE l'intention et l'appel d'outil — un chantier, pas une
+       règle à ajouter. Ce test tombera le jour où `propose` deviendra
+       asynchrone, ce qui est exactement le moment où il faudra y repenser. */
+    expect(moteur).toContain('propose(text: string): IntentProposal');
+  });
+
+  it('la boucle ÉVOQUE désormais les entités — la cause précédente est tombée', () => {
+    /* La moitié levée par ADR-072, vérifiée dans les deux surfaces. Sans elle,
+       le résolveur n'aurait jamais rien à lire, quelle que soit la suite. */
     const cli = readFileSync('src/apps/cli/main.ts', 'utf8');
-    expect(assistant).not.toContain('mentionedEntityIds');
-    expect(cli).not.toContain('mentionedEntityIds');
+    const http = readFileSync('src/apps/server/http.ts', 'utf8');
+    expect(cli).toContain('mentionedEntityIds: reply.mentionedEntityIds');
+    expect(http).toContain('mentionedEntityIds: reply.mentionedEntityIds');
   });
 });

@@ -34,6 +34,19 @@ export type AssistantReply =
       readonly toolId: string;
       readonly detail: string;
       readonly output: unknown;
+      /**
+       * LES ENTITÉS ÉVOQUÉES PAR CET ÉCHANGE — ADR-072.
+       *
+       * Toujours présent, éventuellement vide. C'est ce qui permet à l'appelant
+       * d'enregistrer le tour avec `mentionedEntityIds`, et donc au résolveur de
+       * répondre à « ça » (`docs/05 §A2`).
+       *
+       * **AUCUNE INFÉRENCE ICI.** L'entité est retenue parce que l'outil a
+       * déclaré l'avoir touchée — `resource.kind === 'entity'` —, jamais parce
+       * qu'un nom a été reconnu dans une phrase. C'est la frontière qui garde
+       * ce chemin compatible `Tier 0` (ADR-071).
+       */
+      readonly mentionedEntityIds: readonly string[];
     }
   | {
       readonly kind: 'CONFIRM';
@@ -156,12 +169,20 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           return { kind: 'ERROR', message: result.error.message };
         }
 
+        /* CE QUE L'ÉCHANGE A ÉVOQUÉ — ADR-072.
+           L'outil DÉCLARE la ressource touchée ; on ne devine rien et on ne
+           connaît la forme d'aucun `output`. Une ressource d'un autre genre —
+           note, tâche, mémoire — n'est pas une entité résoluble, et la liste
+           reste vide plutôt que d'être remplie approximativement. */
+        const touchee = result.value.resource;
         return {
           kind: 'DONE',
           status: result.value.status,
           toolId: proposal.toolId,
           detail: result.value.verification.detail,
           output: result.value.output,
+          mentionedEntityIds:
+            touchee !== null && touchee.kind === 'entity' ? [touchee.id] : [],
         };
       } finally {
         // La confirmation ne doit jamais fuir vers l'appel suivant.

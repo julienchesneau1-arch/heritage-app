@@ -80,6 +80,21 @@ export interface GatewayResult {
   readonly replayed: boolean;
 
   /**
+   * LA RESSOURCE TOUCHÉE — ADR-072.
+   *
+   * L'appelant ne savait pas ce qu'un outil venait d'affecter. Il lui restait à
+   * fouiller `output`, dont la forme appartient à chaque outil : l'Assistant
+   * aurait dû connaître `entityId` pour `entity_create`, `noteId` pour
+   * `note_create`… c'est-à-dire porter la connaissance de chaque outil, ce que
+   * le contrat existe précisément pour éviter.
+   *
+   * `null` PLUTÔT QU'OPTIONNEL, et ce n'est pas un détail : une lecture ne
+   * touche aucune ressource, et cette absence est un FAIT, pas un oubli. Un
+   * champ optionnel est un champ qu'on oublie (ADR-055).
+   */
+  readonly resource: { readonly kind: string; readonly id: string } | null;
+
+  /**
    * CE QUE VAUT `output` — ADR-055.
    *
    * Toujours renseignée, et c'est délibéré : un champ optionnel serait un
@@ -622,6 +637,10 @@ export function createToolGateway(deps: {
         policy,
         eventId: event.value.eventId,
         replayed: true,
+        /* RIEN N'A ÉTÉ RÉEXÉCUTÉ, donc rien n'a été observé : on ne recompose
+           pas une ressource depuis un verdict déjà écrit. `null` dit « je ne
+           l'ai pas vue », pas « il n'y en a pas ». */
+        resource: null,
         /* La provenance reste celle du CONTRAT, même sans sortie : elle décrit
            ce que cet outil produit, pas ce qu'on vient d'obtenir. */
         provenance: def.outputProvenance,
@@ -1142,6 +1161,8 @@ export function createToolGateway(deps: {
           policy,
           eventId: event.value.eventId,
           replayed: true,
+          // Même raison qu'au-dessus : rejeu, donc aucune observation neuve.
+          resource: null,
           provenance: def.outputProvenance,
           suspectedInjection: false,
         });
@@ -1616,6 +1637,7 @@ export function createToolGateway(deps: {
       policy,
       eventId: event.value.eventId,
       replayed: false,
+      resource: executed.value.resource ?? null,
       provenance: def.outputProvenance,
       suspectedInjection: sealed?.suspectedInjection ?? false,
     });

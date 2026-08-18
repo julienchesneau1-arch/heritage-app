@@ -38,6 +38,8 @@ function success(): GatewayResult {
     policy: { decision: 'ALLOW', effectiveAutonomy: 'L2', reasons: [] },
     eventId: 'evt-1',
     replayed: false,
+    // ADR-072 : la ressource touchée est TOUJOURS renseignée, `null` compris.
+    resource: null,
     provenance: 'TOOL_OUTPUT',
     suspectedInjection: false,
   };

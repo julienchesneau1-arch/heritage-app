@@ -894,10 +894,18 @@ doit piloter `cloudEnabled` — au même moment que le branchement du CostGate
 > C'est la condition de révision que l'ADR d'origine s'était écrite, et elle
 > s'est réalisée par le chemin qu'elle avait prévu.
 >
-> **CE QUI TIENT :** aucun appelant ne renseigne `mentionedEntityIds`. Le
-> mécanisme sait résoudre, la boucle produit n'évoque aucune entité. A2 reste
-> donc bloqué — mais c'est désormais un chantier de CÂBLAGE, plus un chantier
-> de modèle. La distinction est tout ce que cette section a jamais défendu.
+> **SECONDE MOITIÉ LEVÉE — ADR-072.** La boucle renseigne désormais
+> `mentionedEntityIds` : CLI et passerelle web enregistrent ce que l'échange a
+> touché, sans aucune inférence — l'outil DÉCLARE la ressource.
+>
+> **CE QUI TIENT, ET C'EST EN AMONT DE TOUT :** aucune règle du moteur
+> d'intention ne mène à `entity_create`. **L'utilisateur ne peut rien DIRE qui
+> crée une entité.** Un outil que la conversation n'atteint pas est un outil que
+> le produit n'a pas.
+>
+> Et une raison d'architecture : `propose(text)` est SYNCHRONE quand le résolveur
+> est asynchrone et sur base. Résoudre « ça » exigerait une passe entre
+> l'intention et l'appel d'outil — un chantier, pas une règle.
 
 Le diagnostic d'origine, conservé parce qu'il reste exact sur la seconde moitié :
 

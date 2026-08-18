@@ -110,36 +110,59 @@ type Blocage =
          */
         readonly declarePar: string;
       };
+    }
+  /**
+   * Le blocage tient tant qu'AUCUNE règle du moteur d'intention ne mène à cet
+   * outil.
+   *
+   * ⚠ CINQUIÈME FORME — ADR-072, et le blocage d'A2 change de motif pour la
+   * TROISIÈME fois. Chaque fois il devient plus précis, et chaque fois c'est
+   * une cause qui tombe :
+   *
+   * ```text
+   * 1. « Context Engine hors circuit »        → mauvais diagnostic (câblage)
+   * 2. rien ne peuple `entities`              → tombé, ADR-071
+   * 3. aucun appelant ne renseigne le champ   → tombé, ADR-072
+   * 4. AUCUNE RÈGLE Tier 0 ne mène à l'outil  → tient
+   * ```
+   *
+   * Un outil enregistré qu'aucune intention n'atteint est inaccessible à la
+   * conversation : l'utilisateur ne peut rien DIRE qui le déclenche.
+   */
+  | {
+      readonly motif: string;
+      readonly outilHorsIntention: { readonly outil: string; readonly moteur: string };
     };
 
 const BLOQUES: Readonly<Record<string, Blocage>> = {
   A2: {
-    /* ⚠ CE MOTIF A CHANGÉ DEUX FOIS, ET C'EST LE SIGNE QU'IL EST SUIVI.
+    /* ⚠ TROISIÈME MOTIF, ET DEUX CAUSES SONT RÉELLEMENT TOMBÉES.
 
-       D'ABORD il décrivait mal son blocage : « Context Engine hors circuit »,
-       ce qui désignait un chantier de câblage. La cause était plus profonde —
-       rien ne créait d'entité (`docs/26 §4.12`).
+       `entity_create` peuple `entities` (ADR-071), et la boucle renseigne
+       désormais `mentionedEntityIds` (ADR-072) : `resolveAnaphora` a de la
+       matière, et rend `RESOLVED`.
 
-       ENSUITE cette cause est TOMBÉE : `entity_create` peuple `entities`
-       (ADR-071), et le résolveur d'anaphore rend désormais `RESOLVED` là où il
-       rendait toujours `NOT_FOUND`. Éprouvé dans `tests/tools/entities.test.ts`.
+       CE QUI TIENT est en amont de tout cela : **aucune règle du moteur
+       d'intention ne mène à `entity_create`.** L'utilisateur ne peut rien DIRE
+       qui crée une entité — l'outil n'est atteignable que par un appel direct
+       à la passerelle, donc par un test, jamais par une conversation.
 
-       CE QUI TIENT ENCORE est l'autre moitié, jamais levée : **aucun appelant
-       ne renseigne `mentionedEntityIds`**. Le mécanisme sait résoudre ; la
-       boucle produit n'évoque aucune entité, donc Jarvis n'a rien à résoudre
-       de lui-même.
+       ET UNE SECONDE RAISON, ARCHITECTURALE : `propose(text)` est SYNCHRONE,
+       quand le résolveur est asynchrone et sur base. Résoudre « ça » ne peut
+       donc pas se faire dans l'étape d'intention ; il faudrait une passe de
+       résolution entre l'intention et l'appel d'outil. C'est un chantier, pas
+       une règle à ajouter.
 
-       Déclarer A2 débloqué parce que le MODULE marche répéterait mot pour mot
-       la faute de `docs/26 §4.12` : la porte éprouvait le module, la case du
-       document promet **Jarvis**. */
+       Déclarer A2 débloqué parce que le mécanisme fonctionne serait, pour la
+       troisième fois, la faute de `docs/26 §4.12`. */
     motif:
-      "le mécanisme de résolution fonctionne depuis ADR-071, mais AUCUN appelant " +
-      "ne renseigne `mentionedEntityIds` : la boucle produit n'évoque aucune " +
-      'entité, donc le scénario reste hors de portée de Jarvis lui-même',
-    champJamaisRenseigne: {
-      champ: 'mentionedEntityIds',
-      parUnAppelantDe: 'appendTurn(',
-      declarePar: 'src/core/session/session.ts',
+      "les deux causes précédentes sont tombées (ADR-071, ADR-072), mais AUCUNE " +
+      "règle Tier 0 ne mène à `entity_create` : rien de ce que l'utilisateur dit " +
+      'ne crée une entité, et `propose()` étant synchrone, la résolution ' +
+      "d'anaphore ne peut pas vivre dans l'étape d'intention",
+    outilHorsIntention: {
+      outil: 'entity_create',
+      moteur: 'src/core/intent/engine.ts',
     },
   },
   A8: {
@@ -259,6 +282,15 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
           `${id} est déclaré bloqué parce que rien ne peuple ` +
             `\`${blocage.tableJamaisPeuplee}\` — or du code de src/ le fait désormais.`,
         ).toEqual([]);
+      } else if ('outilHorsIntention' in blocage) {
+        const { outil, moteur } = blocage.outilHorsIntention;
+        const source = sourcesDeSrc().find((f) => f.file === moteur);
+        expect(source, `${id} désigne ${moteur}, qui n'existe pas.`).not.toBeUndefined();
+        expect(
+          source?.content.includes(outil) ?? false,
+          `${id} est déclaré bloqué parce qu'aucune règle de ${moteur} ne mène ` +
+            `à \`${outil}\` — or c'est désormais le cas.`,
+        ).toBe(false);
       } else if ('champJamaisRenseigne' in blocage) {
         /* Même discipline : le blocage tombe le jour où un appelant renseigne
            le champ, sans qu'on ait à s'en souvenir. */
