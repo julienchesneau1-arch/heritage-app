@@ -7,6 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { mint, type OperationIdentity } from '../../src/core/tools/identity.js';
+import { readConfirmables } from '../../src/core/tools/confirmation.js';
 import { createDb } from '../../src/core/db/client.js';
 import { createLedger } from '../../src/core/ledger/ledger.js';
 import { validateDefinition } from '../../src/core/tools/contract.js';
@@ -248,12 +249,16 @@ const checks: readonly Check[] = [
             userConfirmed: false,
           },
         });
-        return (
-          !result.ok &&
-          result.error.kind === 'CONFIRMATION_REQUIRED' &&
-          // La confirmation porte sur la valeur concrète, pas sur l'intention.
-          result.error.details?.['privacyClass'] === 'GREEN'
-        );
+        if (result.ok || result.error.kind !== 'CONFIRMATION_REQUIRED') return false;
+        /* La confirmation porte sur la valeur concrète, pas sur l'intention.
+
+           ⚠ LU PAR `readConfirmables`, PAS PAR LA CLÉ NUE. Cette porte lisait
+           `details['privacyClass']` ; ADR-063 a préfixé les valeurs pour qu'un
+           paramètre nommé `tool` ne puisse plus être avalé par une liste noire.
+           La porte a rougi la première — c'est exactement son travail — et elle
+           éprouve désormais la PROPRIÉTÉ plutôt que la forme de transport. */
+        const valeurs = readConfirmables(result.error.details);
+        return valeurs.some((v) => v.nom === 'privacyClass' && v.rendu === 'GREEN');
       } finally {
         await connection.close();
       }
