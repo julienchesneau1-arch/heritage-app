@@ -140,20 +140,20 @@ describe('RED TEAM — code mort en production', () => {
            branché — et ce test le signalera si on oublie de l'y brancher. */
         'src/core/cost/gate.ts',
 
-        // Modèle d'effet par cible (ADR-031). Spécifié, implémenté, testé —
-        // et PAS ENCORE BRANCHÉ au Tool Gateway, qui n'a aujourd'hui aucune
-        // notion de cible à lui transmettre.
-        //
-        // Il est listé ici volontairement plutôt que masqué : c'est la dette
-        // nommée de Foundation 4, et ce test la maintient visible jusqu'à ce
-        // qu'un outil multi-cibles existe. Voir `docs/20 §4`.
-        'src/core/tools/outcome.ts',
+        /* ⚠ `src/core/tools/outcome.ts` A QUITTÉ CETTE LISTE — ADR-065.
+           Il y figurait avec ce commentaire : « pas encore branché […] jusqu'à
+           ce qu'un outil multi-cibles existe ». Cet outil existe :
+           `memory_forget` projette son statut sur la ligne mémoire ET sur
+           chaque dérivé hors cascade.
+
+           La dette nommée de Foundation 4 est payée, et c'est ce test qui
+           l'aura suivie du premier au dernier jour. */
 
       ].sort(),
     );
   });
 
-  it('cinq modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('quatre modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
     /* Le chiffre est asserté, pas seulement la liste : c'est ce qui force à
        PASSER ICI quand un module cesse d'être atteint — ou le devient.
@@ -166,8 +166,14 @@ describe('RED TEAM — code mort en production', () => {
        **À cinq avec ADR-055** : `quarantine/processor.ts` est appelé par le
        Tool Gateway depuis que `web_search` existe. C'est la défense principale
        contre T1 (ADR-004) qui entre en circuit, après y avoir été absente
-       depuis le début du dépôt. */
-    expect(deadLogic).toHaveLength(5);
+       depuis le début du dépôt.
+
+       **À quatre avec ADR-065** : `tools/outcome.ts` est traversé par
+       `memory_forget`, qui projette son statut sur la ligne mémoire et sur
+       chaque dérivé hors cascade. Le modèle d'effet par cible attendait un
+       outil multi-cibles depuis Foundation 4 ; le droit à l'oubli en est un,
+       parce qu'une mémoire vit à plusieurs endroits. */
+    expect(deadLogic).toHaveLength(4);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

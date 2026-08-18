@@ -228,7 +228,15 @@ export type VerificationStatus = z.infer<typeof VerificationStatus>;
  *   ACK sans preuve   ≠ CONFIRMED
  */
 export const EvidenceKind = z.enum([
-  /** L'effet a été OBSERVÉ. Seule preuve qui autorise `CONFIRMED`. */
+  /**
+   * L'effet a été OBSERVÉ.
+   *
+   * Preuve de succès pour une opération qui AJOUTE — et preuve d'échec pour
+   * une opération qui EFFACE. Ce commentaire disait « seule preuve qui
+   * autorise `CONFIRMED` » : c'était vrai tant que tout effet était additif.
+   * `memory_forget` est la première capacité spécifiée dont le succès est une
+   * ABSENCE (ADR-065, `docs/05 §C3`).
+   */
   'POSITIVE_PRESENCE',
   /**
    * L'absence d'effet a été observée, ET l'observation est CONCLUANTE.

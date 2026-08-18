@@ -4460,3 +4460,111 @@ exclusive de `ledger-chain.test.ts`.
 Le jour où un rapport de `src/apps/` calcule une fenêtre temporelle en
 JavaScript, ADR-036, ADR-037 et celui-ci sont contournés ensemble. La borne se
 demande à la base, ou ne se demande pas.
+
+---
+
+## ADR-065 — Un succès peut être une ABSENCE
+
+**Statut :** accepté (`docs/05 §C3`, CRITIQUE).
+**Référence :** ADR-004, ADR-019, ADR-031, ADR-041, `docs/03` (échelle L0–L4),
+`docs/19 §2`, `src/tools/memory.ts`, `src/core/verification/engine.ts`.
+
+### Ce qu'il fallait livrer
+
+`memory_forget` — le **premier des cinq outils inverses déclarés** à être écrit,
+et celui-là d'abord parce que `docs/05 §C3` est CRITIQUE quand les quatre autres
+sont du confort.
+
+```text
+Entrée   : « Oublie cette information. »
+Attendu  : mémoire + embeddings + relations + cache + dérivés supprimés ;
+           événement MEMORY_DELETED.
+Interdit : que le contenu supprimé survive dans le journal.
+```
+
+### Le défaut de vocabulaire que l'écriture a révélé
+
+Tous les outils du dépôt réussissent en **faisant apparaître** quelque chose, et
+se vérifient en le relisant. `confirmed()` code donc en dur
+`evidence: 'POSITIVE_PRESENCE'`, et la seule fabrique rendant
+`POSITIVE_ABSENCE` était… `failed()`.
+
+> **Un outil dont le succès EST une absence ne pouvait pas annoncer son succès
+> honnêtement.** Il lui restait à mentir sur la preuve — `confirmed`, en
+> prétendant avoir observé une présence — ou à sous-déclarer en `unknown`.
+
+Le commentaire d'`EvidenceKind` disait d'ailleurs « seule preuve qui autorise
+`CONFIRMED` ». C'était vrai tant que tout effet était additif ; il est corrigé
+plutôt que laissé mentir.
+
+**Ajouté :** `erased()`, qui rend `CONFIRMED` sur preuve `POSITIVE_ABSENCE`, et
+qui **exige le même `conclusiveBecause` que `failed()`** — prouver une absence
+oblige à dire pourquoi l'observation est concluante.
+
+**Généralisé :** `projectStatus(targets, successEvidence)`. L'axe est unique et
+bascule les deux bornes, car la preuve d'échec est toujours l'observation
+contraire. Par défaut, le comportement d'origine — aucun appelant existant ne
+change.
+
+### Trois arbitrages, et aucun n'est anodin
+
+| | Décision | Pourquoi |
+|---|---|---|
+| **Suppression réelle** | `DELETE`, pas `state = 'DELETED'` | `memory_add.rollback` annonçait l'effacement doux. Une ligne `DELETED` garde `content` : dire « oublié » serait une fausse confirmation **portant sur une promesse de confidentialité** — l'utilisateur cesse de se méfier d'une donnée qui existe encore |
+| **`NOT_UNDOABLE`** | la capture existe et ne garde RIEN | ADR-019 veut que toute mutation capture de quoi être annulée. Appliqué tel quel, cela recopierait le contenu dans `action_snapshots` : on n'aurait rien oublié, on aurait **déplacé**. Le schéma avait prévu la sortie |
+| **L4** | pas un choix de prudence | `docs/03` nomme la ligne : *« Paiement, suppression, données sensibles, irréversible »* |
+
+> Un oubli qu'on peut défaire n'est pas un oubli.
+
+### `PARTIAL` cesse d'être décoratif
+
+Une mémoire ne vit pas qu'à un endroit. Les dérivés `cascades = false` — export,
+sauvegarde, cache externe — survivent au `DELETE`. Tant qu'il en reste un, le
+statut est `PARTIAL`, et il **sort de `projectStatus`** : `docs/19 §2` l'exigeait,
+*un outil ne peut pas se dire `PARTIAL` pour éviter de trancher*.
+
+`src/core/tools/outcome.ts` figurait depuis Foundation 4 dans les modules hors
+circuit, avec ce commentaire : « jusqu'à ce qu'un outil multi-cibles existe ».
+Cet outil existe. **La dette nommée est payée, et c'est `wiring.test.ts` qui
+l'aura suivie du premier au dernier jour** — cinq modules morts, désormais
+quatre.
+
+### Ce que les tests ont attrapé
+
+**Mon propre outil, par son contrôle négatif.** La relecture concluait
+« absente, donc effacée » — vrai aussi d'une mémoire qui n'a **jamais existé**.
+`memory_forget` annonçait un oubli `CONFIRMED` sur un identifiant inconnu.
+`execute` savait la différence, `readBack` l'ignorait.
+
+**La barrière d'immuabilité, sur un test précédent.** Elle avait déjà refusé un
+`UPDATE` du rôle applicatif (ADR-064). Ici, sept tests du dépôt ont rougi en
+même temps — chacun affirmait l'absence de ce qui venait d'être écrit :
+
+```text
+redteam/memory.test.ts    « aucun outil ne permet d'oublier »   → it.fails devenu vrai
+golden/contract.test.ts   C3 déclaré bloqué                     → le blocage n'a plus de motif
+redteam/wiring.test.ts    outcome.ts orphelin                   → il ne l'est plus
+coherence-des-chiffres    16 outils, 27/30 scénarios            → 17 et 28/30
+```
+
+C'est le dépôt qui dicte la mise à jour, pas l'inverse. Aucun de ces tests n'a
+été affaibli : chacun enregistre désormais une vérité différente.
+
+### Sabotage
+
+```text
+UPDATE state='DELETED' au lieu de DELETE   → 3 rouges
+priorState conservé dans l'instantané      → 1 rouge (l'INTERDIT)
+dérivés hors cascade ignorés               → 1 rouge (le PARTIAL)
+```
+
+### Condition de révision
+
+Le jour où un outil appelle `erased()` sans pouvoir fermer sa fenêtre
+d'observation, la fabrique ment aussi sûrement que `confirmed()` mentait ici.
+`conclusiveBecause` est obligatoire pour cette raison, et non par symétrie
+esthétique avec `failed()`.
+
+Et si un second outil d'effacement apparaît, `PARTIAL` doit rester **projeté**.
+Le jour où quelqu'un écrit `status: 'PARTIAL'` en dur dans un `readBack`, la
+discipline de `docs/19 §2` est perdue.

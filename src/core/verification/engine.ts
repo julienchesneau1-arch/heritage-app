@@ -117,6 +117,32 @@ function failed(absence: Absence): VerificationOutcome {
   };
 }
 
+/**
+ * SUCCÈS DONT LA PREUVE EST UNE ABSENCE — ADR-065.
+ *
+ * `confirmed()` code en dur `POSITIVE_PRESENCE`, et la seule fabrique rendant
+ * `POSITIVE_ABSENCE` était `failed()`. Autrement dit : **un outil dont le
+ * succès EST une absence ne pouvait pas annoncer son succès honnêtement.** Il
+ * lui restait à mentir sur la preuve (`confirmed`, en prétendant avoir observé
+ * une présence) ou à sous-déclarer (`unknown`). Les deux sont interdits ici.
+ *
+ * `docs/05 §C3` — droit à l'oubli, CRITIQUE — est la première capacité
+ * spécifiée dont c'est le cas. Effacer réussit quand la chose n'est **plus**
+ * là.
+ *
+ * MÊME EXIGENCE QUE `failed()` : prouver une absence oblige à dire pourquoi
+ * l'observation est concluante. C'est le champ qui coûte cher à remplir
+ * honnêtement, et c'est le point — face à une file d'attente, « zéro ligne »
+ * ne prouve rien.
+ */
+function erased(absence: Absence): VerificationOutcome {
+  return {
+    status: 'CONFIRMED',
+    detail: `Effacement vérifié : ${absence.observed} (${absence.conclusiveBecause})`,
+    evidence: 'POSITIVE_ABSENCE',
+  };
+}
+
 /** Rien n'a été tenté. Distinct d'un échec, et distinct d'une ignorance. */
 function notAttempted(detail: string): VerificationOutcome {
   return { status: 'NOT_ATTEMPTED', detail, evidence: 'POSITIVE_ABSENCE' };
@@ -313,6 +339,7 @@ export const verificationOutcome = {
   probable,
   unknown,
   failed,
+  erased,
   notAttempted,
   contractViolation,
 } as const;

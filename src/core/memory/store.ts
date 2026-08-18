@@ -13,7 +13,7 @@ import type {
   Provenance,
   SourceType,
 } from '../types/domain.js';
-import { createDerivativeRegistry } from './derivatives.js';
+import { createDerivativeRegistry, type Derivative } from './derivatives.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import type { MemoryState, MemoryType, StoredMemory } from './types.js';
 
@@ -94,6 +94,28 @@ export interface MemoryStore {
   setState(id: string, state: MemoryState): Promise<Result<void>>;
   /** Mémoires sans embedding : la file d'attente de la voie sémantique. */
   pendingEmbeddings(limit: number): Promise<Result<readonly StoredMemory[]>>;
+  /**
+   * EFFACER POUR DE BON — `docs/05 §C3`, ADR-065.
+   *
+   * Un `DELETE`, pas un `state = 'DELETED'`. L'effacement doux laisserait
+   * `content` dans la ligne : annoncer « oublié » serait alors une fausse
+   * confirmation portant sur une promesse de confidentialité.
+   *
+   * L'embedding est une COLONNE de `memories` et `memory_derivatives` porte
+   * `ON DELETE CASCADE` : la ligne emporte l'un et l'autre. Ce qui ne part pas
+   * ainsi — export, sauvegarde, cache externe — est justement ce que
+   * `derivativesRequiringManualDeletion` sert à nommer AVANT.
+   *
+   * Rend `true` si une ligne a été supprimée, `false` s'il n'y avait rien.
+   * L'appelant a besoin de la différence : effacer ce qui n'existait pas n'est
+   * pas un oubli, c'est un non-événement, et l'annoncer comme un succès serait
+   * revendiquer un acte qui n'a pas eu lieu.
+   */
+  deleteForever(id: string): Promise<Result<boolean>>;
+  /** Dérivés qu'aucune cascade n'emporte — la liste à traiter à la main. */
+  derivativesRequiringManualDeletion(
+    id: string,
+  ): Promise<Result<readonly Derivative[]>>;
 }
 
 export function createMemoryStore(db: Db): MemoryStore {
@@ -209,6 +231,25 @@ export function createMemoryStore(db: Db): MemoryStore {
       );
       if (!rows.ok) return rows;
       return ok(rows.value.rows.map(toStoredMemory));
+    },
+
+    async derivativesRequiringManualDeletion(
+      id: string,
+    ): Promise<Result<readonly Derivative[]>> {
+      return derivatives.requiringManualDeletion(id);
+    },
+
+    async deleteForever(id: string): Promise<Result<boolean>> {
+      /* `RETURNING id` PLUTÔT QUE `rowCount`. On veut distinguer « j'ai effacé »
+         de « il n'y avait rien », et le second ne doit jamais s'annoncer comme
+         un oubli réussi : revendiquer un acte qui n'a pas eu lieu est la faute
+         que ce dépôt traque partout ailleurs. */
+      const supprime = await db.query<{ id: string }>(
+        'DELETE FROM memories WHERE id = $1 RETURNING id',
+        [id],
+      );
+      if (!supprime.ok) return supprime;
+      return ok(supprime.value.rows.length > 0);
     },
   };
 }

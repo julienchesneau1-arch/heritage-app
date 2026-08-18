@@ -45,7 +45,7 @@ elle n'est donc pas un dû.
 
 | Affirmation | Mesure |
 |---|---|
-| 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ `egress_review`, hors liste) |
+| 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ `egress_review` et **`memory_forget`**, hors liste — Phase 4 et Undo Engine) |
 | Model Router absent | aucun fichier de `src/` ne contient « router » |
 | Voix absente | aucun module STT/TTS/VAD |
 | Update Engine absent | aucun module canary/rollback/twin |
@@ -53,17 +53,17 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 76 %**
+## 2. Profondeur de preuve — **≈ 77 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
 | **Invariants de sécurité S1–S15** (`docs/03`) | **7 des 15** nommément référencés dans les tests | **47 %** |
-| **Tests dorés A·B·C** (`docs/05`) | **27 des 30** référencés, 3 déclarés bloqués | **90 %** |
+| **Tests dorés A·B·C** (`docs/05`) | **28 des 30** référencés, 2 déclarés bloqués | **93 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 76 %** |
+| **Moyenne** | | **≈ 77 %** |
 
 ### Le chiffre des invariants était FAUX, et dans le sens qui flatte
 
@@ -96,7 +96,7 @@ Deux réserves y sont chiffrées plutôt que fondues dans « tracé » :
 
 | | Ce que la preuve ne couvre pas |
 |---|---|
-| **S12** | la **capture** de quoi défaire est prouvée, pas l'**exécution** — cinq outils inverses déclarés, **zéro écrit** |
+| **S12** | la capture est prouvée ; l'**exécution** l'est désormais pour UN outil sur cinq — `memory_forget` (ADR-065). Restent `calendar_delete`, `note_delete`, `reminder_cancel`, `task_cancel` |
 | **S13** | le cloud est éteint **en dur** ; `cloud.enabled` n'a aucun effet. L'invariant dit que l'**utilisateur** peut l'éteindre |
 
 S13 est le motif « CostGate » une deuxième fois : **tenu par absence, pas par
@@ -123,7 +123,7 @@ creux :
 existe (ADR-041), donc le blocage n'a plus de motif, donc le test l'exige. Le
 compteur `couverts/bloqués` est passé de 23/7 à **24/6**, puis **25/5** avec
 `briefing_generate`, **26/4** avec `egress_review`, et **27/3** avec
-`web_search` (ADR-055).
+`web_search` (ADR-055), et **28/2** avec `memory_forget` — le droit à l'oubli, premier outil inverse écrit (ADR-065).
 
 **Et surtout, le lien est désormais MÉCANIQUE.**
 `tests/golden/contract.test.ts` lit `docs/05`, en extrait les identifiants, et
@@ -233,11 +233,11 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **64 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **65 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
-| 05 | Tests dorés | **27/30 référencés**, 3 bloqués déclarés — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |
+| 05 | Tests dorés | **28/30 référencés**, 2 bloqués déclarés — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |
 | 06 | Prompt maître | appliqué à chaque session |
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
 | 08·09·10·11 | Audits | faits, conclusions intégrées |
@@ -287,7 +287,7 @@ entier, et aucun ne renforce ce qui existe.
 
 ```text
 ÉTENDUE FONCTIONNELLE   ≈ 64 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 76 %     ce qu'on peut en démontrer
+PROFONDEUR DE PREUVE    ≈ 77 %     ce qu'on peut en démontrer
 ```
 
 > ⚠ **CETTE SECTION A CONTREDIT LE RESTE DU DOCUMENT.** Elle affichait encore

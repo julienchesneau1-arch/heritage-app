@@ -289,7 +289,7 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Cinq modules de logique hors circuit
+### 4.1 Quatre modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
@@ -300,7 +300,7 @@ jamais atteints par le produit**.
 | `context/packet.ts` · `resolver.ts` | **rien ne crée d'entité** — voir §4.12, la cause est plus profonde que « pas branché » | une capacité d'extraction d'entités, donc un modèle (Tier 1+) |
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
-| `tools/outcome.ts` | le Gateway n'a pas de notion de cible | dès qu'un outil multi-cibles existe |
+| ~~`tools/outcome.ts`~~ | **LEVÉE (ADR-065)** — `memory_forget` projette son statut sur la ligne mémoire ET chaque dérivé hors cascade ; une mémoire vit à plusieurs endroits, donc l'oubli est multi-cibles | — |
 
 **Ce compteur a une histoire, et elle vaut d'être lue :**
 
@@ -310,13 +310,16 @@ jamais atteints par le produit**.
 7   + privacy/classify.ts (F1) — classification branchée à rien, délibérément
 6   − privacy/classify.ts (F2) — le Policy Gate l'appelle
 5   − quarantine/processor.ts (ADR-055) — web_search ingère, le Gateway scelle
+4   − tools/outcome.ts (ADR-065) — memory_forget projette sur plusieurs cibles
 ```
 
 > **Le titre a dit « Cinq » pendant toute la période où il valait six.**
 > `wiring.test.ts` l'affirmait pourtant (`toHaveLength(6)`) ; ce document non.
 > Le test avait raison contre le registre — c'est l'ordre qu'on veut, mais
-> l'écart aurait dû être rattrapé le jour même. Il revient à cinq pour une
-> raison entièrement différente de celle qui l'y avait mis.
+> l'écart aurait dû être rattrapé le jour même. Il est revenu à cinq pour une
+> raison entièrement différente de celle qui l'y avait mis, puis à **quatre**
+> quand le droit à l'oubli a donné au modèle d'effet par cible le premier
+> appelant qu'il attendait depuis Foundation 4.
 
 **Conséquence à énoncer sans détour :** `PARTIAL` est spécifié (`docs/19`),
 implémenté et testé — et **aucune opération réelle ne peut aujourd'hui le
@@ -759,7 +762,7 @@ fournisseur, pas cru sur parole. C'est la même discipline que
 `PROVIDER_CONTRACT_VIOLATION` : un fournisseur qui ment sur lui-même est un
 problème de SOURCE, et il se constate.
 
-### 4.10 S12 — la capture existe, l'exécution du défaire n'existe pas
+### 4.10 S12 — la capture existe ; le défaire n'existe QUE pour un outil sur cinq
 
 **Trouvée en rendant `docs/03` mécanique (ADR-054).** L'invariant S12 dit « le
 rollback reste possible ». Mesure :
@@ -768,7 +771,7 @@ rollback reste possible ». Mesure :
 |---|---|
 | `src/core/undo/` | **un seul fichier** — `snapshots.ts`, la capture |
 | Outils inverses déclarés | `task_cancel` · `note_delete` · `memory_forget` · `calendar_delete` · `reminder_cancel` |
-| Outils inverses **écrits** | **zéro** |
+| Outils inverses **écrits** | **un** — `memory_forget` (ADR-065) |
 | Moteur qui rejoue une capture | **aucun** |
 
 L'invariant est donc vrai au sens des **données** — on sait quoi défaire, et
@@ -780,9 +783,27 @@ type que `docs/12` proscrit. « Le rollback est possible » lu par un humain
 signifie « je peux revenir en arrière », pas « la donnée nécessaire est
 conservée quelque part ».
 
-**Condition de levée :** le premier outil inverse écrit et éprouvé de bout en
-bout — capture, rejeu, vérification. La réserve est chiffrée dans
-`invariants-contract.test.ts` et ne peut plus disparaître silencieusement.
+**LEVÉE PARTIELLE — ADR-065.** `memory_forget` est écrit et éprouvé de bout en
+bout : suppression réelle, dérivés en cascade, événement `MEMORY_DELETED`,
+et l'interdit de `§C3` vérifié dans le journal **et** dans les instantanés.
+
+Il a fallu commencer par lui, et pas par commodité : `docs/05 §C3` est
+`CRITIQUE` quand les quatre autres sont du confort.
+
+> ⚠ **ET IL A RÉVÉLÉ UN DÉFAUT DE VOCABULAIRE DU VERIFICATION ENGINE.**
+> Tous les outils du dépôt réussissaient en faisant APPARAÎTRE quelque chose.
+> `confirmed()` codait donc `POSITIVE_PRESENCE` en dur, et la seule fabrique
+> rendant `POSITIVE_ABSENCE` était `failed()`. **Un outil dont le succès est
+> une absence ne pouvait pas annoncer son succès honnêtement.**
+
+**Ce qui reste :** quatre outils inverses non écrits — `calendar_delete`,
+`note_delete`, `reminder_cancel`, `task_cancel` — et **aucun moteur qui rejoue
+une capture**. `memory_forget` est `NOT_UNDOABLE` par construction : il ne
+démontre donc rien du rejeu, seulement de l'exécution du défaire.
+
+**Condition de levée complète :** un moteur qui reprend une capture
+`INVERSE_OPERATION` ou `STATE_RESTORE` et l'exécute. La réserve reste chiffrée
+dans `invariants-contract.test.ts`.
 
 ### 4.11 S13 — le cloud est éteint EN DUR, il n'y a pas d'interrupteur
 

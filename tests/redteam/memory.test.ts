@@ -194,19 +194,24 @@ describe.skipIf(skip)('RED TEAM — statut épistémique de la mémoire', () => 
   /* C. Cycle de vie                                                      */
   /* ------------------------------------------------------------------ */
 
-  it('DÉMONSTRATION — aucun outil ne permet d\'oublier, de corriger ou de lister', () => {
-    // `memory_add` déclare pourtant `rollback: "…via memory_forget"`. L'outil
-    // n'existe pas. Le droit à l'oubli (S14, 03 §12) n'est donc pas exerçable
-    // par la conversation — seulement en SQL.
+  it('OUBLIER est désormais exerçable ; CORRIGER et LISTER ne le sont pas', () => {
+    /* ⚠ CE TEST A CHANGÉ DE CAMP — ADR-065.
+       Il disait : « aucun outil ne permet d'oublier […] le droit à l'oubli
+       (S14, `03 §12`) n'est pas exerçable par la conversation — seulement en
+       SQL. » `memory_forget` existe : `docs/05 §C3` est servi.
+
+       Les deux autres manques restent, et restent nommés. Un test qui perd une
+       assertion en gagnant une capacité cesserait de surveiller ce qui manque
+       encore. */
     const ids = stack.gateway.list().map((t) => t.definition.id);
     expect(ids).toContain('memory_add');
     expect(ids).toContain('memory_search');
-    expect(ids).not.toContain('memory_forget');
+    expect(ids).toContain('memory_forget');
     expect(ids).not.toContain('memory_update');
     expect(ids).not.toContain('memory_list');
   });
 
-  it.fails('DÉFAUT — le rollback annoncé par memory_add doit être exécutable', () => {
+  it('le rollback annoncé par memory_add est exécutable', () => {
     const tool = stack.gateway.list().find((t) => t.definition.id === 'memory_add');
     if (tool === undefined) throw new Error('memory_add absent');
     const rollback = tool.definition.rollback ?? '';

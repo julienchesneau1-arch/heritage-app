@@ -98,11 +98,6 @@ const BLOQUES: Readonly<Record<string, Blocage>> = {
     // Le registre des outils ne doit mentionner aucun email, sous aucune forme.
     absentDuRegistre: 'email',
   },
-  C3: {
-    motif:
-      "memory_forget non écrit — il n'existe qu'en tant qu'outil inverse déclaré (src/tools/memory.ts) ; Undo Engine",
-    absentDuRegistre: 'memoryForget',
-  },
 };
 
 /** Tous les sources de `src/`, pour vérifier ce que le PRODUIT fait vraiment. */
@@ -240,7 +235,9 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
        fichier porte désormais la mesure. A9 a quitté cette liste le jour où
        `audit_query` a existé — c'est exactement le mouvement qu'on attend
        d'une dette datée. A7 l'a quittée à son tour avec `briefing_generate`,
-       C4 avec `egress_review`, puis **B4 avec `web_search`** (ADR-055).
+       C4 avec `egress_review`, puis **B4 avec `web_search`** (ADR-055), puis
+       **C3 avec `memory_forget`** (ADR-065) — le droit à l'oubli, premier
+       outil inverse écrit sur les cinq déclarés.
 
        ⚠ CES DEUX LIGNES NE LISENT QUE LA TABLE, et il faut le dire ici plutôt
          que de laisser croire le contraire : c'est le test au-dessus — « chaque
@@ -252,8 +249,8 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
        adversariale ligne C2 ») ; il y entre désormais par seize tests
        d'arrêt d'urgence. Même nombre, autre vérité — la démonstration qu'un
        compteur ne vaut que par la règle de reconnaissance qui l'alimente. */
-    expect(couverts).toBe(27);
-    expect(bloques).toBe(3);
+    expect(couverts).toBe(28);
+    expect(bloques).toBe(2);
     expect(bloques / ids.length).toBeLessThan(0.25);
   });
 

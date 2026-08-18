@@ -61,8 +61,24 @@ export type TargetOutcome = z.infer<typeof TargetOutcome>;
  */
 export function projectStatus(
   targets: readonly TargetOutcome[],
+  /**
+   * QUELLE OBSERVATION PROUVE LE SUCCÈS — ADR-065.
+   *
+   * La projection codait « succès = la chose est là ». Vrai d'un envoi, FAUX
+   * d'un effacement : `memory_forget` réussit quand la mémoire n'est **plus**
+   * là. Sans ce paramètre, une suppression parfaitement vérifiée se projetait
+   * en `UNKNOWN` — l'engine n'avait aucun moyen d'annoncer honnêtement un
+   * succès subtractif.
+   *
+   * L'axe est unique et il bascule les DEUX bornes : la preuve d'échec est
+   * toujours l'observation contraire. Par défaut, le comportement d'origine.
+   */
+  successEvidence: 'POSITIVE_PRESENCE' | 'POSITIVE_ABSENCE' = 'POSITIVE_PRESENCE',
 ): VerificationStatus {
   if (targets.length === 0) return 'NOT_ATTEMPTED';
+
+  const failureEvidence =
+    successEvidence === 'POSITIVE_PRESENCE' ? 'POSITIVE_ABSENCE' : 'POSITIVE_PRESENCE';
 
   const count = (status: VerificationStatus): number =>
     targets.filter((t) => t.status === status).length;
@@ -82,9 +98,9 @@ export function projectStatus(
     targets.filter((t) => t.status === status && t.evidence === required).length;
 
   const total = targets.length;
-  const confirmed = proven('CONFIRMED', 'POSITIVE_PRESENCE');
-  const notAttempted = proven('NOT_ATTEMPTED', 'POSITIVE_ABSENCE');
-  const failed = proven('FAILED', 'POSITIVE_ABSENCE');
+  const confirmed = proven('CONFIRMED', successEvidence);
+  const notAttempted = proven('NOT_ATTEMPTED', failureEvidence);
+  const failed = proven('FAILED', failureEvidence);
   const probable = count('PROBABLE');
 
   // 1. Rien n'a été tenté nulle part.
@@ -136,8 +152,12 @@ export function resumableTargets(
  * Miroir par cible de `mayClaimSuccess`. Séparé pour que le jour où l'un des
  * deux change, la divergence saute aux yeux au lieu de s'installer.
  */
-export function mayClaimTargetSuccess(outcome: TargetOutcome): boolean {
-  return outcome.status === 'CONFIRMED' && outcome.evidence === 'POSITIVE_PRESENCE';
+export function mayClaimTargetSuccess(
+  outcome: TargetOutcome,
+  /** Même axe que `projectStatus` : pour un effacement, la preuve est l'absence. */
+  successEvidence: 'POSITIVE_PRESENCE' | 'POSITIVE_ABSENCE' = 'POSITIVE_PRESENCE',
+): boolean {
+  return outcome.status === 'CONFIRMED' && outcome.evidence === successEvidence;
 }
 
 /** Résumé lisible d'un résultat partiel, destiné à l'utilisateur. */

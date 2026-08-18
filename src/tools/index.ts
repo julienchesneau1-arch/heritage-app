@@ -14,7 +14,7 @@ import type { MemoryStore } from '../core/memory/store.js';
 import type { HybridSearch } from '../core/memory/search.js';
 import type { CalendarProvider, SearchProvider } from '../providers/contract.js';
 import { ok, type Result } from '../core/types/result.js';
-import { memoryAddTool, memorySearchTool } from './memory.js';
+import { memoryAddTool, memoryForgetTool, memorySearchTool } from './memory.js';
 import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
 import { noteCreateTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
@@ -85,6 +85,7 @@ export function registerCoreTools(
 ): Result<void> {
   const tools = [
     memoryAddTool(deps.guard, deps.store, deps.isUserConfirmed),
+    memoryForgetTool(deps.store),
     memorySearchTool(deps.search),
     taskCreateTool(),
     taskListTool(),
@@ -140,6 +141,7 @@ export function registerCoreTools(
 
 export {
   memoryAddTool,
+  memoryForgetTool,
   memorySearchTool,
   taskCreateTool,
   taskListTool,
