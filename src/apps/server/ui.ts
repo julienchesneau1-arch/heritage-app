@@ -324,8 +324,12 @@ ${tablesDeStatut()}
                        : "⚠ CHAÎNE D'AUDIT ROMPUE");
       } else if (cmd === '/inbox') {
         const r = await api('/api/inbox');
-        renderReport('En attente de ta confirmation :',
-          r.candidates.map(c => c.content + '  (' + c.memoryType + ', ' + c.sourceType + ')'));
+        // La troncature se dit ici AUSSI (ADR-064) : deux surfaces, une seule
+        // vérité. Une liste écourtée en silence se lit comme une liste entière.
+        const lignes = r.candidates.map(c => c.content + '  (' + c.memoryType + ', ' + c.sourceType + ')');
+        const reste = r.total - r.candidates.length;
+        if (reste > 0) lignes.push('… et ' + reste + ' autre(s) (' + r.total + ' en attente au total).');
+        renderReport('En attente de ta confirmation :', lignes);
       } else if (cmd === '/diagnostic') {
         const r = await api('/api/diagnostic');
         renderReport('Diagnostic :', [

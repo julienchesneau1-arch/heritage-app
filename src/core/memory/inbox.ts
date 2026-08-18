@@ -88,6 +88,18 @@ export interface MemoryInbox {
   /** Dépose un candidat. Idempotent : une observation répétée n'en crée qu'un. */
   enqueue(proposal: CandidateProposal): Promise<Result<MemoryCandidate>>;
   pending(limit?: number): Promise<Result<readonly MemoryCandidate[]>>;
+  /**
+   * COMBIEN il y en a — pas combien on en a lu. ADR-064.
+   *
+   * `diagnosticReport` répondait « combien de candidats en attente ? » par
+   * `pending(1000).length`. Au-delà de mille, il aurait répondu « 1000 » sans
+   * le dire : un plafond de lecture rendu comme un décompte.
+   *
+   * Le compte se fait donc en SQL, où il ne dépend d'aucune limite de lignes.
+   * Même geste que `Ledger.dayTally` — on ne signale pas la troncature, on la
+   * rend impossible.
+   */
+  pendingCount(): Promise<Result<number>>;
   get(id: string): Promise<Result<MemoryCandidate | null>>;
   /** Marque un candidat confirmé et le relie à la mémoire créée. */
   confirm(id: string, memoryId: string): Promise<Result<void>>;
@@ -167,6 +179,23 @@ export function createMemoryInbox(db: Db): MemoryInbox {
       );
       if (!rows.ok) return rows;
       return ok(rows.value.rows.map(toCandidate));
+    },
+
+    async pendingCount(): Promise<Result<number>> {
+      /* MÊME PRÉDICAT QUE `pending`, MOT POUR MOT — `state = 'PENDING'` et
+         `expires_at > now()`. Deux définitions de « en attente » finiraient par
+         diverger, et le jour où elles divergent aucune ne fait autorité
+         (ADR-041) : la liste montrerait des candidats que le compte ignore. */
+      const rows = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM memory_candidates
+          WHERE state = 'PENDING' AND expires_at > now()`,
+      );
+      if (!rows.ok) return rows;
+      const ligne = rows.value.rows[0];
+      if (ligne === undefined) {
+        return err(jarvisError('INTERNAL', 'Décompte sans ligne rendue'));
+      }
+      return ok(Number(ligne.n));
     },
 
     async get(id: string): Promise<Result<MemoryCandidate | null>> {

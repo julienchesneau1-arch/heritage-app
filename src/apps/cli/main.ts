@@ -164,6 +164,18 @@ async function showInbox(runtime: Runtime): Promise<void> {
         `confiance ${candidate.confidence.toFixed(2)}\n`,
     );
   }
+
+  /* LA TRONCATURE SE DIT (ADR-064). La liste s'arrête à vingt ; sans cette
+     ligne, vingt candidats affichés sur cinquante se lisent comme cinquante.
+     Le correctif ne vaut que s'il arrive jusqu'à l'œil — la leçon d'ADR-063,
+     où le pipeline avait été réparé et l'affichage oublié. */
+  const restants = report.value.total - report.value.candidates.length;
+  if (restants > 0) {
+    stdout.write(
+      `\n    … et ${String(restants)} autre${restants > 1 ? 's' : ''} ` +
+        `(${String(report.value.total)} en attente au total).\n`,
+    );
+  }
 }
 
 async function showDiagnostic(runtime: Runtime): Promise<void> {

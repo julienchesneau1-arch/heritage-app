@@ -424,6 +424,22 @@ Quatre tests, trois sabotages qui rougissent chacun un test distinct.
 antidatait un événement avec le rôle applicatif. L'`UPDATE` a été **refusé** —
 la barrière d'immuabilité du journal a fait son travail sur mon propre test.
 
+**Et les deux voisins portaient la même famille.** Cette fois je les ai
+regardés plutôt que de les déclarer inoffensifs :
+
+| | Défaut | Gravité |
+|---|---|---|
+| `diagnosticReport` | `pending(1000).length` — un **compte** plafonné à mille | un compte ne se plafonne jamais |
+| `inboxReport` | vingt candidats affichés sur N, sans dire N | tronquer une **liste** est légitime ; ne pas le dire ne l'est pas |
+
+`MemoryInbox.pendingCount()` compte en SQL, avec **le prédicat de `pending`
+mot pour mot** — deux définitions de « en attente » finiraient par diverger, et
+la liste montrerait alors des candidats que le compte ignore.
+
+Le reste va **jusqu'à l'œil** : CLI et passerelle web disent tous deux
+« … et N autre(s) ». C'est la leçon d'ADR-063, où le pipeline avait été réparé
+et l'affichage oublié.
+
 ### 4.3 Couverture globale — 83,89 % des lignes
 
 > ⚠ **MESURE DATÉE, ET C'EST UN CHOIX ASSUMÉ.** Contrairement aux autres

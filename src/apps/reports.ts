@@ -75,11 +75,20 @@ export interface InboxEntry {
 
 export interface InboxReport {
   readonly candidates: readonly InboxEntry[];
+  /**
+   * COMBIEN il y en a en tout — pas combien cette liste en montre.
+   *
+   * Tronquer une LISTE est légitime ; ne pas le dire ne l'est pas. Sans ce
+   * total, vingt candidats affichés sur cinquante se lisent comme cinquante.
+   */
+  readonly total: number;
 }
 
 export async function inboxReport(runtime: Runtime): Promise<Result<InboxReport>> {
   const pending = await runtime.inbox.pending();
   if (!pending.ok) return pending;
+  const total = await runtime.inbox.pendingCount();
+  if (!total.ok) return total;
   return ok({
     candidates: pending.value.map((c) => ({
       content: c.content,
@@ -87,6 +96,7 @@ export async function inboxReport(runtime: Runtime): Promise<Result<InboxReport>
       sourceType: c.sourceType,
       confidence: c.suggestedConfidence,
     })),
+    total: total.value,
   });
 }
 
@@ -105,7 +115,10 @@ export async function diagnosticReport(
 ): Promise<Result<DiagnosticReport>> {
   const chain = await runtime.ledger.verifyChain();
   if (!chain.ok) return chain;
-  const pending = await runtime.inbox.pending(1000);
+  /* UN DÉCOMPTE, PAS UNE LECTURE PLAFONNÉE. C'était `pending(1000).length` :
+     au-delà de mille candidats, le diagnostic aurait répondu « 1000 » sans le
+     dire. Un plafond de lecture rendu comme un compte. */
+  const pending = await runtime.inbox.pendingCount();
   if (!pending.ok) return pending;
 
   return ok({
@@ -113,7 +126,7 @@ export async function diagnosticReport(
     tools: runtime.gateway.list().length,
     chainValid: chain.value.valid,
     chainLength: chain.value.checked,
-    pending: pending.value.length,
+    pending: pending.value,
     embeddings: runtime.embeddingsAvailable,
     cloud: runtime.cloudEnabled,
   });

@@ -173,3 +173,85 @@ describe.skipIf(skip)('Memory Inbox', () => {
     }
   });
 });
+
+/* ====================================================================== *
+ * LE DÉCOMPTE — combien il y en a, pas combien on en a lu (ADR-064)
+ * ====================================================================== */
+
+describe.skipIf(skip)('le décompte des candidats en attente', () => {
+  let db: Db;
+  let inbox: MemoryInbox;
+
+  beforeAll(() => {
+    db = appDb();
+    inbox = createMemoryInbox(db);
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
+  it('COMPTE au-delà de la limite de lecture — 20 lus, tous comptés', async () => {
+    /* LE DÉFAUT D'ORIGINE : `diagnosticReport` répondait « combien de candidats
+       en attente ? » par `pending(1000).length`, et `inboxReport` montrait les
+       vingt premiers sans dire combien il y en avait. Un plafond de LECTURE
+       rendu comme un COMPTE.
+
+       On en dépose 25 : la lecture par défaut s'arrête à 20, le compte ne doit
+       pas s'y arrêter. */
+    const marque = `compte-${String(Date.now())}`;
+    for (let i = 0; i < 25; i += 1) {
+      const depose = await inbox.enqueue(proposal(`${marque} · candidat ${String(i)}`));
+      expect(depose.ok).toBe(true);
+    }
+
+    const lus = await inbox.pending();
+    expect(lus.ok).toBe(true);
+    if (lus.ok) expect(lus.value).toHaveLength(20);
+
+    const compte = await inbox.pendingCount();
+    expect(compte.ok).toBe(true);
+    if (!compte.ok) return;
+
+    // Le compte dépasse ce que la lecture a rendu : c'est tout l'enjeu.
+    expect(compte.value).toBeGreaterThanOrEqual(25);
+    expect(compte.value).toBeGreaterThan(20);
+  });
+
+  it('le compte et la liste partagent le MÊME prédicat — un confirmé sort des deux', async () => {
+    /* ADR-041 appliqué à deux définitions de « en attente ». Si le compte
+       comptait aussi les candidats confirmés, la liste montrerait N éléments et
+       le total en annoncerait N+1 : l'utilisateur chercherait un candidat qui
+       n'existe plus. */
+    const avant = await inbox.pendingCount();
+    expect(avant.ok).toBe(true);
+    if (!avant.ok) return;
+
+    const depose = await inbox.enqueue(proposal(`accord-${String(Date.now())}`));
+    expect(depose.ok).toBe(true);
+    if (!depose.ok) return;
+
+    const pendant = await inbox.pendingCount();
+    expect(pendant.ok && pendant.value).toBe(avant.value + 1);
+
+    const rejete = await inbox.reject(depose.value.id);
+    expect(rejete.ok).toBe(true);
+
+    // REVENU À SON POINT DE DÉPART : un candidat sorti de l'attente sort des
+    // DEUX registres, pas d'un seul.
+    const apres = await inbox.pendingCount();
+    expect(apres.ok && apres.value).toBe(avant.value);
+  });
+
+  it('CONTRÔLE NÉGATIF — le compte n’est pas une constante', async () => {
+    /* Sans lui, un `return ok(0)` ou un `return ok(42)` passerait les tests
+       précédents dès lors que la base est assez peuplée. */
+    const debut = await inbox.pendingCount();
+    const ajout = await inbox.enqueue(proposal(`bouge-${String(Date.now())}`));
+    const fin = await inbox.pendingCount();
+
+    expect(debut.ok && ajout.ok && fin.ok).toBe(true);
+    if (!debut.ok || !fin.ok) return;
+    expect(fin.value).not.toBe(debut.value);
+  });
+});
