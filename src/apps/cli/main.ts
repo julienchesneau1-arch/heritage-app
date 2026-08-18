@@ -25,8 +25,7 @@ import type { AssistantReply } from '../../core/assistant.js';
 import {
   announce,
   confirmationPrompt,
-  isAffirmative,
-  isNegative,
+  readConfirmation,
   mark,
 } from './report.js';
 
@@ -249,11 +248,15 @@ async function handleText(
   if (reply.kind === 'CONFIRM') {
     const answer = await ask(confirmationPrompt(reply.reason, reply.values));
 
-    if (isNegative(answer)) {
+    /* UNE SEULE LECTURE, TROIS ISSUES — et deux d'entre elles ne font rien.
+       La décision vit dans `report.ts` et y est éprouvée : elle n'a plus à
+       être reconstituée ici par une chaîne de `if` que rien ne traverse. */
+    const lecture = readConfirmation(answer);
+    if (lecture === 'REFUSE') {
       stdout.write('  Annulé. Rien n\'a été fait.\n');
       return;
     }
-    if (!isAffirmative(answer)) {
+    if (lecture === 'UNCLEAR') {
       // PRD §135 : une réponse ambiguë n'est pas une confirmation.
       stdout.write('  Je n\'ai pas compris comme un oui. Rien n\'a été fait.\n');
       return;

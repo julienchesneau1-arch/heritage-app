@@ -289,15 +289,39 @@ la protection ne vaut donc que pour ce qu'il rapporte.
 Ce n'est pas un défaut : c'est une capacité **déclarée non disponible**. Elle
 serait un défaut le jour où quelqu'un croirait qu'elle protège.
 
-### 4.2 Le CLI n'est exercé par aucun test
+### 4.2 Le CLI n'est exercé par aucun test — et il portait une décision de SÛRETÉ
 
 `src/apps/cli/main.ts` — **0 % de couverture, 240 lignes**. C'est la surface
 produit réelle. Aucun test ne la traverse.
 
-Ce que ça ne remet PAS en cause : le CLI n'exécute aucune action en propre, il
-appelle l'Assistant — donc le même Policy Gate, le même Memory Guard, le même
-journal, tous couverts. Le risque porte sur l'**ergonomie et le rendu**, pas
-sur la sûreté.
+> ⚠ **CE PARAGRAPHE SE RASSURAIT À TORT, ET LA CORRECTION EST LA SIXIÈME DE
+> CETTE FAMILLE.** Il disait : « le CLI n'exécute aucune action en propre […]
+> le risque porte sur l'**ergonomie et le rendu**, pas sur la sûreté. »
+
+**Faux.** Le CLI lisait le consentement de l'utilisateur sur une action `L3` /
+`L4` — deux prédicats et une chaîne de `if` au milieu du rendu. C'est la
+DERNIÈRE décision de la chaîne, et la seule qu'aucun Policy Gate ne rattrape :
+le Gate a déjà rendu son verdict, il a dit « demande à l'humain ».
+
+Mesuré :
+
+```text
+isNegative → return false     → 744 tests verts
+ancrage ^…$ retiré            → « oui mais non » lu comme un OUI
+```
+
+Le premier est bénin — le défaut fermé rattrape. **Le second exécute une action
+`L4` que personne n'a confirmée.**
+
+**Corrigé** (ADR-061) : la décision est sortie du shell. `readConfirmation`
+rend `CONFIRM` / `REFUSE` / `UNCLEAR` — trois issues parce que `PRD §135` dit
+que *le doute n'est pas une confirmation*, et qu'un booléen forcerait à ranger
+« peut-être » d'un côté. Huit tests, deux sabotages qui rougissent.
+
+**Ce qui reste vrai :** la BOUCLE du CLI — affichage, lecture d'entrée,
+commandes — n'est toujours traversée par aucun test. Mais ce n'est plus « de
+l'ergonomie » par défaut : c'est ce qui reste **après** avoir sorti la seule
+décision de sûreté qui s'y trouvait.
 
 **Condition :** à couvrir avant toute promesse de disponibilité produit.
 

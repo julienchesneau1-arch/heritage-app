@@ -4121,3 +4121,81 @@ Si un jour la reconnaissance d'entités arrive par un chemin non prévu — un
 outil qui crée explicitement une entité sur demande de l'utilisateur, sans
 modèle — alors A2 se débloquerait sans Tier 1, et cette ADR devrait être
 reprise.
+
+---
+
+## ADR-061 — Lire un consentement est une décision de sûreté, pas de l'affichage
+
+**Statut :** accepté (`docs/26 §4.2`, `PRD §135`).
+**Référence :** ADR-004, ADR-059, `docs/03 §3`, `tests/unit/consentement.test.ts`.
+
+### La question que je me suis posée
+
+Cinq sprints à corriger des affirmations fausses. L'étendue est passée de 64 %
+à 65 % puis retour à 64 %. Le produit n'a gagné aucune capacité depuis
+`web_search` et l'arrêt d'urgence, pendant que la machinerie de preuve
+grossissait.
+
+> Ai-je commencé à optimiser l'appareil de mesure plutôt que la chose mesurée ?
+
+Reformulé autrement : **744 tests prouvent le moteur, zéro prouve le volant.**
+Le CLI est la seule chose qu'un humain touche, et `docs/26 §4.2` le laissait à
+0 % avec une phrase rassurante.
+
+### La phrase rassurante était fausse
+
+> le CLI n'exécute aucune action en propre […] le risque porte sur
+> l'**ergonomie et le rendu**, pas sur la sûreté.
+
+`src/apps/cli/report.ts` porte `isAffirmative` et `isNegative` : elles décident
+si l'utilisateur a **consenti** à une action `L3` / `L4`.
+
+C'est la dernière décision de la chaîne, et la seule qu'aucun Policy Gate ne
+rattrape — le Gate a déjà rendu son verdict, il a dit « demande à l'humain ».
+Ce qui suit est le seul juge.
+
+### Mesuré avant d'être corrigé
+
+```text
+isNegative → return false     → 744 tests verts
+ancrage ^…$ retiré            → « oui mais non » lu comme un OUI
+```
+
+Le premier sabotage est bénin : le défaut fermé rattrape, l'utilisateur voit
+« je n'ai pas compris » au lieu d'« annulé ». **Le second exécute une action
+`L4` que personne n'a confirmée.**
+
+### La décision
+
+Sortir la décision du shell, plutôt que d'ajouter des tests autour d'elle :
+
+```ts
+export type ConfirmationReading = 'CONFIRM' | 'REFUSE' | 'UNCLEAR';
+export function readConfirmation(answer: string): ConfirmationReading
+```
+
+**Trois issues, pas deux.** `PRD §135` : *le doute n'est pas une confirmation*.
+Un booléen forcerait à ranger « peut-être » d'un côté ou de l'autre ; trois
+issues laissent l'ambiguïté exister avec sa propre réponse — et sa propre
+phrase à l'écran.
+
+Le refus est lu **en premier**. Les deux listes sont disjointes aujourd'hui,
+donc l'ordre n'est pas observable — et le test le dit plutôt que de le
+maquiller. Ce qui est éprouvé, c'est la **disjonction** : le jour où quelqu'un
+ajoute un mot des deux côtés, ce test rougit et l'oblige à trancher l'ordre.
+
+### Ce que cette ADR ne prétend pas
+
+La boucle du CLI reste non traversée : affichage, lecture d'entrée, commandes.
+Ce qui est sorti de l'ombre, c'est la **décision** — elle vit dans une fonction
+pure et éprouvée plutôt que dans une chaîne de `if` au milieu du rendu.
+
+`docs/26 §4.2` garde donc sa condition (« à couvrir avant toute promesse de
+disponibilité produit »), mais sans la phrase qui la minimisait.
+
+### Condition de révision
+
+Si la passerelle web venait à lire un consentement en texte libre — elle prend
+aujourd'hui un booléen typé, donc elle n'en lit pas — elle devrait passer par
+la même fonction. Deux lectures du consentement finiraient par diverger, et le
+jour où elles divergent, aucune ne fait autorité (ADR-041).

@@ -121,8 +121,41 @@ export function confirmationPrompt(
   return lines.join('\n');
 }
 
+/* ====================================================================== *
+ * LA LECTURE DU CONSENTEMENT — le dernier pouce de « le système décide »
+ * ====================================================================== */
+
+/**
+ * Ce que la réponse de l'utilisateur veut dire, et rien d'autre.
+ *
+ * POURQUOI UNE DÉCISION NOMMÉE PLUTÔT QUE DEUX BOOLÉENS
+ * ------------------------------------------------------
+ * Cette lecture était deux prédicats consommés par une chaîne de `if` dans la
+ * boucle du CLI — c'est-à-dire une décision de sûreté vivant dans la couche
+ * d'affichage, la seule du dépôt qu'aucun test ne traverse.
+ *
+ * Mesuré : remplacer `isNegative` par `return false` laissait **744 tests
+ * verts**. Retirer l'ancrage `^…$` d'`isAffirmative` faisait lire « oui mais
+ * non » comme un OUI, et rien ne l'aurait dit.
+ *
+ * `docs/26 §4.2` se rassurait ainsi : « le CLI n'exécute rien en propre, le
+ * risque porte sur l'ergonomie et le rendu, pas sur la sûreté ». **C'était
+ * faux.** Lire le consentement d'un humain sur une action L3/L4 est une
+ * décision de sûreté — la dernière de la chaîne, et celle qu'aucun Policy Gate
+ * ne rattrape : le Gate a déjà dit « demande à l'utilisateur ».
+ *
+ * TROIS ISSUES, PAS DEUX — ET C'EST LE POINT
+ * -------------------------------------------
+ * `PRD §135` : *le doute n'est pas une confirmation.* Un booléen forcerait à
+ * ranger « peut-être » d'un côté ou de l'autre. Trois issues laissent
+ * l'ambiguïté exister, avec sa propre réponse.
+ */
+export type ConfirmationReading = 'CONFIRM' | 'REFUSE' | 'UNCLEAR';
+
 /** Une réponse vaut-elle confirmation ? Le doute n'en est pas une (PRD §135). */
 export function isAffirmative(answer: string): boolean {
+  /* ANCRÉ AUX DEUX BOUTS, ET C'EST LA MOITIÉ DE LA GARANTIE. Sans `^…$`,
+     « oui mais non » et « surtout pas ok » seraient des confirmations. */
   return /^(o|oui|ok|d'accord|daccord|vas-y|confirme|y|yes)$/iu.test(
     answer.trim(),
   );
@@ -130,4 +163,17 @@ export function isAffirmative(answer: string): boolean {
 
 export function isNegative(answer: string): boolean {
   return /^(n|non|annule|stop|no)$/iu.test(answer.trim());
+}
+
+/**
+ * LA décision, en un seul endroit.
+ *
+ * Le refus est testé EN PREMIER, délibérément : si les deux listes venaient un
+ * jour à se recouvrir par accident, l'ordre décide, et il doit décider dans le
+ * sens qui ne fait rien.
+ */
+export function readConfirmation(answer: string): ConfirmationReading {
+  if (isNegative(answer)) return 'REFUSE';
+  if (isAffirmative(answer)) return 'CONFIRM';
+  return 'UNCLEAR';
 }
