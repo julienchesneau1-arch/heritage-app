@@ -45,7 +45,7 @@ elle n'est donc pas un dû.
 
 | Affirmation | Mesure |
 |---|---|
-| 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ `egress_review` et **`memory_forget`**, hors liste — Phase 4 et Undo Engine) |
+| 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ 5 hors liste : `egress_review` en Phase 4, et **`memory_forget`, `note_delete`, `task_cancel`, `reminder_cancel`** avec l'Undo Engine) |
 | Model Router absent | aucun fichier de `src/` ne contient « router » |
 | Voix absente | aucun module STT/TTS/VAD |
 | Update Engine absent | aucun module canary/rollback/twin |
@@ -101,7 +101,7 @@ Deux réserves y sont chiffrées plutôt que fondues dans « tracé » :
 
 | | Ce que la preuve ne couvre pas |
 |---|---|
-| **S12** | la capture ET l'exécution du défaire sont prouvées (ADR-066) — mais pour UN outil inverse sur cinq, et **aucun mécanisme ne rejoue un `STATE_RESTORE`** |
+| **S12** | capture et exécution du défaire prouvées pour **quatre outils inverses sur cinq** (ADR-066/067) ; restent `calendar_delete` — seul effet externe — et **aucun mécanisme ne rejoue un `STATE_RESTORE`** |
 | **S13** | le cloud est éteint **en dur** ; `cloud.enabled` n'a aucun effet. L'invariant dit que l'**utilisateur** peut l'éteindre |
 
 S13 est le motif « CostGate » une deuxième fois : **tenu par absence, pas par
@@ -238,7 +238,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **66 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **67 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |

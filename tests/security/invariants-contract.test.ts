@@ -116,9 +116,9 @@ interface Trace {
  */
 const RESERVES: Readonly<Record<string, string>> = {
   S12:
-    'la capture est prouvée, et l’exécution du défaire l’est désormais pour UN ' +
-    'outil inverse sur cinq (`memory_forget`, ADR-065/066) ; quatre restent non ' +
-    'écrits, et aucun mécanisme ne rejoue une capture STATE_RESTORE',
+    'capture et exécution du défaire prouvées pour QUATRE outils inverses sur ' +
+    'cinq (ADR-065/066/067) ; `calendar_delete` reste non écrit — seul effet ' +
+    'externe — et aucun mécanisme ne rejoue une capture STATE_RESTORE',
   S13:
     'le cloud est éteint EN DUR : `cloud.enabled` n’a aucun effet, l’invariant ' +
     'dit pourtant que l’UTILISATEUR peut l’éteindre',

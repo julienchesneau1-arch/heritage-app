@@ -156,18 +156,30 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
   });
 
   it('le nombre d’OUTILS annoncé est le nombre d’outils enregistrés', () => {
-    /* `docs/02` en liste quinze. DEUX outils sont arrivés hors de cette liste :
-       `egress_review` en Phase 4, et `memory_forget` avec l'Undo Engine
-       (ADR-065). Le total du dépôt est donc dix-sept, et `docs/28` doit dire
-       les deux sans les confondre — gonfler « 15 sur 15 » à chaque outil hors
-       liste ferait mentir la mesure de la Phase 3. */
+    /* `docs/02` en liste quinze pour la Phase 3. D'autres outils sont arrivés
+       HORS de cette liste, et leur nombre grandit — d'où un ensemble NOMMÉ
+       plutôt qu'une soustraction magique.
+
+       Gonfler « 15 sur 15 » à chaque outil hors liste ferait mentir la mesure
+       de la Phase 3 ; le cacher derrière `- 5` rendrait la prochaine addition
+       indolore. Chaque exception se déclare donc ici, avec sa raison. */
+    const HORS_LISTE = new Set([
+      'egress_review', // Phase 4 — console d'égression (C4)
+      'memory_forget', // Undo Engine — ADR-065
+      'note_delete', // Undo Engine — ADR-067
+      'task_cancel', // Undo Engine — ADR-067
+      'reminder_cancel', // Undo Engine — ADR-067
+    ]);
+
     const outils = outilsEnregistres();
     const publie = nombre(AVANCEMENT, /\*\*(\d+) outils sur 15\*\*/);
     expect(publie, 'ligne outils introuvable dans docs/28').not.toBeNull();
-    expect(publie).toBe(outils.length - 2); // −2 : `egress_review` et `memory_forget`
-    expect(outils).toContain('egress_review');
-    expect(outils).toContain('memory_forget');
-    expect(outils.length).toBe(17);
+
+    for (const hors of HORS_LISTE) expect(outils, hors).toContain(hors);
+    const dePhase3 = outils.filter((id) => !HORS_LISTE.has(id));
+    expect(publie).toBe(dePhase3.length);
+    expect(dePhase3.length).toBe(15);
+    expect(outils.length).toBe(15 + HORS_LISTE.size);
   });
 
   it('les chiffres des SCÉNARIOS DORÉS collent au document et au test', () => {

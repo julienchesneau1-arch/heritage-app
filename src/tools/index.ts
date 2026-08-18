@@ -15,12 +15,12 @@ import type { HybridSearch } from '../core/memory/search.js';
 import type { CalendarProvider, SearchProvider } from '../providers/contract.js';
 import { ok, type Result } from '../core/types/result.js';
 import { memoryAddTool, memoryForgetTool, memorySearchTool } from './memory.js';
-import { taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
-import { noteCreateTool } from './notes.js';
+import { taskCancelTool, taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
+import { noteCreateTool, noteDeleteTool } from './notes.js';
 import { createAuditQueryTool } from './audit.js';
 import { fileSearchTool } from './files.js';
 import { briefingGenerateTool } from './briefing.js';
-import { reminderCreateTool } from './reminders.js';
+import { reminderCancelTool, reminderCreateTool } from './reminders.js';
 import { systemStatusTool } from './status.js';
 import { egressReviewTool } from './egress.js';
 import { webSearchTool } from './web.js';
@@ -88,12 +88,14 @@ export function registerCoreTools(
     memoryForgetTool(deps.store),
     memorySearchTool(deps.search),
     taskCreateTool(),
+    taskCancelTool(),
     taskListTool(),
     /* Phase 3, point 1 de `docs/02`. Premier outil qui MODIFIE une ligne :
        la capture d'annulation y devient une restauration, pas une
        suppression — ADR-042. */
     taskCompleteTool(),
     noteCreateTool(),
+    noteDeleteTool(),
     /* Premier outil de Phase 3, et celui qui tient la promesse de `docs/12` :
        le journal devient interrogeable par un humain. Il ne dépend d'aucune
        autre dépendance — il lit `event_ledger` par le contexte d'outil. */
@@ -119,6 +121,7 @@ export function registerCoreTools(
     /* Phase 3, point 8. Rien ne sonne dans ce dépôt : le rappel se présente
        dans le briefing, et l'outil le DIT (ADR-048). */
     reminderCreateTool(),
+    reminderCancelTool(),
     /* Phase 3, point 9 — le dernier des dix accessibles. Un état qui ne peut
        pas dire « ça ne va pas » ne dit rien quand ça va (ADR-049). */
     systemStatusTool(deps.ledger),
@@ -144,15 +147,18 @@ export {
   memoryForgetTool,
   memorySearchTool,
   taskCreateTool,
+  taskCancelTool,
   taskListTool,
   taskCompleteTool,
   noteCreateTool,
+  noteDeleteTool,
   calendarReadTool,
   calendarCreateTool,
   calendarUpdateTool,
   fileSearchTool,
   briefingGenerateTool,
   reminderCreateTool,
+  reminderCancelTool,
   systemStatusTool,
   egressReviewTool,
   webSearchTool,

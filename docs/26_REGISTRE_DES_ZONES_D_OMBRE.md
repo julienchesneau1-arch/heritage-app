@@ -762,7 +762,7 @@ fournisseur, pas cru sur parole. C'est la même discipline que
 `PROVIDER_CONTRACT_VIOLATION` : un fournisseur qui ment sur lui-même est un
 problème de SOURCE, et il se constate.
 
-### 4.10 S12 — le défaire EXISTE, pour un outil inverse sur cinq
+### 4.10 S12 — le défaire EXISTE, pour quatre outils inverses sur cinq
 
 **Trouvée en rendant `docs/03` mécanique (ADR-054).** L'invariant S12 dit « le
 rollback reste possible ». Mesure :
@@ -771,7 +771,7 @@ rollback reste possible ». Mesure :
 |---|---|
 | `src/core/undo/` | **un seul fichier** — `snapshots.ts`, la capture |
 | Outils inverses déclarés | `task_cancel` · `note_delete` · `memory_forget` · `calendar_delete` · `reminder_cancel` |
-| Outils inverses **écrits** | **un** — `memory_forget` (ADR-065) |
+| Outils inverses **écrits** | **quatre** — `memory_forget` (ADR-065), `note_delete` · `task_cancel` · `reminder_cancel` (ADR-067) |
 | Moteur qui rejoue une capture | **`src/core/undo/engine.ts`** (ADR-066) — rejoue par le Tool Gateway, jamais en écrivant lui-même |
 
 L'invariant est donc vrai au sens des **données** — on sait quoi défaire, et
@@ -809,14 +809,13 @@ consentement, il transmet celui de son appelant.
 
 | | |
 |---|---|
-| Outils inverses non écrits | `calendar_delete` · `note_delete` · `reminder_cancel` · `task_cancel` |
-| `STATE_RESTORE` | **refusé en nommant ce qui manque** — réappliquer les valeurs antérieures exigerait un outil de restauration par type de ressource ; aucun n'existe |
+| Outil inverse non écrit | **`calendar_delete`** — le seul dont l'effet est EXTERNE. Sa vérification ne peut pas s'appuyer sur PostgreSQL : la fenêtre d'observation ne se ferme pas de la même façon, `PROBABLE` y devient un verdict possible. Il mérite sa propre passe |
+| `STATE_RESTORE` | **refusé en nommant ce qui manque** — réappliquer les valeurs antérieures exigerait un outil de restauration par type de ressource ; aucun n'existe. `task_cancel` et `reminder_cancel` capturent pourtant l'état antérieur : ne pas le faire rendrait la restauration DÉFINITIVEMENT impossible le jour où l'outil existera |
 
 Le refus est délibéré : restaurer « directement, puisqu'on a les données »
 serait un second chemin d'écriture hors politique et hors journal.
 
-**Condition de levée complète :** un outil de restauration d'état, et les quatre
-outils inverses manquants. La réserve reste chiffrée dans
+**Condition de levée complète :** un outil de restauration d'état, et `calendar_delete`. La réserve reste chiffrée dans
 `invariants-contract.test.ts` — et elle a survécu au passage de S12 de « tracé »
 à « nommé », ce qui est précisément le piège qu'ADR-066 a fermé.
 

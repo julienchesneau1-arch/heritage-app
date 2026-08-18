@@ -403,3 +403,151 @@ export function taskCompleteTool(): RegisteredTool {
     },
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* task_cancel — l'inverse déclaré de `task_create`                           */
+/* -------------------------------------------------------------------------- */
+
+const TaskCancelInput = z.object({
+  taskId: z.uuid(),
+});
+
+/**
+ * ANNULER UNE TÂCHE — troisième outil inverse écrit. ADR-067.
+ *
+ * `task_create` annonce `rollback: 'Passer la tâche à CANCELLED via
+ * task_cancel.'` depuis le premier jour, et l'outil n'existait pas.
+ *
+ * ANNULER N'EST PAS SUPPRIMER — ET LE NIVEAU LE DIT
+ * ---------------------------------------------------------------------------
+ * `L2`, comme `task_create` et `task_complete`, alors que `note_delete` est
+ * `L4`. Ce n'est pas une indulgence : la ligne SURVIT, le titre aussi, seul
+ * l'état change. Rien n'est perdu, donc rien n'est irréversible — la condition
+ * qui déclenche `L4` dans `docs/03` n'est pas remplie.
+ *
+ * LE REFUS SUR UNE TÂCHE DÉJÀ TERMINÉE
+ * -------------------------------------
+ * Miroir exact de `task_complete`, qui refuse une tâche `CANCELLED` parce que
+ * *« la terminer effacerait cette décision »*. La symétrie n'est pas
+ * esthétique : dans les deux sens, on refuse d'écraser une décision de
+ * l'utilisateur dans le seul état qu'il consulte.
+ */
+export function taskCancelTool(): RegisteredTool {
+  return defineTool({
+    definition: {
+      id: 'task_cancel',
+      version: '1.0.0',
+      description: 'Annuler une tâche — la ligne est conservée.',
+      autonomy: 'L2',
+      privacyClass: 'ORANGE',
+      dataCategory: 'TASK',
+      reversible: true,
+      networkRequired: false,
+      parameters: [{ name: 'taskId', sensitive: false }],
+      /* `OPERATION_KEY` pour la raison qu'a établie `task_complete` : une
+         mutation n'est jamais « naturellement » idempotente tant qu'elle traîne
+         un effet de bord — ici la CAPTURE — qui, lui, ne l'est pas. */
+      idempotency: 'OPERATION_KEY',
+      verification: 'READ_BACK',
+      timeoutMs: 5000,
+      maxRetries: 1,
+      auditEvent: 'TASK_CANCELLED',
+      requiredSecrets: [],
+      rollback: "Restaurer l'état antérieur CAPTURÉ (STATE_RESTORE) — jamais un état supposé.",
+      attemptVerification: 'NONE',
+      effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
+    },
+    inputSchema: TaskCancelInput,
+
+    async execute(input, ctx): Promise<Result<ToolExecution>> {
+      /* LA MUTATION ET LA CAPTURE SONT LA MÊME INSTRUCTION — `docs/26 §3`.
+         `FROM tasks AS prior` lit l'instantané pris au DÉBUT de la commande. Un
+         `SELECT` puis un `UPDATE` ouvriraient entre les deux une fenêtre où
+         l'état peut changer, et la capture décrirait alors un passé qui n'a
+         jamais existé. */
+      const updated = await ctx.db.query<CompletedRow>(
+        `UPDATE tasks AS t
+            SET state = 'CANCELLED', updated_at = now()
+           FROM tasks AS prior
+          WHERE t.id = $1
+            AND prior.id = t.id
+            AND prior.state <> 'DONE'
+        RETURNING t.id, t.title, t.state, prior.state AS prior_state`,
+        [input.taskId],
+      );
+      if (!updated.ok) return updated;
+
+      const row = updated.value.rows[0];
+      if (row === undefined) {
+        const state = await ctx.db.query<{ state: string }>(
+          'SELECT state FROM tasks WHERE id = $1',
+          [input.taskId],
+        );
+        if (!state.ok) return state;
+        const found = state.value.rows[0];
+        if (found === undefined) {
+          return err(jarvisError('NOT_FOUND', `Tâche ${input.taskId} introuvable.`));
+        }
+        return err(
+          jarvisError(
+            'CONFLICT',
+            `Tâche ${input.taskId} déjà terminée : l'annuler effacerait cette décision.`,
+          ),
+        );
+      }
+
+      return ok({
+        output: { taskId: row.id, title: row.title, state: row.state },
+        resource: { kind: 'task', id: row.id },
+        /* L'ÉTAT ANTÉRIEUR EST CAPTURÉ MÊME SI RIEN NE SAIT ENCORE LE REJOUER.
+           L'Undo Engine refuse aujourd'hui `STATE_RESTORE` en nommant ce qui
+           manque (ADR-066). Ne rien capturer « puisque c'est inutilisable »
+           rendrait la restauration définitivement impossible le jour où l'outil
+           existera : une action exécutée sans capture ne se rattrape pas. */
+        undo: { kind: 'STATE_RESTORE', priorState: { state: row.prior_state } },
+      });
+    },
+
+    async readBack(execution, ctx): Promise<Result<VerificationOutcome>> {
+      if (execution.resource === undefined) {
+        return ok(
+          verificationOutcome.unknown('Aucune ressource à relire.', 'NO_OBSERVATION'),
+        );
+      }
+      const found = await ctx.db.query<{ id: string; title: string; state: string }>(
+        'SELECT id, title, state FROM tasks WHERE id = $1',
+        [execution.resource.id],
+      );
+      if (!found.ok) return found;
+
+      const row = found.value.rows[0];
+      if (row === undefined) {
+        return ok(
+          verificationOutcome.failed({
+            observed: `Tâche ${execution.resource.id} introuvable après annulation.`,
+            conclusiveBecause:
+              'lecture transactionnelle après commit, aucun effet différé possible',
+          }),
+        );
+      }
+      if (row.state !== 'CANCELLED') {
+        /* L'ÉTAT LU N'EST PAS CELUI ATTENDU. On ne conclut pas à l'échec : la
+           ligne existe, quelqu'un d'autre a pu la faire évoluer entre-temps.
+           `UNKNOWN` est la lecture honnête d'un état qu'on n'explique pas. */
+        return ok(
+          verificationOutcome.unknown(
+            `Tâche ${row.id} relue à l'état ${row.state}, attendu CANCELLED.`,
+            'EXTERNAL_STATE',
+          ),
+        );
+      }
+      return ok(
+        verificationOutcome.confirmed({
+          observed: `tâche « ${row.title} » relue à l'état ${row.state}`,
+        }),
+      );
+    },
+  });
+}

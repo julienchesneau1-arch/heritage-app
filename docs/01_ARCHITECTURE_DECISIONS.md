@@ -4677,3 +4677,90 @@ Le jour où un outil de restauration par type de ressource existe,
 être laissé en place « au cas où ». Et si un appelant frappe un jour une clé
 d'annulation par `mint()`, le double défaire revient sans qu'aucune garde
 applicative ne le voie.
+
+---
+
+## ADR-067 — Annuler n'est pas supprimer, et le niveau d'autonomie le dit
+
+**Statut :** accepté (invariant S12, `docs/03` échelle L0–L4).
+**Référence :** ADR-019, ADR-042, ADR-065, ADR-066, `src/tools/notes.ts`,
+`src/tools/tasks.ts`, `src/tools/reminders.ts`.
+
+### Une promesse en prose, tenue
+
+Trois outils créateurs annonçaient leur défaire dans une chaîne de caractères,
+depuis le premier jour :
+
+```text
+note_create      → « Supprimer la note via note_delete. »
+task_create      → « Passer la tâche à CANCELLED via task_cancel. »
+reminder_create  → « Passer le rappel à CANCELLED via reminder_cancel. »
+```
+
+Aucun n'existait. C'est la famille de défaut que `docs/26 §2` recense sept
+fois — **une affirmation que rien ne relie au réel** — et ADR-066 venait de
+donner un moteur capable de les appeler.
+
+### La distinction que ces trois outils forcent à trancher
+
+`note_delete` **efface** : la ligne part, le contenu avec. `task_cancel` et
+`reminder_cancel` **changent un état** : la ligne survit, le titre aussi.
+
+| | Geste | Autonomie | Capture |
+|---|---|---|---|
+| `note_delete` | la ligne part | **L4** — `docs/03` : *suppression, irréversible* | `NOT_UNDOABLE` |
+| `task_cancel` | `state = CANCELLED` | **L2** | `STATE_RESTORE` |
+| `reminder_cancel` | `state = CANCELLED` | **L2** | `STATE_RESTORE` |
+
+Ce n'est pas un détail de classement : **le niveau d'autonomie est l'endroit où
+la différence de gravité se paie**, en confirmation humaine. Un `task_cancel`
+en `L4` userait la cérémonie ; un `note_delete` en `L2` effacerait sans
+demander.
+
+Le test correspondant vérifie les trois ensemble, précisément pour qu'ils ne se
+ressemblent pas là où ils ne doivent pas.
+
+### La capture est prise même si rien ne sait la rejouer
+
+`task_cancel` et `reminder_cancel` capturent `STATE_RESTORE`. L'Undo Engine
+refuse aujourd'hui de rejouer ce type (ADR-066) — aucun outil de restauration
+n'existe.
+
+Ne rien capturer « puisque c'est inutilisable » rendrait la restauration
+**définitivement** impossible le jour où l'outil existera. C'est la thèse
+d'origine de `snapshots.ts` : *une action exécutée sans capture est
+définitivement non annulable, chaque jour d'usage sans capture produit des
+actions irréversibles par construction.*
+
+### Les refus symétriques
+
+`task_complete` refuse une tâche `CANCELLED` — *« la terminer effacerait cette
+décision »*. `task_cancel` refuse donc une tâche `DONE`, et `reminder_cancel`
+un rappel `DONE`.
+
+> Sans la symétrie, l'ORDRE des gestes déciderait de ce qui survit.
+
+### Le compteur d'outils hors liste devient un ensemble NOMMÉ
+
+`docs/02` liste quinze outils pour la Phase 3. Cinq existent désormais hors de
+cette liste. Le test de cohérence les énumère avec leur raison, au lieu de
+soustraire un nombre.
+
+> Gonfler « 15 sur 15 » ferait mentir la mesure de la Phase 3 ; cacher les
+> exceptions derrière `- 5` rendrait la prochaine addition indolore.
+
+### Ce qui reste, et pourquoi il n'est pas ici
+
+`calendar_delete` est le cinquième inverse déclaré, et le seul dont l'effet est
+**externe**. Sa vérification ne peut pas s'appuyer sur PostgreSQL : la fenêtre
+d'observation ne se ferme pas de la même façon, `PROBABLE` y devient un verdict
+possible, et le contrat d'effet n'est pas `LOCAL_TRANSACTIONAL`. Il mérite sa
+propre passe plutôt que d'être expédié avec trois outils locaux.
+
+### Condition de révision
+
+Le `L4` de `note_delete` suit `docs/03` à la lettre. **Le risque est nommé
+plutôt que masqué :** à trop classer `L4`, la confirmation forte devient un
+réflexe et cesse de protéger ce qui compte — un paiement. Si le pack finit par
+distinguer les suppressions par enjeu, cette décision est la première à
+rouvrir.

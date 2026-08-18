@@ -190,3 +190,132 @@ export function reminderCreateTool(): RegisteredTool {
     },
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* reminder_cancel — l'inverse déclaré de `reminder_create`                   */
+/* -------------------------------------------------------------------------- */
+
+const ReminderCancelInput = z.object({
+  reminderId: z.uuid(),
+});
+
+interface CancelledReminderRow extends ReminderRow {
+  prior_state: string;
+}
+
+/**
+ * ANNULER UN RAPPEL — quatrième outil inverse écrit. ADR-067.
+ *
+ * Même geste que `task_cancel`, et même arbitrage : la ligne survit, le texte
+ * et l'échéance aussi. `L2`, parce que rien n'est perdu.
+ *
+ * LE REFUS SUR UN RAPPEL DÉJÀ HONORÉ
+ * -----------------------------------
+ * Un rappel `DONE` a été délivré : l'annuler après coup effacerait la trace
+ * d'un événement qui a bel et bien eu lieu, dans le seul état que
+ * l'utilisateur consulte. On refuse, comme `task_cancel` refuse une tâche
+ * terminée.
+ */
+export function reminderCancelTool(): RegisteredTool {
+  return defineTool({
+    definition: {
+      id: 'reminder_cancel',
+      version: '1.0.0',
+      description: 'Annuler un rappel — la ligne est conservée.',
+      autonomy: 'L2',
+      privacyClass: 'ORANGE',
+      dataCategory: 'TASK',
+      reversible: true,
+      networkRequired: false,
+      parameters: [{ name: 'reminderId', sensitive: false }],
+      idempotency: 'OPERATION_KEY',
+      verification: 'READ_BACK',
+      timeoutMs: 5_000,
+      maxRetries: 1,
+      auditEvent: 'REMINDER_CANCELLED',
+      requiredSecrets: [],
+      rollback: "Restaurer l'état antérieur CAPTURÉ (STATE_RESTORE) — jamais un état supposé.",
+      attemptVerification: 'NONE',
+      effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
+    },
+    inputSchema: ReminderCancelInput,
+
+    async execute(input, ctx): Promise<Result<ToolExecution>> {
+      // Mutation et capture dans la MÊME instruction (`docs/26 §3`).
+      const updated = await ctx.db.query<CancelledReminderRow>(
+        `UPDATE reminders AS r
+            SET state = 'CANCELLED'
+           FROM reminders AS prior
+          WHERE r.id = $1
+            AND prior.id = r.id
+            AND prior.state <> 'DONE'
+        RETURNING r.id, r.text, r.remind_at, r.state, prior.state AS prior_state`,
+        [input.reminderId],
+      );
+      if (!updated.ok) return updated;
+
+      const row = updated.value.rows[0];
+      if (row === undefined) {
+        const state = await ctx.db.query<{ state: string }>(
+          'SELECT state FROM reminders WHERE id = $1',
+          [input.reminderId],
+        );
+        if (!state.ok) return state;
+        if (state.value.rows[0] === undefined) {
+          return err(jarvisError('NOT_FOUND', `Rappel ${input.reminderId} introuvable.`));
+        }
+        return err(
+          jarvisError(
+            'CONFLICT',
+            `Rappel ${input.reminderId} déjà honoré : l'annuler effacerait cette trace.`,
+          ),
+        );
+      }
+
+      return ok({
+        output: { reminderId: row.id, text: row.text, state: row.state },
+        resource: { kind: 'reminder', id: row.id },
+        undo: { kind: 'STATE_RESTORE', priorState: { state: row.prior_state } },
+      });
+    },
+
+    async readBack(execution, ctx): Promise<Result<VerificationOutcome>> {
+      if (execution.resource === undefined) {
+        return ok(
+          verificationOutcome.unknown('Aucune ressource à relire.', 'NO_OBSERVATION'),
+        );
+      }
+      const found = await ctx.db.query<ReminderRow>(
+        'SELECT id, text, remind_at, state FROM reminders WHERE id = $1',
+        [execution.resource.id],
+      );
+      if (!found.ok) return found;
+
+      const row = found.value.rows[0];
+      if (row === undefined) {
+        return ok(
+          verificationOutcome.failed({
+            observed: `Rappel ${execution.resource.id} introuvable après annulation.`,
+            conclusiveBecause:
+              'lecture transactionnelle après commit, aucun effet différé possible',
+          }),
+        );
+      }
+      if (row.state !== 'CANCELLED') {
+        return ok(
+          verificationOutcome.unknown(
+            `Rappel ${row.id} relu à l'état ${row.state}, attendu CANCELLED.`,
+            'EXTERNAL_STATE',
+          ),
+        );
+      }
+      return ok(
+        verificationOutcome.confirmed({
+          observed: `rappel « ${row.text} » relu à l'état ${row.state}`,
+        }),
+      );
+    },
+  });
+}

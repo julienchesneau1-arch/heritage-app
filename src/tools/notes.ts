@@ -135,3 +135,123 @@ export function noteCreateTool(): RegisteredTool {
     },
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* note_delete — l'inverse déclaré de `note_create`                           */
+/* -------------------------------------------------------------------------- */
+
+const NoteDeleteInput = z.object({
+  noteId: z.uuid(),
+});
+
+/**
+ * SUPPRIMER UNE NOTE — deuxième outil inverse écrit. ADR-067.
+ *
+ * `note_create` annonce `rollback: 'Supprimer la note via note_delete.'` depuis
+ * le premier jour. L'outil n'existait pas : l'annulation d'une note était une
+ * phrase, pas une capacité.
+ *
+ * POURQUOI `L4` ALORS QUE `note_create` EST `L2`
+ * ---------------------------------------------------------------------------
+ * `docs/03` ne laisse pas le choix : `L4` = *« Paiement, **suppression**,
+ * données sensibles, **irréversible** »*. Une note supprimée ne revient pas.
+ *
+ * **Et c'est une asymétrie voulue avec `task_cancel` et `reminder_cancel`,
+ * restés `L2`** : ceux-là font passer un état à `CANCELLED`, la ligne survit,
+ * le contenu aussi. *Annuler n'est pas supprimer* — les deux mots désignent
+ * ici deux gestes de gravité différente, et le niveau d'autonomie est l'endroit
+ * où la différence se paie.
+ *
+ * > ⚠ Le risque de ce choix est nommé plutôt que masqué : à trop classer `L4`,
+ * > la confirmation forte devient un réflexe et cesse de protéger ce qui
+ * > compte. Condition de révision dans ADR-067.
+ */
+export function noteDeleteTool(): RegisteredTool {
+  return defineTool({
+    definition: {
+      id: 'note_delete',
+      version: '1.0.0',
+      description: 'Supprimer définitivement une note.',
+      autonomy: 'L4',
+      privacyClass: 'ORANGE',
+      dataCategory: 'PERSONAL_MEMORY',
+      reversible: false,
+      networkRequired: false,
+      parameters: [{ name: 'noteId', sensitive: true }],
+      idempotency: 'OPERATION_KEY',
+      verification: 'READ_BACK',
+      timeoutMs: 5000,
+      maxRetries: 1,
+      auditEvent: 'NOTE_DELETED',
+      requiredSecrets: [],
+      // Rien ne défait une suppression. Annoncer un rollback inexistant
+      // promettrait une réversibilité que `reversible: false` nie déjà.
+      rollback: null,
+      attemptVerification: 'NONE',
+      effect: 'LOCAL_TRANSACTIONAL',
+      verifiability: 'VERIFIABLE',
+      outputProvenance: 'TOOL_OUTPUT',
+    },
+    inputSchema: NoteDeleteInput,
+
+    async execute(input, ctx): Promise<Result<ToolExecution>> {
+      /* `RETURNING id` PLUTÔT QUE `rowCount` — même raison que `memory_forget`
+         (ADR-065) : il faut distinguer « j'ai supprimé » de « il n'y avait
+         rien », et le second ne doit jamais s'annoncer comme un succès. */
+      const supprime = await ctx.db.query<{ id: string }>(
+        'DELETE FROM notes WHERE id = $1 RETURNING id',
+        [input.noteId],
+      );
+      if (!supprime.ok) return supprime;
+
+      return ok({
+        output: {
+          noteId: input.noteId,
+          existait: supprime.value.rows.length > 0,
+        },
+        resource: { kind: 'note', id: input.noteId },
+        // Voir `memory_forget` : la capture existe et ne garde rien. Recopier
+        // le contenu ici reviendrait à ne pas supprimer.
+        undo: { kind: 'NOT_UNDOABLE' },
+      });
+    },
+
+    async readBack(execution, ctx): Promise<Result<VerificationOutcome>> {
+      const sortie = execution.output as { noteId: string; existait: boolean };
+
+      if (!sortie.existait) {
+        return ok(
+          verificationOutcome.notAttempted(
+            `Aucune note ${sortie.noteId} : il n'y avait rien à supprimer.`,
+          ),
+        );
+      }
+
+      const reste = await ctx.db.query<{ id: string }>(
+        'SELECT id FROM notes WHERE id = $1',
+        [sortie.noteId],
+      );
+      if (!reste.ok) return reste;
+
+      if (reste.value.rows.length > 0) {
+        return ok(
+          verificationOutcome.failed({
+            observed: `La note ${sortie.noteId} est TOUJOURS présente après suppression.`,
+            conclusiveBecause:
+              'lecture transactionnelle après commit, aucun effet différé possible',
+          }),
+        );
+      }
+
+      /* `erased` ET NON `confirmed` : ici le succès EST une absence, et la
+         preuve qui l'établit est `POSITIVE_ABSENCE` (ADR-065). */
+      return ok(
+        verificationOutcome.erased({
+          observed: `note ${sortie.noteId} absente`,
+          conclusiveBecause:
+            'lecture transactionnelle après commit, aucun effet différé possible',
+        }),
+      );
+    },
+  });
+}
