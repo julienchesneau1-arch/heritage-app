@@ -29,29 +29,30 @@ export interface AuditReport {
   readonly brokenAt?: string;
 }
 
+/**
+ * « Qu'as-tu fait aujourd'hui ? » — et la réponse est COMPLÈTE. ADR-064.
+ *
+ * ⚠ CE RAPPORT ÉTAIT LE SECOND REGISTRE D'UN FAIT QUI EN AVAIT DÉJÀ UN.
+ * L'outil `audit_query` répond à la même question en bornant par
+ * `date_trunc('day', clock_timestamp())`. Ce rapport-ci, lui, lisait
+ * `recent(200)` puis filtrait sur `new Date()`. Les deux ne pouvaient pas
+ * s'accorder — et c'est CELUI-CI que le CLI et la passerelle web affichent.
+ * **Le bon était celui que personne ne voyait.**
+ *
+ * ADR-041 l'avait écrit : *le jour où deux registres du même fait divergent,
+ * aucun ne fait autorité.* Il n'y en a plus qu'un.
+ */
 export async function auditReport(runtime: Runtime): Promise<Result<AuditReport>> {
-  const recent = await runtime.ledger.recent(200);
-  if (!recent.ok) return recent;
-
-  const day = new Date().toISOString().slice(0, 10);
-  const today = recent.value.filter((e) => e.occurredAt.startsWith(day));
-
-  const counts = new Map<string, AuditEntry>();
-  for (const event of today) {
-    const key = `${event.eventType}${event.status}`;
-    const existing = counts.get(key);
-    counts.set(
-      key,
-      existing === undefined
-        ? { type: event.eventType, status: event.status, count: 1 }
-        : { ...existing, count: existing.count + 1 },
-    );
-  }
+  const tally = await runtime.ledger.dayTally();
+  if (!tally.ok) return tally;
 
   const chain = await runtime.ledger.verifyChain();
-  const events = [...counts.values()].sort((a, b) =>
-    `${a.type}${a.status}`.localeCompare(`${b.type}${b.status}`),
-  );
+  const events: AuditEntry[] = tally.value.entries.map((e) => ({
+    type: e.eventType,
+    status: e.status,
+    count: e.count,
+  }));
+  const day = tally.value.day;
 
   if (!chain.ok) return chain;
   const broken = chain.value.valid ? undefined : (chain.value.brokenAt?.reason ?? 'inconnu');

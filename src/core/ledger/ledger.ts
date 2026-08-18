@@ -99,10 +99,49 @@ export interface ChainReport {
   readonly brokenAt?: { readonly eventId: string; readonly reason: string };
 }
 
+/** Une ligne du décompte de la journée : combien de fois ce couple est survenu. */
+export interface DayTallyEntry {
+  readonly eventType: string;
+  readonly status: string;
+  readonly count: number;
+}
+
+export interface DayTally {
+  /** Le jour tel que LA BASE le voit, `YYYY-MM-DD`. */
+  readonly day: string;
+  readonly entries: readonly DayTallyEntry[];
+  /** Le total, indépendant du détail — il ne peut pas être tronqué. */
+  readonly total: number;
+}
+
 export interface Ledger {
   append(event: unknown): Promise<Result<SealedEvent>>;
   verifyChain(): Promise<Result<ChainReport>>;
   recent(limit?: number): Promise<Result<readonly SealedEvent[]>>;
+  /**
+   * Ce qui s'est passé AUJOURD'HUI — agrégé par la base, jamais par le
+   * processus.
+   *
+   * POURQUOI CETTE MÉTHODE EXISTE — ADR-064
+   * ----------------------------------------
+   * `auditReport` répondait à « qu'as-tu fait aujourd'hui ? » en lisant
+   * `recent(200)` puis en filtrant sur `new Date().toISOString().slice(0,10)`.
+   * Deux défauts dans une seule ligne :
+   *
+   * **La fenêtre était calculée par le PROCESSUS.** C'est exactement ce
+   * qu'ADR-036 et ADR-037 ont tranché : un appelant dont l'horloge dérive voit
+   * « aujourd'hui » ailleurs qu'aujourd'hui. L'outil `audit_query` bornait déjà
+   * par `date_trunc('day', clock_timestamp())` ; le rapport de l'application,
+   * lui, ne l'avait jamais fait.
+   *
+   * **Le décompte était SILENCIEUSEMENT plafonné à 200.** Au-delà, la réponse
+   * omettait des événements sans le dire. Un audit incomplet qui se présente
+   * comme complet est pire qu'un audit absent : il rassure.
+   *
+   * L'agrégation est faite en SQL, donc le total ne dépend d'aucune limite de
+   * lignes. On ne signale pas une troncature — on la rend impossible.
+   */
+  dayTally(): Promise<Result<DayTally>>;
   /**
    * L'événement qui porte l'ISSUE d'une opération — le DERNIER, pas le premier.
    *
@@ -247,6 +286,57 @@ export function createLedger(db: Db): Ledger {
       }
 
       return ok({ valid: true, checked });
+    },
+
+    async dayTally(): Promise<Result<DayTally>> {
+      /* TOUT EST CALCULÉ ICI : la borne du jour, le regroupement, le total.
+         Rien ne remonte en JavaScript qui puisse dériver d'une horloge ou
+         d'une limite de lignes. `to_char` rend le jour tel que la base le
+         voit — c'est cette date-là qui fait autorité dans la réponse. */
+      const rows = await db.query<{
+        day: string;
+        event_type: string;
+        status: string;
+        count: string;
+      }>(
+        `SELECT to_char(date_trunc('day', clock_timestamp()), 'YYYY-MM-DD') AS day,
+                event_type, status, count(*)::text AS count
+           FROM event_ledger
+          WHERE occurred_at >= date_trunc('day', clock_timestamp())
+            AND occurred_at <  date_trunc('day', clock_timestamp()) + interval '1 day'
+          GROUP BY event_type, status
+          ORDER BY event_type, status`,
+      );
+      if (!rows.ok) return rows;
+
+      const entries = rows.value.rows.map((r) => ({
+        eventType: r.event_type,
+        status: r.status,
+        count: Number(r.count),
+      }));
+
+      /* Le jour vient de la base même quand il n'y a AUCUN événement : sans
+         lui, une journée vide obligerait à le recalculer en JavaScript, et le
+         défaut reviendrait par la porte du cas limite. */
+      const dayRow = rows.value.rows[0];
+      let day = dayRow?.day;
+      if (day === undefined) {
+        const seul = await db.query<{ day: string }>(
+          `SELECT to_char(date_trunc('day', clock_timestamp()), 'YYYY-MM-DD') AS day`,
+        );
+        if (!seul.ok) return seul;
+        const ligne = seul.value.rows[0];
+        if (ligne === undefined) {
+          return err(jarvisError('INTERNAL', 'La base n’a pas rendu sa date du jour'));
+        }
+        day = ligne.day;
+      }
+
+      return ok({
+        day,
+        entries,
+        total: entries.reduce((acc, e) => acc + e.count, 0),
+      });
     },
 
     async recent(limit = 50): Promise<Result<readonly SealedEvent[]>> {

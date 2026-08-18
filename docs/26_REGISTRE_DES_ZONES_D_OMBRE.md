@@ -381,6 +381,49 @@ elle se joue.
 
 **Condition :** à couvrir avant toute promesse de disponibilité produit.
 
+### 4.2 bis L'audit du jour était incomplet — et j'avais écrit qu'il ne l'était pas
+
+> ⚠ **CETTE ENTRÉE CORRIGE UNE AFFIRMATION DE CE REGISTRE, ÉCRITE PAR MOI.**
+> À l'itération précédente, j'ai conclu le balayage « quels exports de
+> `src/apps/` ne sont cités par aucun test ? » ainsi : *« les huit restants ne
+> portent aucune décision de sûreté — des constantes, du balisage statique. »*
+>
+> À la question suivante, j'ai **relancé le balayage** plutôt que de citer ma
+> propre conclusion. `src/apps/reports.ts` est apparu, avec trois exports que
+> la première passe n'avait pas listés. L'affirmation était fausse.
+
+**Une conclusion qu'on recopie est une mesure qui a cessé d'en être une.** C'est
+la septième occurrence de la famille recensée en §2 — un chiffre ou une
+affirmation en prose que plus rien ne relie au réel — et la première dont
+l'auteur soit le registre lui-même.
+
+`auditReport` répond à « qu'as-tu fait aujourd'hui ? » (`docs/05 §A9`). Il
+lisait `recent(200)` puis filtrait sur `new Date().toISOString().slice(0, 10)` :
+
+| Défaut | Conséquence |
+|---|---|
+| Borne du jour calculée par le **processus** | ADR-036/037 disent l'inverse : une horloge qui dérive montre le mauvais jour |
+| Plafond **silencieux** à 200 événements | au-delà, la réponse en omettait **sans le dire** |
+
+Le second est le plus grave, et pas pour la donnée perdue : un audit est la
+contrepartie de l'autonomie. **Un audit incomplet qui se présente comme complet
+ne coûte pas une information — il rassure.**
+
+**Et il existait déjà une bonne réponse.** L'outil `audit_query` borne par
+`date_trunc('day', clock_timestamp())` depuis son écriture. Deux registres du
+même fait (ADR-041), avec une aggravation que la formule n'avait pas prévue :
+le registre JUSTE était celui que personne n'affichait, le registre FAUX était
+la surface produit. *Un doublon n'est pas symétrique : celui qu'on voit gagne,
+quel que soit celui qui a raison.*
+
+**Corrigé** (ADR-064) : `Ledger.dayTally()` agrège en SQL — borne, regroupement
+et total. La troncature n'est pas signalée, elle est rendue **impossible**.
+Quatre tests, trois sabotages qui rougissent chacun un test distinct.
+
+**Ce que le dépôt m'a appris en écrivant le test :** la première version
+antidatait un événement avec le rôle applicatif. L'`UPDATE` a été **refusé** —
+la barrière d'immuabilité du journal a fait son travail sur mon propre test.
+
 ### 4.3 Couverture globale — 83,89 % des lignes
 
 > ⚠ **MESURE DATÉE, ET C'EST UN CHOIX ASSUMÉ.** Contrairement aux autres

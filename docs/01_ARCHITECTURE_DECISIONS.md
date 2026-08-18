@@ -4369,3 +4369,94 @@ Si `error.details` devait un jour porter d'autres familles de données —
 diagnostics, suggestions — chacune aurait son préfixe, jamais une exception
 dans le filtre. Le jour où l'on écrit `key !== …` ici, la liste noire est
 revenue.
+
+---
+
+## ADR-064 — L'audit du jour est complet, et sa borne appartient à la base
+
+**Statut :** accepté (`docs/05 §A9`).
+**Référence :** ADR-036, ADR-037, ADR-041, `src/core/ledger/ledger.ts`,
+`src/apps/reports.ts`.
+
+### Comment c'est arrivé — en re-mesurant, pas en se souvenant
+
+Une itération plus tôt, j'avais conclu le balayage « quels exports de
+`src/apps/` ne sont cités par aucun test ? » ainsi : *« les huit restants ne
+portent aucune décision de sûreté — des constantes, du balisage statique. »*
+
+À la question suivante, j'ai relancé le balayage plutôt que de citer ma propre
+conclusion. `src/apps/reports.ts` est apparu, avec trois exports que la
+première passe n'avait pas listés.
+
+> **L'affirmation était fausse**, et elle était de moi. Une conclusion qu'on
+> recopie est une mesure qui a cessé d'en être une.
+
+### Les deux défauts
+
+`auditReport` répond à « qu'as-tu fait aujourd'hui ? ». Il lisait
+`recent(200)`, puis filtrait par `new Date().toISOString().slice(0, 10)`.
+
+| | |
+|---|---|
+| **Fenêtre au mauvais poignet** | la borne du jour venait du **processus**. ADR-036 et ADR-037 ont tranché l'inverse : un appelant dont l'horloge dérive voit « aujourd'hui » ailleurs qu'aujourd'hui |
+| **Plafond silencieux à 200** | au-delà, la réponse omettait des événements **sans le dire**. Le journal enregistre chaque opération d'outil et chaque décision de politique : deux cents, c'est une journée ordinaire |
+
+Le second est le plus grave, et pas pour la donnée perdue. Un audit est la
+contrepartie de l'autonomie : c'est par lui que l'utilisateur peut prendre
+Jarvis en défaut. **Un audit incomplet qui se présente comme complet ne coûte
+pas une information — il rassure.**
+
+### Ce que cette trouvaille apprend de plus qu'un bug
+
+Il existait **déjà** une bonne réponse. L'outil `audit_query`
+(`src/tools/audit.ts`) borne par `date_trunc('day', clock_timestamp())` depuis
+son écriture. Deux registres du même fait, ce qu'ADR-041 interdit — avec une
+aggravation que la formule d'ADR-041 n'avait pas prévue :
+
+> Le registre JUSTE était celui que personne n'affichait. Le registre FAUX
+> était la surface produit — CLI **et** passerelle web appellent `auditReport`.
+
+Un doublon n'est pas symétrique. Celui qu'on voit gagne, quel que soit celui
+qui a raison.
+
+### La décision
+
+Une méthode `Ledger.dayTally()`, et un seul chemin pour tout le monde.
+L'agrégation est faite **en SQL** : la borne, le regroupement et le total.
+
+**On ne signale pas la troncature — on la rend impossible.** Un `count(*)` ne
+dépend d'aucune limite de lignes. Rendre `truncated: true` aurait été honnête
+et aurait laissé au lecteur une réponse partielle à interpréter ; l'agrégation
+en base n'a rien à interpréter.
+
+### Le cas limite qui ramenait le défaut par la porte de derrière
+
+Une agrégation sans ligne ne rend **aucune** ligne — donc aucune date. La
+tentation est de retomber sur `new Date()` là, et seulement là : le défaut ne
+se serait vu qu'un jour sans activité, c'est-à-dire jamais en test et un jour
+en production. La base est donc interrogée une seconde fois plutôt que devinée,
+et un contrôle négatif vérifie que cette seconde question **est posée**.
+
+### Sabotage
+
+Trois passes, chacune reproduisant un défaut d'origine, chacune faisant rougir
+exactement un test :
+
+```text
+least(count(*), 200)         → « AU-DELÀ DE 200 ÉVÉNEMENTS » rouge
+WHERE retiré                 → « un événement d'HIER » rouge
+repli sur new Date()         → « MÊME quand la journée est vide » rouge
+```
+
+### Ce que le dépôt m'a appris pendant l'écriture du test
+
+La première version antidatait l'événement avec le rôle applicatif.
+**L'`UPDATE` a été refusé.** La barrière d'immuabilité du journal a fait son
+travail sur mon propre test — il a fallu le superutilisateur et la fenêtre
+exclusive de `ledger-chain.test.ts`.
+
+### Condition de révision
+
+Le jour où un rapport de `src/apps/` calcule une fenêtre temporelle en
+JavaScript, ADR-036, ADR-037 et celui-ci sont contournés ensemble. La borne se
+demande à la base, ou ne se demande pas.
