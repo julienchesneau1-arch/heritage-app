@@ -6133,3 +6133,92 @@ Le motif « mot de passe en dur », lui, suppose que les casses usuelles du
 mot-clé suffisent. Un `SeCrEt` échapperait. C'est le prix de l'exclusion
 sensible à la casse, et il est assumé : un code écrit ainsi se voit à la
 relecture, un faux positif chronique ne se voit plus.
+
+---
+
+## ADR-080 — La fluidité, en chiffres — et le délai qui manquait
+
+**Statut :** accepté (mesure), correctif appliqué.
+**Référence :** `tests/redteam/context-scenarios.test.ts`,
+`src/providers/google/calendar.ts`, ADR-073, ADR-078.
+
+### La question de Julien : « peut-on enfin discuter avec Jarvis ? »
+
+Elle méritait un chiffre, pas une impression. Le dépôt portait déjà le bon
+instrument : trente tours d'une conversation réaliste, étalés sur plusieurs
+jours, classés par **aptitude requise**. Ils vérifiaient qu'aucun tour ne ment.
+Personne n'avait compté ce qui **aboutit**.
+
+```text
+ACTION            10/11    quand la formulation matche une règle, ça marche
+REFERENCE          0/8     « il », « la première », « ça » — RIEN
+TEMPOREL           1/4
+DESAMBIGUISATION   1/2
+CONTRADICTION      1/2
+SUPPRESSION        0/2
+COMPARAISON        0/1
+─────────────────────────
+TOTAL             13/30    43 %
+```
+
+### Le chiffre décisif n'est pas le total
+
+**`REFERENCE` à 0/8.** Huit tours sur trente — plus d'un quart d'une vraie
+conversation — désignent une chose sans la renommer. *« Il vient de m'envoyer son
+devis. »* *« Marque la première comme faite. »* *« De quoi parlions-nous ? »*
+
+C'est exactement ce qui fait qu'une conversation est une conversation, et non une
+suite d'ordres. **Jarvis n'a aucune fluidité conversationnelle**, à l'écrit comme
+ailleurs : il a une interface à onze verbes, qui répond très bien quand on emploie
+les bons.
+
+### Pourquoi 0/8 alors que la résolution EXISTE
+
+ADR-073 a construit `resolveAnaphora`, et il fonctionne — ses propres tests le
+montrent. Il ne sert pas ici parce que **rien ne crée d'entité dans ce fil de
+conversation** : il lit `mentioned_entity_ids`, et aucune entité n'est jamais
+évoquée.
+
+Le résolveur tourne à vide. Pas par défaut de câblage — `docs/26 §4.12` avait
+déjà corrigé ce diagnostic-là — mais par défaut de **matière**. Reconnaître
+qu'« il » désigne le traiteur suppose d'avoir enregistré le traiteur comme
+entité, et seul `entity_create` le fait, sur demande explicite.
+
+> C'est la reconnaissance d'entités qui manque, pas la résolution. La première
+> demande un modèle ; la seconde est exacte, locale et gratuite.
+
+### Le pendant du chiffre, et il compte autant
+
+**Aucun des trente tours ne produit d'erreur technique.** Les dix-sept qui
+n'aboutissent pas sont des refus formulés : Jarvis dit ce qu'il a compris et ce
+qui manque.
+
+43 % d'aboutissement serait inquiétant si le reste plantait. C'est la différence
+entre **incomplet** et **cassé**, et elle se mesure.
+
+### Le délai d'attente qui manquait
+
+Repéré à l'audit d'ADR-079 et laissé ouvert. `fetch` n'a **aucun délai par
+défaut** : un serveur qui accepte la connexion puis se tait laisse la promesse en
+suspens. Jarvis n'aurait alors ni succès, ni échec, ni message — **il se
+tairait**, la seule réponse que `docs/06` ne permet pas.
+
+Et la distinction porte tout le sens :
+
+```text
+PROVIDER_UNAVAILABLE   « il n'a pas répondu »
+TIMEOUT                « j'ai cessé d'attendre » — la requête est peut-être arrivée
+```
+
+Les confondre ferait conclure un échec sur une action réussie : le mensonge
+**symétrique** de celui que `S15` interdit d'ordinaire, et tout aussi faux.
+L'identifiant dérivé de la clé d'opération rend d'ailleurs la reprise sûre — si
+l'événement existe, un nouvel essai reçoit `409` et le constate.
+
+### Condition de révision
+
+La mesure est **figée en test**. Le jour où elle monte, ce sera pour une raison
+nommée — et le jour où elle baisse sans raison, la CI le dira. Le piège serait de
+la faire monter en ajoutant des règles `Tier 0` pour les phrases exactes du
+scénario : le chiffre grimperait sans que rien ne s'améliore. **Les trente tours
+sont un échantillon, pas une cible.**

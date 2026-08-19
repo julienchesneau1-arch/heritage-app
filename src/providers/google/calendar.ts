@@ -78,12 +78,28 @@ export type Transport = (
   },
 ) => Promise<ReponseHttp>;
 
+/**
+ * Délai au-delà duquel on cesse d'attendre Google.
+ *
+ * ⚠ SANS LUI, UN APPEL QUI PEND BLOQUE LE TOUR DE PAROLE INDÉFINIMENT.
+ *
+ * `fetch` n'a aucun délai par défaut. Un serveur qui accepte la connexion puis
+ * ne répond jamais — panne réseau silencieuse, coupure de tunnel — laisse la
+ * promesse en suspens. Jarvis n'aurait alors ni succès, ni échec, ni message :
+ * il se tairait, ce qui est la seule réponse que `docs/06` ne permet pas.
+ *
+ * Dix secondes : au-delà, une opération d'agenda n'est plus interactive, et
+ * l'utilisateur mérite un verdict plutôt qu'une attente.
+ */
+const DELAI_MS = 10_000;
+
 /** Transport réel, adossé au `fetch` de Node. */
-export function transportReseau(): Transport {
+export function transportReseau(delaiMs: number = DELAI_MS): Transport {
   return async (url, init) => {
     const reponse = await fetch(url, {
       method: init.method,
       headers: { ...init.headers },
+      signal: AbortSignal.timeout(delaiMs),
       ...(init.body === undefined ? {} : { body: init.body }),
     });
     const entetes: Record<string, string> = {};
@@ -303,9 +319,7 @@ export function createGoogleAgenda(options: OptionsGoogleAgenda): CalendarProvid
         body: corps,
       });
     } catch (cause) {
-      return err(
-        jarvisError('PROVIDER_UNAVAILABLE', `Google injoignable : ${motif(cause)}`),
-      );
+      return err(erreurReseau(cause));
     }
 
     if (reponse.status !== 200) {
@@ -353,9 +367,7 @@ export function createGoogleAgenda(options: OptionsGoogleAgenda): CalendarProvid
           }),
         );
       } catch (cause) {
-        return err(
-          jarvisError('PROVIDER_UNAVAILABLE', `Google injoignable : ${motif(cause)}`),
-        );
+        return err(erreurReseau(cause));
       }
     };
 
@@ -602,6 +614,35 @@ function echec<T>(quoi: string, status: number): Result<T> {
   return err(
     jarvisError('PROVIDER_UNAVAILABLE', `Google a refusé la ${quoi} (HTTP ${String(status)})`),
   );
+}
+
+/**
+ * Traduit une exception réseau — et la DISTINCTION porte tout le sens.
+ *
+ * ⚠ UN DÉLAI DÉPASSÉ N'EST PAS UNE INDISPONIBILITÉ.
+ *
+ * `PROVIDER_UNAVAILABLE` dit « il n'a pas répondu ». `TIMEOUT` dit « j'ai cessé
+ * d'attendre » — et la requête, elle, est peut-être arrivée. L'événement existe
+ * peut-être déjà dans l'agenda.
+ *
+ * Les confondre ferait conclure un échec sur une action qui a réussi, ce qui
+ * est le mensonge symétrique de celui que `S15` interdit d'ordinaire. Le banc
+ * de défaillance le pose depuis longtemps : *timeout → `UNKNOWN`, jamais
+ * `FAILED`, et aucun rejeu automatique.*
+ *
+ * L'identifiant dérivé de la clé d'opération rend d'ailleurs la reprise sûre :
+ * si l'événement a bien été créé, un nouvel essai reçoit `409` et le constate.
+ */
+function erreurReseau(cause: unknown): ReturnType<typeof jarvisError> {
+  const nom = cause instanceof Error ? cause.name : '';
+  if (nom === 'TimeoutError' || nom === 'AbortError') {
+    return jarvisError(
+      'TIMEOUT',
+      `Google n'a pas répondu dans le délai. Je ne sais pas si ma demande est ` +
+        `arrivée : je ne la rejoue pas automatiquement.`,
+    );
+  }
+  return jarvisError('PROVIDER_UNAVAILABLE', `Google injoignable : ${motif(cause)}`);
 }
 
 /** Motif d'une exception, sans jamais exposer la pile ni un en-tête. */

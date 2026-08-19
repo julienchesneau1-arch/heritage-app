@@ -419,7 +419,64 @@ describe('le renouvellement du jeton', () => {
 });
 
 /* ====================================================================== *
- * 6. CE QUE CE FICHIER NE PROUVE PAS — déclaré, pas tu
+ * 6. CESSER D'ATTENDRE N'EST PAS ÉCHOUER
+ * ====================================================================== */
+
+describe('le délai d’attente', () => {
+  /** Transport qui ne répond jamais — comme un réseau coupé après connexion. */
+  function muet(nomErreur: string): Transport {
+    return () =>
+      Promise.reject(Object.assign(new Error('délai dépassé'), { name: nomErreur }));
+  }
+
+  it('un DÉLAI DÉPASSÉ rend TIMEOUT, jamais un échec', async () => {
+    /* ⚠ LA DISTINCTION PORTE TOUT LE SENS.
+
+       `PROVIDER_UNAVAILABLE` dit « il n'a pas répondu ». `TIMEOUT` dit « j'ai
+       cessé d'attendre » — et la requête est peut-être arrivée. L'événement
+       existe peut-être déjà dans l'agenda.
+
+       Les confondre ferait conclure un échec sur une action réussie : le
+       mensonge symétrique de celui que `S15` interdit d'ordinaire, et tout aussi
+       faux. Le banc de défaillance le pose depuis longtemps — *timeout →
+       UNKNOWN, jamais FAILED, et aucun rejeu automatique.* */
+    const agenda = createGoogleAgenda({ vault: coffre, transport: muet('TimeoutError') });
+    const r = await agenda.verifyEvent('abc123');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('TIMEOUT');
+    // Le message DIT l'ignorance plutôt que de la masquer.
+    expect(r.error.message).toContain('sais pas si ma demande');
+    expect(r.error.message).toContain('ne la rejoue pas');
+  });
+
+  it('CONTRÔLE NÉGATIF — une panne ordinaire reste une INDISPONIBILITÉ', async () => {
+    /* Sans lui, un code qui rendrait `TIMEOUT` sur toute exception passerait le
+       test précédent. Les deux causes existent et ne se traitent pas pareil :
+       une indisponibilité se retente, une ignorance se dit. */
+    const agenda = createGoogleAgenda({ vault: coffre, transport: muet('TypeError') });
+    const r = await agenda.verifyEvent('abc123');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('PROVIDER_UNAVAILABLE');
+  });
+
+  it('STRUCTUREL — le transport réel POSE un délai', () => {
+    /* `fetch` n'en a aucun par défaut. Un serveur qui accepte la connexion puis
+       se tait laisserait la promesse en suspens : Jarvis n'aurait ni succès, ni
+       échec, ni message — il se tairait, la seule réponse que `docs/06` ne
+       permet pas.
+
+       Le test regarde la SOURCE : un délai qui existerait sans être passé à
+       `fetch` ne protégerait rien. */
+    const source = readFileSync('src/providers/google/calendar.ts', 'utf8');
+    expect(source).toContain('AbortSignal.timeout(delaiMs)');
+    expect(source).toMatch(/signal:\s*AbortSignal\.timeout/u);
+  });
+});
+
+/* ====================================================================== *
+ * 7. CE QUE CE FICHIER NE PROUVE PAS — déclaré, pas tu
  * ====================================================================== */
 
 describe('les limites de cette éprouvette', () => {

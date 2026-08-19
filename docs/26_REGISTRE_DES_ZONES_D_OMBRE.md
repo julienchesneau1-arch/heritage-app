@@ -1342,6 +1342,39 @@ document qui promet le produit.
 
 ---
 
+### 4.13 La fluidité conversationnelle — 43 %, et le verrou est la RECONNAISSANCE
+
+**Mesuré, pas estimé** (ADR-080). Trente tours d'une conversation réaliste :
+
+```text
+TOTAL             13/30    43 %   aboutissent
+REFERENCE          0/8      0 %   ← le chiffre décisif
+ERREURS TECHNIQUES 0/30            les 17 refus sont FORMULÉS
+```
+
+Plus d'un quart d'une vraie conversation désigne une chose **sans la renommer**.
+C'est ce qui distingue une conversation d'une suite d'ordres, et Jarvis n'en
+traite aucun cas.
+
+**La cause n'est pas celle qu'on croit.** `resolveAnaphora` existe et fonctionne
+(ADR-073). Il tourne à vide faute de MATIÈRE : il lit `mentioned_entity_ids`, et
+rien n'évoque d'entité dans un fil ordinaire — seul `entity_create` en crée, sur
+demande explicite.
+
+> C'est la **reconnaissance** d'entités qui manque, pas la résolution. La
+> première demande un modèle ; la seconde est exacte, locale et gratuite.
+
+**Condition de levée** : un `Tier 1` local capable de reconnaître les entités
+d'un énoncé libre — le chantier qu'ADR-017 chiffre. Écrire des règles `Tier 0`
+pour les référents ne marcherait pas : « il » ne se résout pas par la forme de la
+phrase, mais par ce qui a été dit avant.
+
+⚠ **Le piège du chiffre** : on peut le faire monter en ajoutant des règles pour
+les phrases exactes du scénario. Il grimperait sans que rien ne s'améliore. Les
+trente tours sont un **échantillon**, pas une cible.
+
+---
+
 ## 5. IRRÉDUCTIBLES — et elles le resteront
 
 Aucune ne se lèvera par plus de code. Les écrire est la seule chose à faire.

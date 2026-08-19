@@ -171,6 +171,66 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     await db.close();
   });
 
+  it('LA FLUIDITÉ, EN CHIFFRES — 13 tours sur 30 aboutissent', () => {
+    /* ⚠ LE CHIFFRE QUI RÉPOND À « PEUT-ON DISCUTER AVEC JARVIS ? », ET IL
+       N'ÉTAIT COMPTÉ NULLE PART.
+
+       Les tests ci-dessus vérifient qu'aucun tour ne MENT. C'est la propriété
+       de sûreté, et elle tient. Elle ne dit rien de l'UTILITÉ : un système qui
+       refuse tout ne ment jamais.
+
+       On compte donc ce qui ABOUTIT, par aptitude. La répartition compte plus
+       que le total :
+
+         ACTION            10/11   quand la formulation matche une règle, ça marche
+         REFERENCE          0/8    « il », « la première », « ça » — RIEN
+         TEMPOREL           1/4
+         DESAMBIGUISATION   1/2
+         CONTRADICTION      1/2
+         SUPPRESSION        0/2
+         COMPARAISON        0/1
+         ─────────────────────────
+         TOTAL             13/30   43 %
+
+       **`REFERENCE` à 0/8 est le chiffre décisif.** Huit tours sur trente —
+       plus d'un quart d'une vraie conversation — désignent une chose sans la
+       renommer. C'est ce qui fait qu'une conversation est une conversation, et
+       non une suite d'ordres.
+
+       Le mécanisme de résolution EXISTE pourtant (ADR-073). Il ne sert pas ici
+       parce que rien ne crée d'entité dans ce fil : `resolveAnaphora` lit
+       `mentioned_entity_ids`, et aucune n'est jamais évoquée. Le résolveur
+       tourne à vide — pas par défaut de câblage, par défaut de MATIÈRE.
+
+       Ce test fige la mesure pour qu'elle ne dérive pas en silence, dans un
+       sens comme dans l'autre. */
+    const parAptitude = new Map<string, { total: number; agi: number }>();
+    for (const r of results) {
+      const e = parAptitude.get(r.turn.aptitude) ?? { total: 0, agi: 0 };
+      e.total++;
+      if (r.reply.kind === 'DONE') e.agi++;
+      parAptitude.set(r.turn.aptitude, e);
+    }
+
+    expect(parAptitude.get('REFERENCE')?.agi, 'aucun référent ne se résout').toBe(0);
+    expect(parAptitude.get('REFERENCE')?.total).toBe(8);
+    expect(parAptitude.get('ACTION')?.agi).toBeGreaterThanOrEqual(10);
+
+    const agi = results.filter((r) => r.reply.kind === 'DONE').length;
+    expect(agi).toBe(13);
+    expect(results).toHaveLength(30);
+  });
+
+  it('et AUCUN tour ne produit d’erreur technique — le refus est propre', () => {
+    /* Le pendant du chiffre ci-dessus, et il compte autant. 43 % d'aboutissement
+       serait inquiétant si les 57 % restants étaient des plantages. Ce sont des
+       refus formulés : Jarvis dit ce qu'il a compris et ce qui manque.
+
+       C'est la différence entre « incomplet » et « cassé ». */
+    const erreurs = results.filter((r) => r.reply.kind === 'ERROR');
+    expect(erreurs.map((r) => r.turn.phrase)).toEqual([]);
+  });
+
   it('un rappel daté est HONORÉ, et la date retenue est DITE', () => {
     /* ⚠ CE TEST A CHANGÉ DEUX FOIS, ET CHAQUE FOIS LA PROPRIÉTÉ A TENU.
 
