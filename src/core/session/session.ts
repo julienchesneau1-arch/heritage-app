@@ -12,7 +12,7 @@
  * qui permet de trancher — sur preuve, pas sur heuristique (`03`, 05/A3).
  */
 import type { Db } from '../db/client.js';
-import type { Mode, Provenance } from '../types/domain.js';
+import { provenanceLue, type Mode, type Provenance } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import type { ConversationTurn } from '../context/packet.js';
 
@@ -95,8 +95,19 @@ export function createSessionStore(db: Db): SessionStore {
         turn_index: number;
         speaker: string;
         content: string;
+        provenance: string;
       }>(
-        `SELECT turn_index, speaker, content FROM session_turns
+        /* ⚠ `provenance` A ÉTÉ AJOUTÉE ICI PAR ADR-083, ET SON ABSENCE ÉTAIT
+           UN DÉFAUT DE SÛRETÉ.
+
+           La colonne existe depuis la migration 0003, avec ce commentaire :
+           *« un contenu externe lu à voix haute reste externe »*. `appendTurn`
+           l'écrit. Ce `SELECT` ne la lisait pas — un tour `EXTERNAL_UNTRUSTED`
+           ressortait donc **indiscernable** d'une phrase de l'utilisateur.
+
+           Écrire une étiquette puis ne jamais la relire ne protège de rien :
+           ça produit seulement la trace d'une protection. */
+        `SELECT turn_index, speaker, content, provenance FROM session_turns
           WHERE session_id = $1 ORDER BY turn_index DESC LIMIT $2`,
         [sessionId, limit],
       );
@@ -110,6 +121,7 @@ export function createSessionStore(db: Db): SessionStore {
             turnIndex: r.turn_index,
             speaker: r.speaker as 'USER' | 'JARVIS',
             content: r.content,
+            provenance: provenanceLue(r.provenance),
           }))
           .reverse(),
       );

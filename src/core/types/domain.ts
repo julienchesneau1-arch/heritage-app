@@ -51,6 +51,28 @@ export function isUntrusted(p: Provenance): boolean {
   return UNTRUSTED_PROVENANCES.has(p);
 }
 
+/**
+ * LIRE UNE PROVENANCE VENUE DE LA BASE — ADR-083.
+ *
+ * `session_turns.provenance` est un `TEXT` contraint par un `CHECK`. Le
+ * réflexe du dépôt était `r.provenance as Provenance` : un `as` sur une
+ * frontière, c'est-à-dire exactement ce qu'ADR-016 appelle un défaut.
+ *
+ * La différence n'est pas cosmétique. `as` dit « fais-moi confiance » ; en
+ * face, une valeur inconnue — colonne migrée, base restaurée d'une version
+ * plus récente, écriture hors application — deviendrait une provenance que
+ * `isUntrusted` déclarerait FIABLE par défaut de correspondance.
+ *
+ * **L'inconnu retombe donc sur la valeur la plus restrictive**, pas sur la
+ * première de la liste. Une provenance illisible est traitée comme un contenu
+ * hostile : c'est le seul repli qui ne peut pas élargir une permission.
+ */
+export function provenanceLue(brut: string): Provenance {
+  const lu = Provenance.safeParse(brut);
+  return lu.success ? lu.data : 'EXTERNAL_UNTRUSTED';
+}
+
+
 /** Une valeur transportant sa provenance. Le noyau ne manipule jamais de nu. */
 export interface Tainted<T> {
   readonly value: T;
@@ -79,6 +101,20 @@ export const PrivacyClass = z.enum([
   'GREEN', // public ou non sensible
 ]);
 export type PrivacyClass = z.infer<typeof PrivacyClass>;
+
+/**
+ * Lire une classe de confidentialité venue de la base — ADR-083.
+ *
+ * Même raison que `provenanceLue`, repli symétrique : `RED`. Une classe
+ * illisible n'est jamais envoyable. L'erreur possible devient « Jarvis a gardé
+ * pour lui quelque chose d'anodin », dont le coût est une gêne — et non
+ * « Jarvis a envoyé au cloud quelque chose qu'il ne savait pas lire », dont le
+ * coût est irréversible.
+ */
+export function privacyClassLue(brut: string): PrivacyClass {
+  const lu = PrivacyClass.safeParse(brut);
+  return lu.success ? lu.data : 'RED';
+}
 
 /* -------------------------------------------------------------------------- */
 /* Niveaux d'autonomie — 03 §4                                                */

@@ -402,6 +402,62 @@ zéro code émis. Vérifié, pas supposé.
 
 ---
 
+### 2.9 Le paquet de contexte filtrait UN canal sur TROIS — et la porte le certifiait
+
+**Trouvé en relisant `packet.ts` pour un autre chantier** (ADR-083). Pas par un
+balayage : par la question « combien de canaux entrent, combien sont filtrés ? »
+
+`buildContextPacket` compose ce qui part vers un modèle. Son en-tête annonce
+« 1. filtrage de confidentialité ← sécurité d'abord », et l'étape existe.
+
+```text
+memories   filtrées par privacyClass       ← la seule protégée
+entities   passaient telles quelles
+turns      passaient tels quels
+```
+
+**Et la cause n'est pas une décision.** Les colonnes existent en base :
+
+| Table | Colonne | Depuis |
+|---|---|---|
+| `entities` | `privacy_class`, `RED` admis | migration 0001 |
+| `session_turns` | `provenance`, `EXTERNAL_UNTRUSTED` admis | migration 0003 |
+
+Les **lecteurs** les jetaient — `EntityRef` et `ConversationTurn` ne les
+portaient pas, leurs `SELECT` ne les demandaient pas.
+
+> Un filtre ne peut pas trier sur ce qu'on ne lui donne pas. Il rend « rien à
+> écarter », ce qui se lit exactement comme un succès.
+
+**La moitié la plus coûteuse : `G1.4` certifiait la propriété.** Son libellé
+dit *« une donnée RED n'entre jamais dans un paquet destiné au cloud »*. Elle
+appelait le module avec `entities: []` et `turns: []` — elle n'a jamais rien
+mis dans les deux canaux non protégés.
+
+**Onzième occurrence du motif** — *une affirmation que le mécanisme censé
+l'établir n'établit pas* — et la **troisième dans de l'outillage de sécurité**,
+après le scanner de secrets (§2.8) et la garde de frontières de mot.
+
+**Corrigé** (ADR-083) : les lecteurs rendent les colonnes ; la lecture échoue
+**fermé** (`provenanceLue` → `EXTERNAL_UNTRUSTED`, `privacyClassLue` → `RED`)
+plutôt qu'un `as` sur une frontière ; les entités se filtrent par classe, les
+tours par **provenance** — un tour non fiable n'est pas *sensible*, il est
+*hostile*, donc écarté **même vers un modèle local**.
+
+**Gardé** par 14 tests, dont l'aller-retour réel en base — un double en mémoire
+aurait rendu la provenance qu'on lui aurait demandée, et c'est précisément le
+contrat TypeScript qui était satisfait pendant que le SQL ne l'était pas.
+
+**Sabotages** : 3 / 3 / 2 / 1 rouges. Et la porte elle-même éprouvée contre le
+défaut qu'elle avait laissé passer → `G1.4 … ÉCHEC`.
+
+> **Ce qui borne la portée, et qu'il faut dire :** `packet.ts` n'a aucun
+> appelant de production (§4.1). Le défaut était **latent**, rien n'a fuité.
+> Mais la garantie était fausse *maintenant*, et l'aurait été encore le jour du
+> branchement, sans que rien ne le signale.
+
+---
+
 ## 3. Ce que le balayage a trouvé sur MOI, et pas sur le code
 
 Honnêteté sur la méthode, parce qu'elle change la conclusion.
@@ -1389,6 +1445,51 @@ phrase, mais par ce qui a été dit avant.
 ⚠ **Le piège du chiffre** : on peut le faire monter en ajoutant des règles pour
 les phrases exactes du scénario. Il grimperait sans que rien ne s'améliore. Les
 trente tours sont un **échantillon**, pas une cible.
+
+---
+
+### 4.14 Le texte libre d'une conversation n'est pas classé
+
+**Ouverte par ADR-083**, en corrigeant §2.9 — c'est la moitié que la correction
+ne pouvait pas emporter.
+
+Le paquet de contexte filtre désormais ses trois canaux. Mais il filtre des
+**enveloppes**, pas des contenus :
+
+| Ce qui entre | Filtré sur | Reste exposé |
+|---|---|---|
+| mémoires | `privacyClass` de la ligne | — |
+| entités | `privacy_class` de la ligne | — |
+| tours | `provenance` de la ligne | **le contenu du tour** |
+| `query` | rien | **tout** |
+
+Si Julien dicte son IBAN, ou parle d'un diagnostic, le paquet ne le sait pas.
+Les tours sont du texte libre, et `session_turns` ne porte **aucune catégorie
+de donnée**.
+
+**Pourquoi ce n'est pas corrigé sur place.** Classer du texte libre exigerait
+de deviner à partir des mots — exactement ce que `privacy/classify` refuse par
+principe :
+
+> Le niveau se déduit de la CATÉGORIE, que la base impose à l'écriture.
+
+Une heuristique lexicale se tromperait dans les deux sens, et le sens dangereux
+est **silencieux** : elle laisserait passer ce qu'elle ne reconnaît pas, tout en
+donnant l'impression qu'un classement a eu lieu. C'est le défaut de §2.9 sous
+une autre forme — une protection qui rend « rien à écarter ».
+
+**Condition de levée** : une colonne `data_category` sur `session_turns`,
+renseignée **à l'écriture** par l'appelant, qui seul sait ce qu'il insère.
+`appendTurn` est le seul écrivain : le chantier est borné.
+
+**Ce qui la maintient visible** : un test la fige explicitement
+(`packet.test.ts`, *« le contenu d'un tour fiable N'EST PAS classé — limite
+déclarée »*). Il vérifie qu'un IBAN traverse le paquet, et **rougira le jour où
+la catégorie existera** — c'est-à-dire au moment exact où cette section doit
+être relue.
+
+> C'est la forme qu'on veut pour une dette : un test qui échoue quand on la
+> rembourse, plutôt qu'un paragraphe qu'on oublie d'effacer.
 
 ---
 

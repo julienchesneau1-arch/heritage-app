@@ -22,9 +22,9 @@ const skip = !databaseAvailable();
 describe('formulation de la question', () => {
   it('pose UNE question, pas cinq', () => {
     const question = disambiguationQuestion('Pierre', [
-      { id: '1', kind: 'PERSON', displayName: 'Pierre Dupont', viaConfirmedAlias: false },
-      { id: '2', kind: 'PERSON', displayName: 'Pierre Martin', viaConfirmedAlias: false },
-      { id: '3', kind: 'PERSON', displayName: 'Pierre du domaine', viaConfirmedAlias: false },
+      { id: '1', kind: 'PERSON', displayName: 'Pierre Dupont', viaConfirmedAlias: false, privacyClass: 'ORANGE' },
+      { id: '2', kind: 'PERSON', displayName: 'Pierre Martin', viaConfirmedAlias: false, privacyClass: 'ORANGE' },
+      { id: '3', kind: 'PERSON', displayName: 'Pierre du domaine', viaConfirmedAlias: false, privacyClass: 'ORANGE' },
     ]);
     expect(question).toBe('Pierre Dupont, Pierre Martin ou Pierre du domaine ?');
     expect(question.split('?').length - 1).toBe(1);
@@ -33,8 +33,8 @@ describe('formulation de la question', () => {
   it('formule naturellement pour deux candidats', () => {
     expect(
       disambiguationQuestion('Paul', [
-        { id: '1', kind: 'PERSON', displayName: 'Paul Riva', viaConfirmedAlias: false },
-        { id: '2', kind: 'PERSON', displayName: 'Paul Ngo', viaConfirmedAlias: false },
+        { id: '1', kind: 'PERSON', displayName: 'Paul Riva', viaConfirmedAlias: false, privacyClass: 'ORANGE' },
+        { id: '2', kind: 'PERSON', displayName: 'Paul Ngo', viaConfirmedAlias: false, privacyClass: 'ORANGE' },
       ]),
     ).toBe('Paul Riva ou Paul Ngo ?');
   });

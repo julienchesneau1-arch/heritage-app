@@ -15,6 +15,7 @@
  * une heuristique de popularité ou d'ordre alphabétique.
  */
 import type { Db } from '../db/client.js';
+import { privacyClassLue, type PrivacyClass } from '../types/domain.js';
 import { ok, type Result } from '../types/result.js';
 
 export interface EntityRef {
@@ -23,6 +24,18 @@ export interface EntityRef {
   readonly displayName: string;
   /** Vrai si la correspondance vient d'un alias confirmé par l'utilisateur. */
   readonly viaConfirmedAlias: boolean;
+  /**
+   * LA CLASSE DE CONFIDENTIALITÉ — ADR-083.
+   *
+   * `entities.privacy_class` existe depuis la migration 0001, avec `RED` parmi
+   * ses valeurs permises. Ce champ ne la lisait pas.
+   *
+   * Ce n'était pas un oubli anodin : `buildContextPacket` écarte les mémoires
+   * `RED` d'un paquet destiné au cloud, et laissait passer les entités —
+   * **non par décision, mais parce que le lecteur avait jeté la colonne**. Un
+   * filtre ne peut pas trier sur ce qu'on ne lui donne pas.
+   */
+  readonly privacyClass: PrivacyClass;
 }
 
 export type Resolution =
@@ -35,6 +48,7 @@ interface CandidateRow {
   kind: string;
   display_name: string;
   via_confirmed_alias: boolean;
+  privacy_class: string;
 }
 
 /**
@@ -78,7 +92,7 @@ export function createEntityResolver(db: Db): EntityResolver {
   ): Promise<Result<readonly EntityRef[]>> {
     const rows = await db.query<CandidateRow>(
       `SELECT DISTINCT ON (e.id)
-              e.id, e.kind, e.display_name,
+              e.id, e.kind, e.display_name, e.privacy_class,
               COALESCE(a.confirmed_by_user, false) AS via_confirmed_alias
          FROM entities e
          LEFT JOIN entity_aliases a
@@ -97,6 +111,7 @@ export function createEntityResolver(db: Db): EntityResolver {
         kind: r.kind,
         displayName: r.display_name,
         viaConfirmedAlias: r.via_confirmed_alias,
+        privacyClass: privacyClassLue(r.privacy_class),
       })),
     );
   }
@@ -187,7 +202,7 @@ export function createEntityResolver(db: Db): EntityResolver {
       }
 
       const entities = await db.query<CandidateRow>(
-        `SELECT id, kind, display_name, false AS via_confirmed_alias
+        `SELECT id, kind, display_name, privacy_class, false AS via_confirmed_alias
            FROM entities WHERE id = ANY($1::uuid[])`,
         [ids],
       );
@@ -198,6 +213,7 @@ export function createEntityResolver(db: Db): EntityResolver {
         kind: r.kind,
         displayName: r.display_name,
         viaConfirmedAlias: false,
+        privacyClass: privacyClassLue(r.privacy_class),
       }));
 
       const single = refs[0];
