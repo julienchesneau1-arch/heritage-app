@@ -178,6 +178,136 @@ describe.runIf(enabled)('migration 0013 — elle défaille plutôt que deviner',
   }, 30_000);
 
   /* ================================================================== *
+   * CE QUE LA REVUE LIGNE PAR LIGNE A TROUVÉ — ADR-076
+   *
+   * Les tests ci-dessus éprouvent ce que la migration REFUSE. Ceux-ci
+   * éprouvent ce qu'elle laisse DERRIÈRE elle, et c'est là que sont les
+   * défauts. La différence de point de vue est tout le sujet : on avait
+   * vérifié la porte, jamais la pièce d'après.
+   * ================================================================== */
+
+  /**
+   * Joue la migration puis un ordre applicatif, dans une transaction annulée.
+   *
+   * ⚠ LES DEUX `UPDATE` D'EN-TÊTE NE SONT PAS DÉCORATIFS.
+   *
+   * Sans eux ces tests passaient ISOLÉS et échouaient en SUITE COMPLÈTE :
+   * `jarvis_test` est partagée, d'autres fichiers y sèment des lignes `GREEN`,
+   * le garde-fou refusait donc la migration, et le défaut qu'on veut mesurer
+   * n'était jamais atteint. Le tout en silence, parce que `db.transaction`
+   * convertit une exception en `Result` — l'erreur ressortait donc comme
+   * « pas d'erreur ».
+   *
+   * On neutralise les `GREEN` DANS la transaction annulée : ce qui est éprouvé
+   * ici est l'état d'APRÈS-migration, pas le garde-fou — celui-ci a ses propres
+   * tests plus haut, qui sèment leurs lignes eux-mêmes.
+   *
+   * `migre` distingue les deux causes d'échec possibles, au lieu de les
+   * confondre dans un `null` : un refus de migration n'est pas un `INSERT` qui
+   * passe.
+   */
+  async function apresMigration(ordre: string): Promise<string | null> {
+    let erreur: string | null = null;
+    let migre = false;
+    await db.transaction(async (tx) => {
+      for (const nettoyage of [
+        "UPDATE memories SET privacy_class = 'ORANGE' WHERE privacy_class = 'GREEN'",
+        "UPDATE notes    SET privacy_class = 'ORANGE' WHERE privacy_class = 'GREEN'",
+      ]) {
+        const fait = await tx.query(nettoyage);
+        if (!fait.ok) return err(jarvisError('INTERNAL', fait.error.message));
+      }
+      const joue = await tx.query(CORPS);
+      if (!joue.ok) return err(jarvisError('INTERNAL', `migration : ${joue.error.message}`));
+      migre = true;
+      const essai = await tx.query(ordre);
+      if (!essai.ok) erreur = essai.error.message;
+      return err(jarvisError('INTERNAL', 'rollback volontaire'));
+    });
+    if (!migre) throw new Error('la migration n’a pas été jouée — test non concluant');
+    return erreur;
+  }
+
+  it('⚠ BLOQUANT — après la migration, Jarvis ne peut plus RIEN écrire', async () => {
+    /* LE DÉFAUT QUI AURAIT ARRÊTÉ JARVIS LE JOUR DE L'APPLICATION.
+
+       `data_level` est `NOT NULL` SANS `DEFAULT`, et aucun `INSERT` de `src/`
+       ne le renseigne — ni `src/tools/notes.ts`, ni
+       `src/core/memory/store.ts`. Les deux écritures échouent donc sur une
+       violation de contrainte, et Jarvis perd la mémoire et les notes d'un
+       coup.
+
+       Rien ne l'avait vu parce que toute la vérification portait sur le
+       GARDE-FOU — « refuse-t-elle de deviner ? » — et aucune sur l'état du
+       système APRÈS. La migration est sûre au sens où elle n'expose pas ; elle
+       est inapplicable au sens où elle casse.
+
+       ⚠ CE TEST DOIT RESTER ROUGE-SI-CORRIGÉ-À-MOITIÉ : il tombera le jour où
+       un `DEFAULT` sera posé OU où le code écrira `data_level`. C'est
+       exactement le signal attendu. */
+    const note = await apresMigration(
+      `INSERT INTO notes (content, privacy_class, operation_id)
+       VALUES ('x', 'ORANGE', gen_random_uuid())`,
+    );
+    expect(note, 'note_create devrait échouer aujourd’hui').not.toBeNull();
+    expect(note ?? '').toContain('data_level');
+
+    const memoire = await apresMigration(
+      `INSERT INTO memories (kind, memory_type, content, confidence, source,
+         source_type, data_category, provenance, privacy_class, content_digest)
+       VALUES ('FACT','SEMANTIC','x',0.9,'c','USER_EXPLICIT','PERSONAL_MEMORY',
+               'USER','ORANGE', repeat('a',64))`,
+    );
+    expect(memoire, 'memory_add devrait échouer aujourd’hui').not.toBeNull();
+    expect(memoire ?? '').toContain('data_level');
+  }, 30_000);
+
+  it('⚠ le PLANCHER de catégorie n’est pas tenu après la migration', async () => {
+    /* SECOND DÉFAUT, PLUS SILENCIEUX QUE LE PREMIER.
+
+       `docs/14 §3` pose une table catégorie → niveau plancher, et sa première
+       propriété est : *le niveau ne peut que monter*. La migration l'applique
+       UNE FOIS, dans son `UPDATE`, puis plus rien ne la tient — seule
+       `CREDENTIAL` reçoit une contrainte permanente.
+
+       Une mémoire `HEALTH` dont le plancher est `HIGHLY_SENSITIVE` peut donc
+       être écrite `PUBLIC` sans que la base s'y oppose. Le jour où le code
+       apprendra à renseigner `data_level` (défaut n°1), c'est lui seul qui
+       tiendra le plancher — et `docs/14` dit le contraire :
+
+         > le niveau ne peut que monter. Même mécanique que `strictest()` dans
+         > le Policy Gate — et ce doit être le même code, pas un second
+         > mécanisme qui lui ressemble.
+
+       Un plancher tenu par la seule application est un second mécanisme. */
+    const accepte = await apresMigration(
+      `INSERT INTO memories (kind, memory_type, content, confidence, source,
+         source_type, data_category, provenance, privacy_class, content_digest,
+         data_level)
+       VALUES ('FACT','SEMANTIC','bilan',0.9,'c','USER_EXPLICIT','HEALTH',
+               'USER','RED', repeat('b',64), 'PUBLIC')`,
+    );
+    // `null` = accepté. C'est le défaut, et on le fige pour qu'il se voie.
+    expect(accepte, 'HEALTH + PUBLIC est accepté — le plancher ne tient pas').toBeNull();
+  }, 30_000);
+
+  it('CONTRÔLE — la contrainte CREDENTIAL, elle, tient bien', async () => {
+    /* Sans lui, les deux tests ci-dessus pourraient s'expliquer par une
+       migration qui n'a rien créé du tout. Celui-ci montre que le mécanisme
+       EXISTE et fonctionne — il n'a simplement été posé que pour une catégorie
+       sur trois. */
+    const refuse = await apresMigration(
+      `INSERT INTO memories (kind, memory_type, content, confidence, source,
+         source_type, data_category, provenance, privacy_class, content_digest,
+         data_level)
+       VALUES ('FACT','SEMANTIC','jeton',0.9,'c','USER_EXPLICIT','CREDENTIAL',
+               'USER','RED', repeat('c',64), 'PUBLIC')`,
+    );
+    expect(refuse, 'CREDENTIAL + PUBLIC doit être refusé').not.toBeNull();
+    expect(refuse ?? '').toContain('credential_restricted');
+  }, 30_000);
+
+  /* ================================================================== *
    * ELLE N'EST PAS APPLIQUÉE — et ce n'est pas qu'une déclaration
    * ================================================================== */
 

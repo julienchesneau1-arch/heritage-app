@@ -5580,3 +5580,134 @@ Le jour où un `Tier 1` local arrive, la tentation sera de lui confier toute la
 compréhension et de supprimer les règles. Elles coûtent zéro, ne varient pas, et
 répondent en **0,0046 ms**. Le `Tier 1` doit prendre ce que les règles ratent —
 les tournures non prévues — pas ce qu'elles réussissent.
+
+---
+
+## ADR-076 — La revue F4, le fournisseur Google, et le rappel qui doit se voir
+
+**Statut :** accepté (revue), décisions enregistrées (Google, rappels).
+**Référence :** `docs/29`, `docs/14 §3/§5`, ADR-036/037, ADR-041, ADR-048,
+`tests/privacy/migration-data-level.test.ts`.
+
+### 1. La revue ligne par ligne de F4 — **ne pas appliquer en l'état**
+
+Conduite à la demande de Julien, sur la base de test, en transaction annulée.
+Le détail est dans `docs/29`. En résumé :
+
+**Ce qui tient** : les colonnes du garde-fou sont `NOT NULL` (donc pas de piège
+`NULL <> 'WEATHER'`), le refus nomme la ligne fautive, les 14 catégories de
+`docs/14 §3` sont couvertes aux bons niveaux, l'ordre des branches ne peut que
+faire MONTER un niveau, et la descente ne peut rien exposer. **La propriété pour
+laquelle cette migration existe est sûre : elle ne devine pas.**
+
+**Défaut n°1 — bloquant.** `data_level` est `NOT NULL` sans `DEFAULT`, et aucun
+`INSERT` de `src/` ne le renseigne. Après application, `note_create` et
+`memory_add` échouent tous les deux. Jarvis perd l'écriture.
+
+**Défaut n°2 — silencieux.** Le plancher de catégorie n'est tenu que par
+l'`UPDATE` de migration. Seule `CREDENTIAL` reçoit une contrainte permanente :
+une mémoire `HEALTH` peut être écrite `PUBLIC` sans que la base s'y oppose.
+`docs/14` exige pourtant *« le même code, pas un second mécanisme qui lui
+ressemble »*.
+
+**Pourquoi rien ne l'avait vu.** Toute la vérification portait sur le garde-fou
+— *refuse-t-elle de deviner ?* — et aucune sur l'état du système APRÈS.
+
+> On avait éprouvé la porte, jamais la pièce d'après.
+
+Les trois constats sont figés en tests. Ils tomberont au correctif : c'est leur
+fonction.
+
+### 1 bis. Ce que j'ai raté en le faisant, et qui compte autant
+
+Ma première tentative a visé **`jarvis_dev`** et non la base de test — `.env`
+définit `JARVIS_DB_NAME=jarvis_dev` — et elle passait par un **pool**, de sorte
+que le `BEGIN` n'englobait rien.
+
+Aucun dégât : les colonnes ne se sont pas créées, et aucun code du dépôt n'écrit
+`GREEN` dans ces tables. Mais deux choses méritent d'être écrites :
+
+1. **c'est une barrière de nom de base qui m'a arrêté**, pas mon attention —
+   `docs/29` n'en portait aucune, et en porte une désormais ;
+2. **le piège du pool est documenté depuis longtemps** dans
+   `tests/privacy/migration-data-level.test.ts`, avec la mesure exacte : *« la
+   colonne s'était réellement créée en base — un test censé prouver que la
+   migration n'est PAS appliquée l'appliquait »*.
+
+C'est la **deuxième fois en deux jours** qu'une leçon écrite dans un commentaire
+ne me protège pas, après le `\b` d'ADR-075. Le motif est stable :
+
+> Une leçon écrite dans un commentaire ne protège que le fichier qui la porte.
+> Seul un mécanisme voyage.
+
+### 2. Google comme fournisseur — **oui, mais ce sont DEUX décisions**
+
+Julien vit dans Gmail et Google Agenda, synchronisés vers son iPhone. La
+question « on continue avec leur cloud ? » en recouvre deux, qu'il ne faut pas
+trancher ensemble :
+
+| | Nature | Verdict |
+|---|---|---|
+| **Google comme SOURCE** (Gmail, Agenda) | intégration de données | **oui**, et c'est le bon choix |
+| **Google comme FOURNISSEUR DE MODÈLE** (Gemini) | inférence cloud | **à traiter séparément**, plus tard |
+
+**Pourquoi la source est un bon choix** : la donnée est déjà chez Google. La
+lire n'ajoute aucune exposition — c'est le seul cas où intégrer un service ne
+dégrade pas la posture. Et l'agenda arrive déjà sur son iPhone : écrire dans
+Google Agenda, c'est **faire sonner l'iPhone sans écrire de notification**. La
+règle 4 de `CLAUDE.md` — *assembler avant de développer* — s'applique
+exactement.
+
+**Ce que cela impose, sans négociation** :
+
+- le contenu d'un email est `EXTERNAL_UNTRUSTED` → **quarantaine**. Gmail est le
+  vecteur d'injection numéro un (T1) ; c'est précisément ce pour quoi
+  `quarantine/processor.ts` existe ;
+- les jetons OAuth sont des secrets → **coffre**, jamais le dépôt, jamais un
+  prompt, jamais un log ;
+- tout appel sortant → **Data Firewall** ;
+- une fiche `docs/04` par dépendance ajoutée.
+
+**Pourquoi le modèle est une autre question** : ADR-017 vise *0 € marginal sur
+80–95 % des interactions*. Un fournisseur cloud d'inférence ne se juge pas sur
+la commodité mais sur le CostGate et le Model Router, qui n'existent pas encore.
+Rien ne presse, et lier les deux décisions ferait entrer un modèle par la porte
+d'une intégration de données.
+
+### 3. Le rappel doit se voir — décision de Julien, enregistrée
+
+> *« Dans l'agenda je vais plus que sur une liste de tâches. À moins qu'on
+> trouve un moyen d'avoir un rappel tous les matins. »*
+
+**Décision retenue : les deux, dans cet ordre.** Le briefing d'abord parce qu'il
+existe déjà ; l'agenda ensuite parce qu'il porte plus loin.
+
+```text
+aujourd'hui   « rappelle-moi de X »  → une TÂCHE, silencieuse
+étape 1       le briefing du matin remonte tâches ET rappels — DÉJÀ ÉCRIT,
+              et atteignable depuis ADR-075 par « fais-moi un point »
+étape 2       « rappelle-moi jeudi » → un événement Google Agenda → iPhone
+```
+
+### 3 bis. Le verrou est UNIQUE, et ce n'est pas celui qu'on croyait
+
+`reminder_create` exige `remindAt` en ISO. `calendar_read/create/update` exigent
+des dates ISO. **Une règle `Tier 0` ne peut produire ni l'un ni l'autre**, et
+`TEMPORAL_QUALIFIER` refuse déjà honnêtement « rappelle-moi jeudi ».
+
+Donc : **la résolution de dates débloque à elle seule quatre outils**, et c'est
+le préalable de tout ce que Julien demande — pas l'adaptateur Google, pas le
+Tier 1.
+
+**Et elle se fait sans modèle.** ADR-036/037 interdisent l'horloge du processus,
+mais n'interdisent pas de reconnaître une expression : la règle nomme
+*symboliquement* (« demain », « jeudi »), l'outil laisse **PostgreSQL** calculer
+l'instant. Le partage est le même que pour les référents (ADR-073) : le `Tier 0`
+reconnaît, la base résout.
+
+### Condition de révision
+
+Si l'adaptateur Google Agenda arrive **avant** la résolution de dates, la
+tentation sera de calculer les dates en TypeScript pour livrer plus vite. Ce
+serait franchir ADR-036/037 sur le chemin le plus visible du produit. L'ordre
+n'est pas négociable : **dates d'abord, agenda ensuite.**
