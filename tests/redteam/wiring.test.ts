@@ -227,6 +227,28 @@ describe('RED TEAM — code mort en production', () => {
     }
   });
 
+  it('l’agenda Google arrive jusqu’aux OUTILS, et seulement s’il est configuré', () => {
+    /* ⚠ LA LEÇON D'ADR-066, APPLIQUÉE AU PREMIER FOURNISSEUR RÉSEAU.
+
+       `reachable` suit le graphe d'IMPORTS : un import conservé suffit à faire
+       passer un module pour branché, même si plus rien ne l'appelle. On vérifie
+       donc les deux bouts — le runtime CONSTRUIT le fournisseur, et il le passe
+       aux outils.
+
+       Et la garde qui compte autant : il n'est construit QUE si le coffre porte
+       de quoi se connecter. Le construire sans secrets ne ferait que découvrir
+       leur absence à chaque appel, et ferait dire à Jarvis « indisponible » là
+       où la vérité est « aucun compte connecté ». */
+    const runtime = readFileSync(join(ROOT, 'src/apps/runtime.ts'), 'utf8');
+    expect(runtime).toContain('googleAgendaConfigure(vault)');
+    expect(runtime).toContain('createGoogleAgenda({ vault })');
+    expect(runtime).toContain('calendar:');
+
+    /* ⚠ ET AUCUN SECRET N'EST LU DANS LE RUNTIME. Le coffre y circule comme
+       objet ; `expose()` n'a qu'un point d'usage, dans l'adaptateur. */
+    expect(runtime).not.toContain('expose()');
+  });
+
   it('l’Undo Engine arrive jusqu’à la SURFACE PRODUIT, pas seulement au graphe', () => {
     /* LA LEÇON D'ADR-063, APPLIQUÉE À UN MOTEUR ENTIER. On y avait réparé le
        pipeline de la confirmation et oublié le rendu ; ici le risque est le

@@ -27,6 +27,10 @@ import { createEntityResolver } from '../core/context/resolver.js';
 import { createResolveurTemporel } from '../core/temps/resolution.js';
 import { createIntentEngine, type IntentEngine } from '../core/intent/engine.js';
 import { createEnvSecretVault } from '../core/secrets/vault.js';
+import {
+  createGoogleAgenda,
+  googleAgendaConfigure,
+} from '../providers/google/calendar.js';
 import { createToolGateway, type ToolGateway } from '../core/tools/gateway.js';
 import { createVerificationEngine } from '../core/verification/engine.js';
 import { createUndoEngine, type UndoEngine } from '../core/undo/engine.js';
@@ -82,10 +86,12 @@ export function buildRuntime(
   const inbox = createMemoryInbox(db);
   const ledger = createLedger(db);
 
+  const vault = createEnvSecretVault();
+
   const gateway = createToolGateway({
     db,
     gate: createPolicyGate(createCedarEvaluator(source.value)),
-    vault: createEnvSecretVault(),
+    vault,
     ledger,
     verifier: createVerificationEngine(),
   });
@@ -105,6 +111,19 @@ export function buildRuntime(
     search: createHybridSearch(db, null),
     ledger,
     isUserConfirmed: () => userConfirmed,
+    /* L'AGENDA NE S'ACTIVE QUE SI LE COFFRE PORTE DE QUOI SE CONNECTER — ADR-078.
+
+       `null` est un état NORMAL et déclaré, pas une panne : les outils
+       s'enregistrent quand même et rendent `PROVIDER_UNAVAILABLE`, ce qui est
+       une réponse. L'alternative — les retirer du catalogue — ferait dire à
+       Jarvis qu'il ne SAIT PAS accéder à un agenda, alors qu'il ne fait que ne
+       pas en avoir un connecté. ADR-075 a montré ce que coûte cette confusion.
+
+       Le fournisseur n'est donc PAS construit sans secrets : il ne ferait que
+       découvrir leur absence à chaque appel. */
+    calendar: googleAgendaConfigure(vault)
+      ? createGoogleAgenda({ vault })
+      : null,
   });
   if (!registered.ok) return registered;
 

@@ -346,6 +346,55 @@ s'entend.
 
 ---
 
+### 2.8 Le scanner de secrets ne lisait PAS l'arbre de travail — il l'annonçait
+
+**Trouvé en branchant Google (ADR-078), sur l'outil censé garder ce branchement.**
+
+Le scan annonçait, à chaque exécution :
+
+```text
+✓ Aucun secret détecté (arbre de travail et historique).
+```
+
+Il lisait `git show HEAD:<fichier>` — c'est-à-dire le **dernier commit** — et
+sautait en silence tout fichier pas encore commité (`catch { continue }`).
+**L'arbre de travail n'a jamais été lu.**
+
+Mesuré par sabotage : un jeton de rafraîchissement Google déposé dans `src/`,
+puis `git add`, puis `pnpm secrets:scan` → *« aucun secret détecté »*. Deux fois,
+non suivi puis suivi.
+
+**La conséquence est exactement là où l'on se sert de cet outil : AVANT de
+commiter.** En CI le code est déjà commité, donc la garde y fonctionne — c'est
+précisément ce qui la rendait invisible. En local, celui qui vérifie avant
+d'engager son travail obtenait un feu vert sur du rouge.
+
+Correctif : lecture depuis le disque. Le repli sur l'historique demeure pour les
+fichiers supprimés.
+
+### 2.8-bis Le même commit ouvrait une porte que le scanner ne voyait pas
+
+`Clé Google` couvrait `AIza…` — une clé d'API. L'adaptateur introduit trois
+secrets d'un genre **différent** :
+
+```text
+GOCSPX-…   secret client, PERMANENT
+1//…       jeton de rafraîchissement, PERMANENT
+ya29.…     jeton d'accès, éphémère mais suffisant pour tout lire
+```
+
+Aucun motif ne les reconnaissait. Les deux premiers ne s'éteignent pas d'eux-mêmes.
+
+> Brancher un service sans étendre le scanner, c'est ajouter une porte et ne pas
+> déplacer la caméra.
+
+Trois motifs ajoutés, avec contrôle négatif : `https://1//example`,
+`GOCSPX-court` et `ya29 est un identifiant` ne doivent PAS mordre — un motif
+trop large se paie en bruit, et le bruit se paie en exceptions, c'est-à-dire en
+trous.
+
+---
+
 ### 2.7 Deux fichiers à 0 % de couverture — faux positif
 
 `src/core/policy/evaluator.ts` et `src/providers/contract.ts` : **types purs**,
@@ -964,6 +1013,38 @@ ajouter un champ qu'aucun adaptateur ne remplit serait spéculatif au sens de
 expose un jeton de version. S'il l'expose, `updateEvent` doit le prendre et le
 renvoyer, et cette entrée disparaît. S'il ne l'expose pas, elle devient
 **irréductible pour ce fournisseur** et doit remonter en §5.
+
+---
+
+> ### ⚠ LEVÉE À MOITIÉ — ADR-078, et la moitié qui manque est nommée
+>
+> Le premier adaptateur réel existe : `src/providers/google/calendar.ts`.
+> Google **expose des etags**, et `updateEvent` les prend et les renvoie en
+> `If-Match`. Le mécanisme qui manquait est donc écrit :
+>
+> ```text
+> lire l'événement        → etag "v7"
+> PATCH avec If-Match v7  → 412 si quelqu'un a modifié entre-temps
+>                         → rien n'est écrit, et Jarvis le DIT
+> ```
+>
+> Les deux lignes « **rien** » du tableau ci-dessus sont couvertes : une
+> modification concurrente ne s'écrase plus, elle échoue.
+>
+> **CE QUI N'EST PAS LEVÉ, ET LA DISTINCTION EST TOUT LE SUJET.** La condition
+> disait *« MESURER si le fournisseur expose un jeton de version »*. Je ne l'ai
+> pas mesuré : **je l'ai lu dans la documentation de Google.** Aucun compte
+> n'est connecté, donc aucun appel réel n'a jamais été fait — les tests jouent
+> contre un transport simulé, qui rend les etags parce que je lui ai dit d'en
+> rendre.
+>
+> Conclure la levée ici serait exactement le motif que §2 recense : *une
+> affirmation que le mécanisme censé l'établir n'établit pas.* Un transport que
+> j'ai écrit ne prouve rien sur Google.
+>
+> **Reste donc à mesurer, au premier appel réel :** que Google rende bien un
+> etag sur `events.get`, et qu'il réponde bien `412` sur un `If-Match` périmé.
+> Deux appels suffiront.
 
 ### 4.8 La composition d'outils n'est pas éprouvée
 

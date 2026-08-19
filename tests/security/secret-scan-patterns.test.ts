@@ -20,6 +20,12 @@ const SHOULD_DETECT: Readonly<Record<string, string>> = {
   'Jeton GitHub': 'ghp_abcdefghijklmnopqrstuvwxyz0123456789',
   'Clé AWS': 'AKIAIOSFODNN7EXAMPLE',
   'Clé Google': `AIza${'B'.repeat(39)}`, // volontairement plus longue que 35
+  /* ADR-078 — les trois secrets qu'introduit l'adaptateur Google Agenda, et
+     qu'aucun motif ne voyait avant lui. Les deux premiers sont PERMANENTS :
+     leur fuite ne s'éteint pas toute seule. */
+  'Secret client Google OAuth': 'GOCSPX-abcdefghijklmnopqrstuvwxyz01',
+  'Jeton de rafraîchissement Google': `1//0e${'A'.repeat(40)}`,
+  'Jeton d’accès Google': `ya29.${'a'.repeat(60)}`,
   'Clé Anthropic': 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz',
   'Bloc de clé privée': '-----BEGIN RSA PRIVATE KEY-----',
   JWT: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N',
@@ -59,6 +65,24 @@ describe('motifs du scan de secrets', () => {
       }
     }
     expect(falsePositives).toEqual([]);
+  });
+
+  it('CONTRÔLE NÉGATIF — les motifs Google OAuth ne mordent pas au hasard', () => {
+    /* Un motif de sécurité trop large se paie en bruit, et le bruit se paie en
+       exceptions — c'est-à-dire en trous. Ces trois chaînes ressemblent aux
+       secrets sans en être, et doivent passer. */
+    const oauth = PATTERNS.filter((p) => p.name.includes('Google'));
+    expect(oauth.length).toBeGreaterThanOrEqual(4);
+    for (const innocent of [
+      'const url = "https://1//example";',
+      'ya29 est un identifiant de test',
+      'GOCSPX-court',
+      'import { google } from "./google.js";',
+    ]) {
+      for (const motif of oauth) {
+        expect(motif.regex.test(innocent), `${motif.name} ← ${innocent}`).toBe(false);
+      }
+    }
   });
 
   it('reconnaît une clé Google plus longue que sa taille nominale', () => {

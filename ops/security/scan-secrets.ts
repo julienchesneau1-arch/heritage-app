@@ -12,6 +12,7 @@
  * Sortie : code 0 si rien n'est trouvé, 1 sinon.
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { argv } from 'node:process';
 import { pathToFileURL } from 'node:url';
 
@@ -29,6 +30,22 @@ export const PATTERNS: readonly Pattern[] = [
   // sécurité doit préférer le faux positif au silence.
   { name: 'Clé AWS', regex: /\bAKIA[0-9A-Z]{16}/ },
   { name: 'Clé Google', regex: /\bAIza[0-9A-Za-z_-]{35}/ },
+  /* ⚠ LES TROIS MOTIFS SUIVANTS ONT ÉTÉ AJOUTÉS PAR ADR-078, ET LEUR ABSENCE
+     ÉTAIT UN TROU CRÉÉ PAR CE MÊME COMMIT.
+
+     `Clé Google` couvre une clé d'API (`AIza…`). L'adaptateur Google Agenda
+     introduit trois secrets d'un genre DIFFÉRENT — OAuth — qu'aucun motif ne
+     reconnaissait :
+
+       GOCSPX-…   le secret client, permanent
+       1//…       le jeton de rafraîchissement, permanent lui aussi
+       ya29.…     le jeton d'accès, éphémère mais suffisant pour tout lire
+
+     Brancher un service sans étendre le scanner, c'est ajouter une porte et
+     ne pas déplacer la caméra. */
+  { name: 'Secret client Google OAuth', regex: /\bGOCSPX-[A-Za-z0-9_-]{20,}/ },
+  { name: 'Jeton de rafraîchissement Google', regex: /\b1\/\/[0-9A-Za-z_-]{30,}/ },
+  { name: 'Jeton d’accès Google', regex: /\bya29\.[0-9A-Za-z_-]{20,}/ },
   { name: 'Clé Anthropic', regex: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
   { name: 'Bloc de clé privée', regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   {
@@ -158,14 +175,33 @@ function main(): void {
     }
   }
 
-  // 2. Contenu des fichiers suivis.
+  /* 2. Contenu des fichiers suivis — DEPUIS LE DISQUE.
+
+     ⚠ CETTE BOUCLE LISAIT `git show HEAD:<fichier>`, ET LE SCAN ANNONÇAIT
+     « arbre de travail et historique ». Il n'a jamais lu l'arbre de travail :
+     il relisait le DERNIER COMMIT, et sautait en silence tout fichier pas
+     encore commité (`catch { continue }`).
+
+     Mesuré par sabotage : un jeton de rafraîchissement Google déposé dans
+     `src/`, puis `git add`, puis `pnpm secrets:scan` → « aucun secret
+     détecté ». Deux fois — non suivi, puis suivi.
+
+     La conséquence est exactement à l'endroit où l'on se sert de cet outil :
+     AVANT de commiter. En CI le code est déjà commité, donc la garde y
+     fonctionne — c'est ce qui la rendait invisible. En local, celui qui
+     vérifie avant d'engager son travail obtenait un feu vert sur du rouge.
+
+     Neuvième occurrence du motif de `docs/26 §2` : une affirmation que le
+     mécanisme censé l'établir n'établit pas. Ici sur un outil de SÉCURITÉ. */
   for (const file of tracked) {
     if (ALLOWLIST.some((r) => r.test(file))) continue;
     let content: string;
     try {
-      content = git(['show', `HEAD:${file}`]);
+      content = readFileSync(file, 'utf8');
     } catch {
-      continue; // fichier non encore commité
+      /* Le fichier est suivi mais absent du disque — supprimé, pas encore
+         commité. Son contenu passé reste couvert par le scan d'historique. */
+      continue;
     }
     findings.push(...scanText(file, content, file));
   }

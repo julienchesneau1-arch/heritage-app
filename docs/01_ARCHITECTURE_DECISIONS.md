@@ -5849,3 +5849,112 @@ Le jour où l'adaptateur Google Agenda arrivera, la tentation sera d'écrire une
 seconde reconnaissance de date, plus riche, à côté de celle-ci. Ce serait
 recréer le défaut n°2 à plus grande échelle. `expression.ts` s'étend ; il ne se
 double pas.
+
+---
+
+## ADR-078 — Le premier fournisseur réseau : Google Agenda
+
+**Statut :** accepté (ADR-076, `docs/04 §1`, `docs/26 §4.7`).
+**Référence :** `src/providers/google/calendar.ts`,
+`tests/providers/google-calendar.test.ts`, `docs/DEPENDENCIES.md`.
+
+### Ce que ce commit change de nature
+
+`src/providers/` ne contenait que des interfaces et le moteur de politique.
+**Jarvis n'avait jamais parlé à une machine qu'il ne possède pas.** Toute la
+machinerie de vérification, d'idempotence et de cloisonnement avait été écrite
+pour ce moment, et n'avait jamais servi contre un vrai tiers.
+
+### Pourquoi Google ne dégrade pas la posture
+
+*Data-local-first* semble s'opposer à lire un agenda hébergé. Il ne s'y oppose
+pas, et la raison tient en une phrase : **la donnée y est déjà**. La lire
+n'ajoute aucune exposition — c'est le seul cas où intégrer un service tiers ne
+coûte rien en surface d'attaque.
+
+L'écriture, elle, rend un service qu'aucun code local ne rendrait : un événement
+créé ici **sonne sur l'iPhone**, parce que le téléphone est déjà synchronisé.
+`CLAUDE.md` règle 4 n'a jamais eu d'application plus nette — Jarvis n'a pas
+besoin de construire des notifications, il a besoin d'écrire là où ça sonne
+déjà.
+
+### Aucune dépendance npm
+
+L'API est du REST sur HTTPS et Node 22 porte `fetch`. Le paquet officiel
+`googleapis` apporterait des centaines de dépendances transitives pour quatre
+requêtes : il ne mérite pas son droit d'exister (`docs/04 §1`). La fiche est
+dans `docs/DEPENDENCIES.md`, sous une rubrique nouvelle — **un service n'est pas
+un paquet** : il ne s'installe pas, il se connecte, et sa fiche est plus longue
+sur ce qu'il voit.
+
+### Trois propriétés qui n'existaient nulle part avant
+
+**1. L'idempotence traverse la frontière.** ADR-013 la posait localement, par
+clé d'opération, et elle s'arrêtait à la sortie : un processus qui meurt entre
+l'appel et l'écriture du verdict ferait recréer l'événement à la reprise — deux
+rendez-vous identiques, rien pour les distinguer.
+
+Google accepte un identifiant fourni par le client. En le **dérivant de la clé
+d'opération**, une reprise retombe sur le même identifiant, Google répond `409`,
+et ce conflit est une **preuve d'existence** — pas une erreur. On relit, on rend
+l'événement.
+
+**2. La fenêtre lecture/écriture se ferme par etag.** ADR-045 exige que la
+modification rende ce qu'elle a remplacé ; Google ne le rend pas, donc il faut
+lire avant. `If-Match` transforme la course en refus : si l'événement a changé,
+`412`, et **rien n'est écrit**. C'est le geste de la génération de bail
+(ADR-035), appliqué à une ressource qu'on ne possède pas.
+
+Sans etag, on **refuse d'écrire**. Une modification qu'on ne pourrait pas
+annuler vaut moins qu'un refus — même arbitrage qu'ADR-070 sur la suppression.
+
+**3. Une réponse d'API est une entrée non fiable.** Le schéma Zod refuse un
+événement sans date, et classe le refus en `PROVIDER_TRUST_REVOKED` et non en
+`VALIDATION` : ce n'est pas notre entrée qui est fautive, c'est le fournisseur
+qui a répondu autre chose que ce qu'il annonce. La distinction porte une
+décision — la seconde exige un humain.
+
+### Les secrets
+
+Trois, au coffre. `expose()` est le seul accès à une valeur, et **un test le
+compte** : trois appels, tous dans la construction de la requête de jeton. Un
+quatrième ailleurs serait un secret qui prend un chemin nouveau.
+
+Et une règle qui mérite d'être écrite parce que le réflexe inverse est naturel :
+**le corps d'une réponse d'authentification n'est jamais recopié dans un message
+d'erreur.** C'est utile pour diagnostiquer, et ce message finit dans un log. Le
+code de statut suffit.
+
+### Aucune horloge
+
+La voie évidente pour le jeton d'accès serait de retenir sa durée de vie et de
+la comparer à l'horloge du processus. On ne calcule rien : on l'utilise jusqu'au
+`401`, puis on en demande un neuf et on rejoue **une fois**. Plus simple, plus
+robuste, sans dérive — et « une fois » est la propriété : sur un compte révoqué,
+une boucle martèlerait Google.
+
+### ⚠ CE QUI N'EST PAS PROUVÉ, ET QUI DOIT ÊTRE LU AVANT DE CITER CET ADR
+
+**Ce code n'a jamais parlé à l'API réelle.** Aucun compte n'est connecté. Les
+dix-huit tests jouent contre un **transport simulé** :
+
+```text
+✅ la forme des requêtes, le traitement de chaque réponse, l'absence de fuite
+❌ que Google se comporte comme simulé ici
+```
+
+Un transport que j'ai écrit ne prouve rien sur Google. `docs/26 §4.7` est donc
+**levée à moitié** : le mécanisme manquant est écrit, mais sa condition disait
+*« MESURER si le fournisseur expose un jeton de version »* — je ne l'ai pas
+mesuré, je l'ai lu dans la documentation.
+
+**Deux appels réels suffiront à lever le reste** : que `events.get` rende un
+etag, et que `If-Match` périmé rende `412`.
+
+### Condition de révision
+
+Le jour du premier appel réel, la tentation sera de conclure « ça marche » sur
+un succès. Un succès ne prouve que le chemin nominal. Les trois cas qui portent
+les garanties — `409`, `412`, absence d'etag — ne se produisent pas
+spontanément : **il faudra les provoquer**, en modifiant l'événement depuis
+l'interface web pendant qu'un test tourne.

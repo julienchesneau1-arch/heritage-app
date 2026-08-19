@@ -90,6 +90,72 @@ remplacement:       OPA/Rego, prévu par l'ADR-005. L'interface `PolicyEvaluator
 
 ---
 
+## Services externes
+
+Un service n'est pas un paquet : il ne s'installe pas, il se **connecte**. Sa
+fiche est donc plus courte sur la maintenance et beaucoup plus longue sur ce
+qu'il voit.
+
+### Google Calendar API — v3
+
+```yaml
+raison_d_etre:      Écrire un rappel LÀ OÙ IL SONNE. L'agenda Google de Julien
+                    est déjà synchronisé vers son iPhone ; un événement créé ici
+                    déclenche une notification qu'aucun code local ne saurait
+                    produire.
+pourquoi_pas_natif: Construire un ordonnanceur et un canal de notification
+                    iOS serait des semaines de travail pour reproduire ce que le
+                    téléphone fait déjà. `CLAUDE.md` règle 4 — assembler avant
+                    de développer.
+paquet_npm:         AUCUN. L'API est du REST sur HTTPS et Node 22 porte `fetch`.
+                    Le paquet officiel `googleapis` apporterait des centaines de
+                    dépendances transitives pour quatre requêtes : il ne mérite
+                    pas son droit d'exister (`04 §1`).
+criticite:          NON CRITIQUE. Jarvis fonctionne entièrement sans — les
+                    rappels restent visibles dans le briefing du matin.
+licence:            Service, pas logiciel. Conditions Google Cloud Platform.
+                    Usage personnel : gratuit dans les quotas courants.
+donnees_vues:       Titre, date de début et de fin des événements créés ou lus.
+                    Classe maximale déclarée : ORANGE. Une donnée RED ne peut
+                    pas l'atteindre — le Policy Gate consulte
+                    `maxPrivacyClass` du fournisseur.
+                    ⚠ Google voit donc ce que Julien écrit dans son agenda.
+                    C'est déjà le cas aujourd'hui : l'intégration n'ajoute
+                    aucune exposition, elle en tire parti.
+acces_reseau:       HTTPS sortant vers `www.googleapis.com` et
+                    `oauth2.googleapis.com`. Aucun autre hôte.
+secrets:            Trois, au coffre, JAMAIS dans le dépôt :
+                      GOOGLE_OAUTH_CLIENT_ID
+                      GOOGLE_OAUTH_CLIENT_SECRET
+                      GOOGLE_OAUTH_REFRESH_TOKEN
+                    Un test structurel compte les appels à `expose()` : trois,
+                    tous dans la construction de la requête de jeton.
+maintenance:        API stable depuis 2011, versionnée (`v3`). Google annonce
+                    les retraits avec un an de préavis.
+vulnerabilites:     Surface propre : aucun code tiers exécuté chez nous.
+                    Le risque est la FUITE DE JETON, traitée par le coffre et
+                    par l'interdiction de recopier une réponse d'authentification
+                    dans un message d'erreur.
+strategie_maj:      Aucune mise à jour à subir — c'est un contrat REST distant.
+                    Un changement de contrat se manifeste par
+                    `PROVIDER_TRUST_REVOKED`, jamais par une supposition.
+fallback:           `null`. Sans compte connecté, les outils d'agenda rendent
+                    `PROVIDER_UNAVAILABLE` — une réponse, pas une panne. Les
+                    rappels continuent d'exister localement et de remonter dans
+                    le briefing.
+remplacement:       CalDAV est le protocole standard, et Apple, Fastmail,
+                    Nextcloud le parlent tous. La surface utilisée ici est
+                    minuscule — lister, créer, modifier, relire — et
+                    l'interface `CalendarProvider` ne mentionne Google nulle
+                    part. Estimé à 2–3 jours pour un adaptateur CalDAV.
+                    ⚠ Une propriété serait perdue : l'idempotence par
+                    identifiant fourni par le client. CalDAV la permet aussi
+                    (l'UID est choisi par le client), donc le coût est réel mais
+                    pas structurel.
+```
+
+---
+
 ## Dépendances de développement
 
 Elles ne s'exécutent jamais en production et ne voient aucune donnée
