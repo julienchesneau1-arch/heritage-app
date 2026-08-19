@@ -328,16 +328,47 @@ describe('l’ordre des tiers, et l’état réel du câblage', () => {
     expect(assistant).toContain('if (repli.ok) proposal = repli.value;');
   });
 
-  it('DÉMONSTRATION — aucun modèle local n’est branché aujourd’hui', () => {
-    /* ⚠ CE TEST DIT UNE ABSENCE, ET C'EST SA FONCTION.
+  it('le `Tier 1` est CONSTRUCTIBLE, et désactivé par défaut', () => {
+    /* ⚠ CE TEST A CHANGÉ DE CAMP — ADR-082.
 
-       `tier1: null` dans le runtime. Aucun `ModelProvider` local n'existe dans
-       le dépôt : en construire un ici annoncerait une compréhension qu'on n'a
-       pas. Jarvis reste entièrement fonctionnel sans (I1, I2) — il comprend
-       moins de formulations, et le dit.
+       Il démontrait une absence : « aucun modèle local n'est branché », avec
+       `tier1: null` en dur dans le runtime. `createOllama` existe désormais, et
+       le `Tier 1` se construit dès que la configuration l'active.
 
-       CETTE LIGNE DOIT TOMBER le jour où un runtime local sera écrit. */
+       Ce qui reste vrai, et qui est un invariant PRODUIT et non un manque :
+       le défaut livré est DÉSACTIVÉ. `I1` et `I2` exigent que Jarvis comprenne,
+       mémorise, retrouve et exécute sans Internet et sans fournisseur IA.
+       Livrer `enabled: true` ferait dépendre le premier démarrage d'une
+       installation qui n'a pas eu lieu. */
     const runtime = readFileSync('src/apps/runtime.ts', 'utf8');
-    expect(runtime).toContain('tier1: null');
+    expect(runtime).toContain('tier1Configure(options.localModel, gateway)');
+    expect(runtime).not.toContain('tier1: null,');
+
+    const defaut: unknown = JSON.parse(readFileSync('config/default.json', 'utf8'));
+    expect((defaut as { localModel: { enabled: boolean } }).localModel.enabled).toBe(false);
+  });
+
+  it('DÉMONSTRATION — aucun MODÈLE n’a jamais répondu à ce code', () => {
+    /* L'absence qui reste, et elle est plus étroite qu'avant ADR-082. Le
+       câblage existe ; ce qui manque est la MESURE. Rien ici ne dit :
+
+         — si un modèle 8B choisit le bon outil, et à quel taux ;
+         — combien de temps il met sur la machine de Julien ;
+         — si les 43 % d'ADR-080 montent, et de combien.
+
+       ⚠ CE TEST NE LIT PLUS SA PROPRE SOURCE, ET C'EST UNE LEÇON GÉNÉRALE.
+
+       Deux rédactions successives ont échoué en attrapant leur propre
+       commentaire — la neuvième et la dixième fois qu'un détecteur de ce dépôt
+       lit ma prose plutôt que mon code. Ce n'est pas de la malchance :
+
+           un test qui grep son propre fichier finira toujours par
+           matcher l'explication qu'il porte.
+
+       La preuve passe donc par une VALEUR : le fournisseur employé s'identifie
+       lui-même comme factice. Aucune phrase ne peut la contredire. */
+    expect(modele({}).capabilities.id).toBe('faux');
+    expect(modele({}).capabilities.local).toBe(true);
+    expect(modele({}).capabilities.costPerMillionTokensEur).toBe(0);
   });
 });

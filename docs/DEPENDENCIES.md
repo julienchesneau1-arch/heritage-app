@@ -96,6 +96,58 @@ Un service n'est pas un paquet : il ne s'installe pas, il se **connecte**. Sa
 fiche est donc plus courte sur la maintenance et beaucoup plus longue sur ce
 qu'il voit.
 
+### Ollama — runtime de modèle local
+
+```yaml
+raison_d_etre:      Comprendre une formulation LIBRE. Les règles `Tier 0`
+                    plafonnent à 43 % d'une conversation réelle (ADR-080) ;
+                    au-delà, il faut un modèle.
+pourquoi_pas_natif: Faire tourner un modèle de langage demande un moteur
+                    d'inférence. Aucun n'est écrit ici, et aucun ne le sera :
+                    ADR-016 pose des runtimes d'inférence HORS PROCESSUS.
+paquet_npm:         AUCUN. L'API est du REST sur HTTP et Node 22 porte `fetch`.
+criticite:          NON CRITIQUE, et c'est un invariant. `localModel.enabled`
+                    vaut `false` par défaut. I1 et I2 exigent que Jarvis
+                    comprenne, mémorise, retrouve et exécute sans fournisseur
+                    IA — il comprend moins de formulations, et le DIT.
+licence:            Ollama : MIT. Les MODÈLES ont leurs propres licences, à
+                    vérifier une par une (`docs/04 §3`). Llama porte des
+                    restrictions d'usage commercial ; Mistral et Qwen sont
+                    permissifs. Ce choix appartient à Julien.
+donnees_vues:       L'énoncé de l'utilisateur et le catalogue d'outils. RIEN
+                    d'autre — ni mémoire, ni contenu d'email. Classe maximale
+                    déclarée : ORANGE.
+acces_reseau:       HTTP vers la BOUCLE LOCALE uniquement, et c'est VÉRIFIÉ.
+                    `createOllama` refuse à la construction toute adresse qui
+                    n'est pas `localhost` / `127.0.0.1` / `[::1]`.
+                    ⚠ Sans cette garde, pointer la configuration ailleurs
+                    ferait sortir chaque énoncé de la machine SANS qu'aucune
+                    ligne de code ne change, et le fournisseur continuerait de
+                    se déclarer « local ».
+secrets:            AUCUN. Ollama n'authentifie pas sur la boucle locale — et
+                    c'est cohérent : il n'y a pas de tiers à qui prouver son
+                    identité.
+maintenance:        Projet très actif, API stable depuis 2023.
+vulnerabilites:     Aucun code tiers exécuté dans notre processus. Le risque
+                    résiduel est qu'Ollama écoute sur `0.0.0.0` — une
+                    configuration D'OLLAMA, pas de Jarvis, et hors de notre
+                    portée. À signaler dans la documentation d'installation.
+strategie_maj:      Aucune à subir : contrat REST distant. Un changement se
+                    manifeste par `PROVIDER_TRUST_REVOKED`, jamais par une
+                    supposition.
+fallback:           `null` → pas de `Tier 1`, retour au `Tier 0` seul. Un refus
+                    d'adresse ne fait PAS échouer le démarrage : punir
+                    l'utilisateur d'une option corrigeable le laisserait sans
+                    assistant du tout.
+remplacement:       llama.cpp expose une API compatible OpenAI, MLX tourne
+                    nativement sur Apple Silicon (ADR-007 pose le seuil de
+                    32 Go). La surface utilisée est minuscule — `/api/chat`,
+                    `/api/tags`, `/api/embeddings` — et `ModelProvider` ne
+                    mentionne Ollama nulle part. Estimé à 1 jour.
+```
+
+---
+
 ### Google Calendar API — v3
 
 ```yaml

@@ -27,6 +27,8 @@ import { createEntityResolver } from '../core/context/resolver.js';
 import { createResolveurTemporel } from '../core/temps/resolution.js';
 import { createIntentEngine, type IntentEngine } from '../core/intent/engine.js';
 import { createEnvSecretVault } from '../core/secrets/vault.js';
+import { createOllama } from '../providers/ollama/model.js';
+import { createTier1, type Tier1 } from '../core/intent/tier1.js';
 import {
   createGoogleAgenda,
   googleAgendaConfigure,
@@ -77,6 +79,13 @@ export function buildRuntime(
      * LUE. Elle ne l'était pas — la protection tenait par un littéral.
      */
     cloudEnabled?: boolean;
+    /**
+     * LE MODÈLE LOCAL — ADR-082.
+     *
+     * Absent = pas de `Tier 1`, et c'est le défaut. La compréhension étendue
+     * est une OPTION ; Jarvis fonctionne sans (I1, I2).
+     */
+    localModel?: { enabled: boolean; url: string; model: string };
   } = {},
 ): Result<Runtime> {
   const source = loadPolicySource(options.policyDir ?? join(process.cwd(), 'policies'));
@@ -145,16 +154,18 @@ export function buildRuntime(
       resolver: createEntityResolver(db),
       // ADR-077 : les dates sont calculées PAR LA BASE, jamais par le processus.
       temps: createResolveurTemporel(db),
-      /* ⚠ `null` TANT QU'AUCUN MODÈLE LOCAL N'EST BRANCHÉ — ADR-081.
+      /* LE `TIER 1`, SI ET SEULEMENT SI UN MODÈLE LOCAL EST CONFIGURÉ — ADR-082.
 
-         Aucun `ModelProvider` local n'existe encore dans le dépôt : le
-         construire ici reviendrait à annoncer une compréhension qu'on n'a pas.
-         Jarvis reste entièrement fonctionnel sans (I1, I2) — il comprend moins
-         de formulations, et le dit.
+         `null` reste un état NORMAL, et le défaut : `localModel.enabled` vaut
+         `false` dans `config/default.json`. Jarvis fonctionne entièrement sans
+         modèle (I1, I2) — il comprend moins de formulations, et le dit.
 
-         Cette ligne changera le jour où un runtime local sera écrit, et le test
-         de câblage de `tests/redteam/wiring.test.ts` le remarquera. */
-      tier1: null,
+         ⚠ UN FOURNISSEUR QUI REFUSE DE SE CONSTRUIRE NE FAIT PAS ÉCHOUER LE
+         DÉMARRAGE. Une adresse non locale est refusée par `createOllama`, et on
+         retombe alors sur `null` : Jarvis démarre en `Tier 0`. Le contraire —
+         un refus de démarrer — punirait l'utilisateur d'une option qu'il peut
+         corriger, et le laisserait sans assistant du tout. */
+      tier1: tier1Configure(options.localModel, gateway),
     }),
     undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
     embeddingsAvailable: false,
@@ -196,6 +207,7 @@ export function openRuntime(
      de défaut que `docs/26 §2` recense huit fois. */
   const runtime = buildRuntime(db, {
     cloudEnabled: config.value.public.cloud.enabled,
+    localModel: config.value.public.localModel,
   });
   if (!runtime.ok) {
     void db.close();
@@ -222,4 +234,25 @@ export function openRuntime(
   };
 
   return runtime;
+}
+
+/**
+ * Construit le `Tier 1` si la configuration le demande, `null` sinon.
+ *
+ * Le refus est SILENCIEUX côté démarrage mais pas invisible : `system_status`
+ * interroge la santé des fournisseurs, et `createOllama` explique pourquoi il
+ * a refusé. Un démarrage qui échoue sur une option de compréhension serait
+ * disproportionné ; un refus muet serait malhonnête. On prend la troisième
+ * voie : démarrer sans, et pouvoir le dire.
+ */
+function tier1Configure(
+  localModel: { enabled: boolean; url: string; model: string } | undefined,
+  gateway: ToolGateway,
+): Tier1 | null {
+  if (localModel === undefined || !localModel.enabled) return null;
+  const modele = createOllama({ url: localModel.url, model: localModel.model });
+  if (!modele.ok) return null;
+  /* Le catalogue est passé en FONCTION, relu à chaque appel : un outil retiré
+     pour perte de confiance (I12) cesse aussitôt d'être proposable. */
+  return createTier1({ model: modele.value, outils: () => gateway.list() });
 }

@@ -36,6 +36,25 @@ export const PublicConfig = z.object({
     enabled: z.boolean(),
   }),
 
+  /**
+   * Le modèle LOCAL — ADR-082.
+   *
+   * `enabled: false` par défaut, et c'est un invariant produit : Jarvis doit
+   * fonctionner sans aucun modèle installé (I1, I2). L'activer élargit la
+   * compréhension ; ne pas l'activer ne casse rien.
+   */
+  localModel: z.object({
+    enabled: z.boolean(),
+    /**
+     * DOIT désigner la boucle locale. Vérifié à la construction du fournisseur,
+     * pas seulement ici : une adresse distante ferait sortir chaque énoncé de
+     * la machine sans qu'aucune ligne de code ne change.
+     */
+    url: z.string().min(1),
+    /** Nom du modèle tel que le runtime le connaît (`llama3.1:8b`…). */
+    model: z.string().min(1),
+  }),
+
   privacy: z.object({
     /** 03 §7 — mode privé actif au démarrage ? */
     startInPrivateMode: z.boolean(),

@@ -6354,3 +6354,117 @@ Le jour où un runtime local sera branché, deux tentations viendront ensemble :
    exactement le geste que les trois refus ci-dessus rendent visible. La
    confirmation n'est pas une friction à optimiser : c'est ce qui distingue
    *proposer* de *décider*.
+
+---
+
+## ADR-082 — Le modèle qui tourne chez toi, et la garde qui rend ça vrai
+
+**Statut :** accepté (ADR-007, ADR-016, ADR-017, ADR-081, `docs/00` data-local-first).
+**Référence :** `src/providers/ollama/model.ts`, `tests/providers/ollama.test.ts`,
+`src/apps/runtime.ts`, `config/default.json`.
+
+### La dernière pièce
+
+ADR-081 avait écrit l'enveloppe de sûreté du `Tier 1` et l'avait laissée sans
+modèle — quatrième module hors circuit, délibérément. Cet ADR la remplit.
+
+`createOllama` implémente `ModelProvider` sur la boucle locale. **Aucune
+dépendance npm** : l'API est du REST sur HTTP, et Node 22 porte `fetch`.
+
+### ⚠ « Local » est une ADRESSE, pas une intention
+
+C'est le cœur de cet ADR, et le test le plus important du fichier n'est pas
+celui qui fait parler le modèle.
+
+Pointer `localModel.url` vers `http://serveur-distant:11434` transformerait
+Jarvis en client d'un service tiers — **sans qu'aucune ligne de code ne
+change**. Le fournisseur continuerait de déclarer `local: true`, le Policy Gate
+le croirait, et chaque énoncé de l'utilisateur partirait sur le réseau.
+
+L'adresse est donc **vérifiée**, et refusée **à la construction** — pas au
+premier appel. Un refus tardif laisserait Jarvis démarrer en se croyant local,
+et n'échouerait qu'au moment où l'utilisateur parle : au pire moment, et après
+que la configuration a été acceptée en silence.
+
+> Une promesse de confidentialité qui repose sur la vigilance de celui qui édite
+> un fichier de configuration n'est pas une promesse.
+
+La liste d'hôtes est **fermée**, pas un motif. Un motif du genre « commence par
+192.168 » laisserait passer le réseau local — c'est-à-dire **une autre
+machine**, chez le voisin de bureau ou sur le Wi-Fi d'un café.
+
+### Une distinction qui porte une décision
+
+```text
+JSON mal formé du MODÈLE        → VALIDATION            ça arrive, c'est normal
+enveloppe non conforme d'OLLAMA → PROVIDER_TRUST_REVOKED exige un humain
+```
+
+Ollama fait son travail quand il transmet ce qu'un modèle a produit. Rompre la
+confiance dans le fournisseur pour une réponse bavarde **punirait le messager**,
+et couperait l'outil pour un comportement qui est normal.
+
+### Ce qui reste désactivé, et pourquoi c'est un invariant
+
+`config/default.json` livre `localModel.enabled: false`. **I1 et I2** exigent que
+Jarvis comprenne, mémorise, retrouve et exécute sans Internet et sans
+fournisseur IA. Livrer `true` ferait dépendre le premier démarrage d'une
+installation qui n'a pas eu lieu.
+
+Et un refus d'adresse **ne fait pas échouer le démarrage** : on retombe sur
+`Tier 0`. Punir l'utilisateur d'une option qu'il peut corriger le laisserait sans
+assistant du tout.
+
+### L'aller-retour d'un orphelin, annoncé à l'aller
+
+```text
+4   + intent/tier1.ts (ADR-081) — l'enveloppe écrite AVANT le modèle
+3   − intent/tier1.ts (ADR-082) — createOllama existe, le Tier 1 se construit
+```
+
+Une seule étape, et la sortie était annoncée dans l'entrée. C'est ce qu'on
+attend d'une **dette datée**, par opposition à celle qu'on découvre.
+
+### Un motif de méthode, à sa dixième occurrence
+
+Deux rédactions successives d'un même test ont échoué **en attrapant leur propre
+commentaire**. Neuvième et dixième fois qu'un détecteur de ce dépôt lit ma prose
+plutôt que mon code — et cette fois j'enfreignais une règle que j'avais écrite
+un commit plus tôt (*nommer le concept, pas le jeton*).
+
+Ce n'est pas de la malchance, c'est structurel :
+
+> Un test qui grep son propre fichier finira toujours par matcher l'explication
+> qu'il porte.
+
+La preuve passe désormais par une **valeur** — le fournisseur employé
+s'identifie lui-même comme factice. Aucune phrase ne peut la contredire.
+
+Un contrôle structurel a par ailleurs été **retiré** plutôt que reformulé : il
+faisait doublon avec une preuve comportementale voisine. *Un contrôle qui
+duplique une preuve ajoute de la friction sans ajouter de preuve.*
+
+### ⚠ Ce qui n'est toujours pas mesuré
+
+**Aucun Ollama n'a tourné ici.** Les tests jouent contre un transport simulé :
+forme des requêtes, traitement des réponses, cas hostiles. Rien de ce qu'un
+modèle réel produit.
+
+Trois chiffres restent inconnus, et aucun ne se déduit d'un test :
+
+```text
+— un modèle 8B choisit-il le bon outil, et à quel taux ?
+— combien de temps met-il sur la machine de Julien ?
+— les 43 % d'ADR-080 montent-ils, et de combien ?
+```
+
+### Condition de révision
+
+Au premier appel réel, la tentation sera de **retirer une confirmation** parce
+que « le modèle a bien compris ». C'est exactement ce que les trois refus
+d'ADR-081 rendent visible : la confirmation n'est pas une friction à optimiser,
+c'est ce qui distingue *proposer* de *décider*.
+
+Et le choix du modèle appartient à Julien — **licence comprise** (`docs/04 §3`) :
+Llama porte des restrictions d'usage commercial, Mistral et Qwen sont
+permissifs.

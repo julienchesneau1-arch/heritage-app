@@ -149,23 +149,18 @@ describe('RED TEAM — code mort en production', () => {
            branché — et ce test le signalera si on oublie de l'y brancher. */
         'src/core/cost/gate.ts',
 
-        /* `Tier 1` — ADR-081. Écrit, éprouvé, et appelé par PERSONNE, parce
-           qu'aucun `ModelProvider` local n'existe encore dans le dépôt.
 
-           C'est le même ordre délibéré que le CostGate deux entrées plus haut :
-           l'ENVELOPPE DE SÛRETÉ est écrite avant la capacité qu'elle encadre.
-           Chaque paramètre marqué `MODEL_OUTPUT`, chaque outil vérifié contre
-           le catalogue réel, `userConfirms` cloué à `false` — tout cela est
-           beaucoup plus facile à écrire à froid qu'après, quand un modèle
-           tourne enfin et qu'on a hâte de le voir répondre.
+        /* ⚠ `src/core/intent/tier1.ts` A QUITTÉ CETTE LISTE — ADR-082.
 
-           Le construire aujourd'hui annoncerait une compréhension qu'on n'a
-           pas : `runtime.ts` pose donc `tier1: null`, et Jarvis dit ce qu'il ne
-           comprend pas plutôt que de deviner.
+           Il y figurait avec ce motif : « écrit, éprouvé, et appelé par
+           PERSONNE, parce qu'aucun `ModelProvider` local n'existe encore ».
+           Il existe : `createOllama` implémente `ModelProvider` sur la boucle
+           locale, et `runtime.ts` construit le `Tier 1` dès que la
+           configuration l'active.
 
-           Il sortira de cette liste le jour où un runtime local sera branché —
-           et ce test le signalera si on oublie de l'y brancher. */
-        'src/core/intent/tier1.ts',
+           Le compteur redescend de quatre à trois — et cette fois pour la
+           raison qu'on avait annoncée, à l'ADR suivante. C'est le mouvement
+           qu'on attend d'une dette datée. */
 
         /* ⚠ `src/core/tools/outcome.ts` A QUITTÉ CETTE LISTE — ADR-065.
            Il y figurait avec ce commentaire : « pas encore branché […] jusqu'à
@@ -180,7 +175,7 @@ describe('RED TEAM — code mort en production', () => {
     );
   });
 
-  it('quatre modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('trois modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
     /* Le chiffre est asserté, pas seulement la liste : c'est ce qui force à
        PASSER ICI quand un module cesse d'être atteint — ou le devient.
@@ -205,12 +200,14 @@ describe('RED TEAM — code mort en production', () => {
        l'Assistant, qui résout les référents avant d'invoquer un outil. Le
        Context Engine attendait cela depuis `docs/26 §4.12` — et il l'a obtenu
        SANS modèle, par trois causes tombées l'une après l'autre. */
-    /* **À QUATRE avec ADR-081** : `intent/tier1.ts` rejoint la liste, et c'est
-       une AUGMENTATION assumée. Le compteur d'orphelins n'est pas une note à
-       minimiser — il mesure l'écart entre ce qui est écrit et ce qui sert.
-       Le faire baisser en branchant un modèle qui n'existe pas serait le
-       tricher. */
-    expect(deadLogic).toHaveLength(4);
+    /* **À QUATRE avec ADR-081**, puis **À TROIS avec ADR-082** : le `Tier 1`
+       est entré dans la liste le temps d'un commit — celui où son enveloppe de
+       sûreté était écrite mais où aucun modèle ne l'appelait — et en est sorti
+       dès que `createOllama` a existé.
+
+       Un aller-retour d'une seule étape, annoncé à l'aller. C'est ce qu'on
+       attend d'une dette datée, par opposition à celle qu'on découvre. */
+    expect(deadLogic).toHaveLength(3);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

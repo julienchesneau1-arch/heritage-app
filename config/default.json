@@ -10,6 +10,11 @@
     "hardBlockAtPercent": 100,
     "enabled": false
   },
+  "localModel": {
+    "enabled": false,
+    "url": "http://127.0.0.1:11434",
+    "model": "llama3.1:8b"
+  },
   "privacy": {
     "startInPrivateMode": false,
     "externalTelemetry": false
