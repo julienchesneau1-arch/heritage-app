@@ -96,19 +96,80 @@ function outcome(reply: AssistantReply): 'TRAITÉ' | 'DIT ABSENT' | 'PRÉCISION'
 
 describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
   let runtime: Runtime;
+  let sessionId = '';
   const results: { turn: Turn; reply: AssistantReply }[] = [];
 
   beforeAll(async () => {
     const built = buildRuntime(appDb());
     if (!built.ok) throw new Error(built.error.message);
     runtime = built.value;
+
+    /* ⚠ CE BANC MESURAIT DANS UNE CONFIGURATION QUE LE PRODUIT N'UTILISE PAS.
+       ADR-085.
+
+       Il appelait `assistant.say(phrase)` **sans `sessionId`**. Or le CLI
+       (`main.ts:328`) et la passerelle web (`http.ts:148`) en passent un, et
+       l'Assistant sans session répond à TOUT référent :
+
+         « À quoi fais-tu référence ? Je n'ai pas de conversation en cours. »
+
+       `REFERENCE 0/8` était donc garanti par le BANC autant que par le
+       produit — et personne ne pouvait distinguer les deux parts.
+
+       Le banc expliquait pourtant son résultat : *« l'Assistant est SANS ÉTAT
+       entre deux phrases »*. C'était exact quand la phrase a été écrite. Depuis
+       ADR-073 il résout les référents, et l'explication a cessé d'être vraie
+       sans que le chiffre bouge — ce qui l'a rendue indétectable.
+
+       On mesure désormais ce que Julien utilise : une session ouverte, le tour
+       enregistré après chaque action, exactement comme le CLI. */
+    const session = await runtime.sessions.start('NORMAL');
+    if (!session.ok) throw new Error(session.error.message);
+    sessionId = session.value.id;
+
     for (const turn of TURNS) {
-      results.push({ turn, reply: await runtime.assistant.say(turn.phrase) });
+      const reply = await runtime.assistant.say(turn.phrase, { sessionId });
+      results.push({ turn, reply });
+
+      /* La boucle du CLI, à l'identique (`main.ts:356`). La recopier plutôt
+         que l'appeler est un second registre du même fait (ADR-041) — la
+         dette est notée en `docs/26 §4.15`, et vaut mieux que de continuer à
+         mesurer un produit qui n'existe pas. */
+      if (reply.kind === 'DONE') {
+        await runtime.sessions.appendTurn(sessionId, {
+          speaker: 'JARVIS',
+          content: `${reply.toolId} → ${reply.status}`,
+          mentionedEntityIds: reply.mentionedEntityIds,
+        });
+      }
     }
   }, 60_000);
 
   afterAll(async () => {
     await runtime.close();
+  });
+
+  it('LE BANC MESURE BIEN LA CONFIGURATION DU PRODUIT — ADR-085', async () => {
+    /* ⚠ CETTE GARDE MANQUAIT, ET C'EST POURQUOI LE DÉFAUT A DURÉ.
+
+       Le banc a mesuré pendant des mois sans session. Le corriger n'a rien
+       changé au chiffre — donc **aucun test existant ne peut voir la
+       différence**, et rien n'empêcherait de retirer à nouveau le `sessionId`.
+
+       Un résultat identique dans deux configurations est exactement le cas où
+       une régression passe inaperçue : on la juge sur le chiffre, et le chiffre
+       est muet. On garde donc la CONFIGURATION, pas seulement le résultat.
+
+       Vérifié par la preuve la moins contournable : la session contient des
+       tours. Sans `sessionId`, il n'y en a aucun. */
+    const tours = await runtime.sessions.recentTurns(sessionId, 50);
+    expect(tours.ok).toBe(true);
+    if (!tours.ok) return;
+    expect(tours.value.length, 'le banc n’a enregistré aucun tour').toBeGreaterThan(0);
+
+    // Et la boucle du produit : chaque tour retenu vient d'une action aboutie.
+    const aboutis = results.filter((r) => r.reply.kind === 'DONE').length;
+    expect(tours.value.length).toBe(aboutis);
   });
 
   it('imprime le déroulé', () => {
@@ -131,10 +192,18 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
   });
 
   it('DÉMONSTRATION — aucun tour exigeant du contexte n\'est traité', () => {
-    // Référence, temporalité, désambiguïsation, contradiction, suppression,
-    // comparaison : zéro sur zéro. L'Assistant est SANS ÉTAT entre deux
-    // phrases — il ne relit jamais les tours précédents, qui sont pourtant
-    // stockés dans `session_turns`.
+    /* ⚠ L'EXPLICATION D'ORIGINE EST FAUSSE DEPUIS ADR-073 — corrigée ADR-085.
+       Elle disait : *« L'Assistant est SANS ÉTAT entre deux phrases — il ne
+       relit jamais les tours précédents »*.
+
+       Il les relit : `resolveAnaphora(sessionId)` est appelé avant toute
+       invocation d'outil. La phrase a cessé d'être vraie sans que le chiffre
+       bouge, ce qui l'a rendue indétectable — et c'est le vrai enseignement.
+
+       La cause réelle est EN AMONT de la résolution : ces tours ressortent
+       `DIT ABSENT`, c'est-à-dire `UNSUPPORTED`. Aucune règle `Tier 0` ne
+       reconnaît la formulation, donc aucun référent n'est jamais PRODUIT.
+       Il n'y a rien à résoudre — pas un résolveur qui échoue. */
     const contextuels = results.filter((r) => r.turn.aptitude !== 'ACTION');
     expect(contextuels.length).toBeGreaterThanOrEqual(17);
 
@@ -147,11 +216,22 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     expect(traitesCorrectement).toEqual([]);
   });
 
-  it('DÉMONSTRATION — la mémoire de travail est écrite, puis jamais relue', async () => {
-    // `SessionStore.recentTurns()` existe et fonctionne. PERSONNE ne l'appelle
-    // en dehors de ses propres tests : ni l'Assistant, ni l'Intent Engine, ni
-    // le CLI, ni le serveur. `session_turns` est une archive, pas une mémoire
-    // de travail — ce qui explique intégralement le résultat ci-dessus.
+  it('DÉMONSTRATION — le CONTENU des tours est écrit, puis jamais relu', async () => {
+    /* ⚠ CE TEST DISAIT PLUS QUE CE QU'IL VÉRIFIE — corrigé ADR-085.
+
+       Il affirmait que `session_turns` est « une archive, pas une mémoire de
+       travail — ce qui explique intégralement le résultat ci-dessus ». Deux
+       erreurs dans une phrase :
+
+       1. La table N'EST PLUS une archive. `resolveAnaphora` lit
+          `mentioned_entity_ids` à chaque tour (ADR-073), et le CLI le
+          renseigne (ADR-072).
+       2. Elle n'explique donc RIEN du résultat, qui se joue en amont.
+
+       Ce qui reste vrai, et que ce test vérifie réellement : le CONTENU
+       textuel des tours n'est jamais relu. Seuls les identifiants d'entités
+       le sont. Jarvis sait ce que l'échange a TOUCHÉ, pas ce qui s'y est DIT
+       — c'est ce qui rend « De quoi parlions-nous ? » hors de portée. */
     const callers = readFileSync(
       join(process.cwd(), 'src', 'core', 'assistant.ts'),
       'utf8',
@@ -197,10 +277,28 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
        renommer. C'est ce qui fait qu'une conversation est une conversation, et
        non une suite d'ordres.
 
-       Le mécanisme de résolution EXISTE pourtant (ADR-073). Il ne sert pas ici
-       parce que rien ne crée d'entité dans ce fil : `resolveAnaphora` lit
-       `mentioned_entity_ids`, et aucune n'est jamais évoquée. Le résolveur
-       tourne à vide — pas par défaut de câblage, par défaut de MATIÈRE.
+       ⚠ **CE CHIFFRE A ÉTÉ RE-MESURÉ APRÈS CORRECTION DU BANC — ADR-085.**
+
+       Le banc appelait `say(phrase)` **sans `sessionId`**, alors que le CLI et
+       la passerelle web en passent un. L'Assistant sans session répond à tout
+       référent « je n'ai pas de conversation en cours » : `REFERENCE 0/8`
+       était donc garanti par le BANC autant que par le produit.
+
+       Corrigé — session ouverte, tours enregistrés comme dans le CLI — et
+       **le chiffre n'a pas bougé d'une unité**. 13/30, `REFERENCE` 0/8.
+
+       C'est un résultat, pas un non-événement : le 0/8 était **surdéterminé**.
+       On sait maintenant qu'il mesure le produit, et non le banc.
+
+       **Et la cause est en amont de la résolution.** Ces huit tours ressortent
+       `DIT ABSENT` = `UNSUPPORTED` : aucune règle `Tier 0` ne reconnaît la
+       formulation, donc aucun référent n'est jamais PRODUIT. Le résolveur ne
+       tourne pas à vide — il n'est jamais appelé.
+
+       > La levée passe par la RECONNAISSANCE (un modèle local, ADR-082), pas
+       > par la résolution. Ajouter des règles `Tier 0` pour ces phrases-ci
+       > ferait monter le chiffre sans rien améliorer : les trente tours sont un
+       > ÉCHANTILLON, pas une cible.
 
        Ce test fige la mesure pour qu'elle ne dérive pas en silence, dans un
        sens comme dans l'autre. */

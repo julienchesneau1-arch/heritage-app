@@ -402,6 +402,46 @@ zéro code émis. Vérifié, pas supposé.
 
 ---
 
+### 2.10 Le banc mesurait `REFERENCE 0/8` sans jamais ouvrir de session
+
+**Trouvé en cherchant pourquoi ADR-084 ne pouvait pas faire bouger le chiffre.**
+
+`REFERENCE 0/8` est cité par quatre ADR et par §4.13. Le banc qui le produit
+appelait `assistant.say(phrase)` **sans `sessionId`** — alors que le CLI et la
+passerelle web en passent un. Sans session, l'Assistant répond à tout référent
+« je n'ai pas de conversation en cours », avant même de chercher.
+
+**Et le banc expliquait son résultat par une phrase périmée** : *« l'Assistant
+est SANS ÉTAT entre deux phrases »*. Vraie à l'écriture, **fausse depuis
+ADR-073**. Elle a cessé de l'être sans que le chiffre bouge — un commentaire ne
+casse aucun test.
+
+**Corrigé** (ADR-085) : session ouverte, tours enregistrés comme dans le CLI.
+
+**Re-mesuré — et le chiffre n'a pas bougé d'une unité.** 13/30, `REFERENCE`
+0/8.
+
+> C'est le résultat, pas un non-événement. Le 0/8 était **surdéterminé** : deux
+> causes suffisantes agissaient ensemble. On sait maintenant qu'il mesure le
+> produit et non le banc — ce que tout le monde supposait sans l'avoir montré.
+
+**Et la cause réelle est plus en amont qu'écrit en §4.13** : les huit tours
+ressortent `UNSUPPORTED`. Aucune règle ne reconnaît la formulation, donc aucun
+référent n'est PRODUIT. Ce n'est pas la reconnaissance d'ENTITÉS qui manque en
+premier — c'est la reconnaissance de l'ÉNONCÉ.
+
+**Gardé** par un test de configuration, et c'est le point : corriger le banc
+n'ayant rien changé au chiffre, **aucun test existant ne pouvait voir la
+différence**. On garde donc la configuration, pas le résultat. Sabotage → 1
+rouge.
+
+> **Douzième occurrence du motif, et la plus retorse.** L'affirmation n'était
+> pas fausse — elle était juste pour une raison qui avait cessé d'exister. Un
+> chiffre juste peut reposer sur une explication morte, et le chiffre ne le dira
+> jamais, puisqu'il ne change pas.
+
+---
+
 ### 2.9 Le paquet de contexte filtrait UN canal sur TROIS — et la porte le certifiait
 
 **Trouvé en relisant `packet.ts` pour un autre chantier** (ADR-083). Pas par un
@@ -1437,6 +1477,37 @@ demande explicite.
 > C'est la **reconnaissance** d'entités qui manque, pas la résolution. La
 > première demande un modèle ; la seconde est exacte, locale et gratuite.
 
+⚠ **CE DIAGNOSTIC EST TROP ÉTROIT — corrigé ADR-085, après re-mesure.**
+
+Il dit « le résolveur tourne à vide faute de MATIÈRE ». Mesuré : **il n'est
+jamais appelé.** Les huit tours ressortent `UNSUPPORTED` — aucune règle `Tier 0`
+ne reconnaît la formulation, donc aucun référent n'est jamais PRODUIT.
+
+```text
+écrit      reconnaissance d'ENTITÉS  →  « il », « le carreleur »
+mesuré     reconnaissance de l'ÉNONCÉ →  « Marque la première comme faite »
+                                          n'atteint aucune règle
+```
+
+« Marque la première comme faite » n'échoue pas faute d'entité : il échoue faute
+de règle. La distinction change la conclusion — il ne suffira pas de peupler
+`entities`, il faut qu'un modèle comprenne la phrase (ADR-082, ADR-084).
+
+**Et un second verrou apparaît derrière le premier**, invisible tant que rien ne
+reconnaît : `resolveAnaphora` ne résout que vers des **entités**. Or trois des
+huit tours désignent une ressource que Jarvis vient de toucher — une note, une
+tâche, un rappel. L'identifiant est connu **exactement** au moment de l'action,
+et l'Assistant le jette :
+
+```ts
+// assistant.ts — ADR-072
+mentionedEntityIds: touchee.kind === 'entity' ? [touchee.id] : []
+```
+
+Ces trois-là ne demandent **aucune** reconnaissance d'entité, seulement de
+cesser de jeter ce que l'outil déclare. C'est le chantier qui suit
+immédiatement l'installation d'un modèle.
+
 **Condition de levée** : un `Tier 1` local capable de reconnaître les entités
 d'un énoncé libre — le chantier qu'ADR-017 chiffre. Écrire des règles `Tier 0`
 pour les référents ne marcherait pas : « il » ne se résout pas par la forme de la
@@ -1474,6 +1545,35 @@ phrase, mais par ce qui a été dit avant.
 ⚠ **Le piège du chiffre** : on peut le faire monter en ajoutant des règles pour
 les phrases exactes du scénario. Il grimperait sans que rien ne s'améliore. Les
 trente tours sont un **échantillon**, pas une cible.
+
+---
+
+### 4.15 Le banc de scénarios recopie la boucle du CLI au lieu de l'appeler
+
+**Ouverte par ADR-085**, sciemment, en corrigeant §2.10.
+
+Le banc doit enregistrer les tours comme le fait le produit. Il le fait en
+**recopiant** douze lignes de `cli/main.ts` — donc deux registres du même fait,
+ce qu'ADR-041 proscrit : *« deux registres du même fait finissent par diverger,
+et le jour où ils divergent aucun ne fait autorité »*.
+
+C'est exactement le défaut qui vient d'être corrigé, sous une autre forme : le
+jour où le CLI changera sa façon d'enregistrer, le banc mesurera de nouveau un
+produit qui n'existe pas.
+
+**Pourquoi c'est accepté malgré tout** : l'alternative — extraire la boucle du
+CLI en fonction partagée — est un chantier qui touche le point d'entrée du
+produit. Le faire dans la même passe que la correction d'une mesure aurait mêlé
+deux risques. Recopier douze lignes vaut mieux que continuer à mesurer sans
+session.
+
+**Condition de levée** : une fonction `tourComplet(runtime, sessionId, texte)`
+partagée par le CLI, la passerelle web et le banc. Les trois l'appellent, aucun
+ne la recopie.
+
+**Ce qui la borne en attendant** : le banc vérifie que la session contient
+autant de tours que d'actions abouties. Une divergence de COMPTE serait vue.
+Une divergence de CONTENU ne le serait pas.
 
 ---
 

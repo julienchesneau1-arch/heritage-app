@@ -6768,3 +6768,99 @@ Et une remarque de méthode : ces tests passent par l'**Assistant**, pas par
 `createTier1`. Éprouver le proposeur seul aurait reproduit le défaut d'ADR-083
 — chaque maillon correct isolément, la chaîne jamais parcourue. Les doubles
 sont aux extrémités ; tout ce qui est entre deux est le vrai code.
+
+---
+
+## ADR-085 — Le banc mesurait une configuration que le produit n'utilise pas
+
+**Statut** : accepté · **Date** : 2026-08-19 · **Corrige la mesure de** : ADR-080
+
+### Ce qui a été trouvé
+
+`REFERENCE 0/8` est cité par ADR-080, 081, 082, 084 et `docs/26 §4.13`. Tout
+ce raisonnement repose sur `tests/redteam/context-scenarios.test.ts`.
+
+Ce banc appelait :
+
+```ts
+runtime.assistant.say(turn.phrase)          // ← aucun sessionId
+```
+
+Le CLI (`main.ts:328`) et la passerelle web (`http.ts:148`) en passent un. Et
+l'Assistant **sans session** répond à tout référent, avant même de chercher :
+
+> « À quoi fais-tu référence ? Je n'ai pas de conversation en cours. »
+
+`REFERENCE 0/8` était donc garanti par le **banc** autant que par le produit,
+et rien ne permettait de distinguer les deux parts.
+
+### Le banc expliquait son résultat — et l'explication était périmée
+
+> *« L'Assistant est SANS ÉTAT entre deux phrases — il ne relit jamais les
+> tours précédents. »*
+
+C'était exact à l'écriture. **ADR-073 l'a rendu faux** : `resolveAnaphora` est
+appelé avant toute invocation d'outil. La phrase a cessé d'être vraie **sans
+que le chiffre bouge**, et c'est précisément ce qui l'a rendue indétectable —
+un commentaire ne casse aucun test.
+
+### Décision, et le résultat qu'elle produit
+
+Le banc ouvre une session, transmet `sessionId`, et enregistre le tour après
+chaque action — la boucle du CLI, à l'identique.
+
+**Re-mesuré. Le chiffre n'a pas bougé d'une unité.**
+
+```text
+AVANT (sans session)     13/30 · REFERENCE 0/8
+APRÈS (avec session)     13/30 · REFERENCE 0/8
+```
+
+C'est un **résultat**, pas un non-événement. Il établit deux choses qu'on ne
+savait pas :
+
+**1. Le 0/8 était surdéterminé.** Deux causes suffisantes agissaient en même
+temps. On sait maintenant que le chiffre mesure le PRODUIT, et non le banc —
+ce qui n'était pas démontré, et que tout le monde supposait.
+
+**2. La cause est en amont de la résolution.** Les huit tours ressortent
+`DIT ABSENT` = `UNSUPPORTED` : aucune règle `Tier 0` ne reconnaît la
+formulation, donc **aucun référent n'est jamais produit**. Le résolveur ne
+tourne pas à vide — il n'est jamais appelé.
+
+`docs/26 §4.13` disait « c'est la reconnaissance d'entités qui manque ». C'est
+plus général que ça : c'est la reconnaissance de l'ÉNONCÉ. « Marque la première
+comme faite » n'échoue pas faute d'entité, il échoue faute de règle.
+
+### La garde qui manquait, et qui explique la durée du défaut
+
+Corriger le banc n'a rien changé au chiffre. **Donc aucun test existant ne peut
+voir la différence** — et rien n'empêcherait de retirer à nouveau le
+`sessionId`.
+
+> Un résultat identique dans deux configurations est exactement le cas où une
+> régression passe inaperçue : on la juge sur le chiffre, et le chiffre est
+> muet.
+
+On garde donc la **configuration**, pas seulement le résultat : le banc vérifie
+que la session contient des tours, et que leur nombre égale celui des actions
+abouties. Sabotage — retrait du `sessionId` — → **1 rouge**.
+
+### Ce que ça ne corrige pas
+
+Le banc **recopie** la boucle du CLI au lieu de l'appeler : deux registres du
+même fait (ADR-041). Noté en `docs/26 §4.15`, avec sa condition de levée. Le
+choix est assumé — recopier douze lignes vaut mieux que continuer à mesurer un
+produit qui n'existe pas.
+
+### La leçon
+
+Douzième occurrence du motif, et la plus retorse : ici l'affirmation n'était pas
+fausse — **elle était juste pour une raison qui avait cessé d'exister**.
+
+> Un chiffre juste peut reposer sur une explication morte. Le chiffre ne le
+> dira jamais, parce qu'il ne change pas.
+
+Le motif de recherche qui en découle : **tout banc de mesure doit prouver qu'il
+mesure la configuration du produit** — et cette preuve doit être un test, pas
+une lecture.
