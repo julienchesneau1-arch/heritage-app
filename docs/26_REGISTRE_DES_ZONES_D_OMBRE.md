@@ -1442,6 +1442,35 @@ d'un énoncé libre — le chantier qu'ADR-017 chiffre. Écrire des règles `Tie
 pour les référents ne marcherait pas : « il » ne se résout pas par la forme de la
 phrase, mais par ce qui a été dit avant.
 
+> ⚠ **LEVÉE PARTIELLE — ADR-084, et la partie qui reste est nommée.**
+>
+> Le `Tier 1` peut désormais MARQUER un paramètre comme renvoi
+> (`ANAPHORA` / `TEMPORAL`) sans jamais le résoudre. Deux moitiés très
+> inégales :
+>
+> | | État |
+> |---|---|
+> | **`TEMPORAL`** | **complet**. « faudrait que je pense au café jeudi » écrit un rappel daté par PostgreSQL (ADR-077). Aucune reconnaissance d'entité n'est nécessaire |
+> | **`ANAPHORA`** | **un non-sens devient une question**. « annule-la » ne produit plus `title: "la"` mais « À quoi fais-tu référence ? » |
+>
+> **Le verrou décrit ci-dessus est INTACT.** `resolveAnaphora` lit
+> `mentioned_entity_ids`, que seul un outil touchant une ENTITÉ renseigne — une
+> tâche, une note, un rappel n'en sont pas. La reconnaissance d'entités reste
+> le chantier, exactement comme écrit.
+>
+> **Et la voie courte a été refusée**, ce qui est le vrai contenu d'ADR-084 :
+> donner l'historique de conversation au modèle aurait atteint `REFERENCE` plus
+> vite. Un historique contient les tours `JARVIS`, et `speaker: 'JARVIS'` ne
+> veut pas dire *produit par Jarvis* — un email lu à voix haute y figure. C'eût
+> été T1 par la grande porte. Demander au modèle de **pointer du doigt** coûte
+> zéro token d'historique.
+>
+> **Le chiffre, lui, n'a pas bougé** — et ne peut pas avoir bougé : aucun modèle
+> n'a tourné. Les 43 % restent la dernière mesure réelle. Un quatrième inconnu
+> s'ajoute même aux trois d'ADR-082 : *un 8B pose-t-il la marque de renvoi, ou
+> l'ignore-t-il ?* C'est pourquoi `referents` est **optionnel**, et pourquoi un
+> test fige le comportement sans marque.
+
 ⚠ **Le piège du chiffre** : on peut le faire monter en ajoutant des règles pour
 les phrases exactes du scénario. Il grimperait sans que rien ne s'améliore. Les
 trente tours sont un **échantillon**, pas une cible.

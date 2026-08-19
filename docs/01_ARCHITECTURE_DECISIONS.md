@@ -6634,3 +6634,137 @@ une colonne de sûreté existe en base, vérifier que **le `SELECT` la demande**
 Écrire une étiquette qu'on ne relit jamais ne protège de rien — ça produit la
 trace d'une protection, ce qui est pire, parce que la trace se lit comme la
 protection.
+
+---
+
+## ADR-084 — Le modèle a le droit de dire « c'est un renvoi », jamais lequel
+
+**Statut** : accepté · **Date** : 2026-08-19 · **Complète** : ADR-081, ADR-077
+
+### Contexte
+
+`REFERENCE 0/8` est le chiffre décisif d'ADR-080. Plus d'un quart d'une
+conversation réelle désigne une chose **sans la renommer** — c'est ce qui
+sépare une conversation d'une suite d'ordres.
+
+ADR-081 a donné la compréhension libre au `Tier 1`, mais lui a clos la porte
+d'un mot :
+
+```ts
+// tier1.ts, AVANT
+referents: {},   // « le modèle ne résout aucun référent »
+```
+
+Le commentaire était juste, la conséquence non. Sans marque, `« annule-la »`
+produisait `task_cancel { title: "la" }` — et l'utilisateur voyait s'afficher
+*« Annuler la tâche « la » ? »*. Une confirmation qui ne veut rien dire.
+
+### La décision, et l'endroit exact où passe la ligne
+
+Le modèle peut **marquer** un paramètre. Il ne peut jamais **résoudre**.
+
+```text
+DROIT       « annule-la »
+            parametres { title: "la" }, referents { title: 'ANAPHORA' }
+
+PAS DROIT   choisir QUELLE tâche « la » désigne
+```
+
+La ligne sépare **une observation de langue** — il y a un pronom, il y a une
+date relative — d'**une décision sur le monde**. La première se lit sur la
+phrase seule. La seconde exige la conversation et la base, que le modèle n'a
+ni l'une ni l'autre.
+
+### Ce que ce partage permet d'éviter, et qui est le vrai sujet
+
+La voie évidente pour atteindre `REFERENCE` était de **mettre l'historique de
+conversation dans le prompt**. Elle est refusée.
+
+Un historique contient les tours `JARVIS`. Et `speaker: 'JARVIS'` ne veut pas
+dire *produit par Jarvis* : le jour où il lit un email à voix haute, c'est
+Jarvis qui parle et c'est un tiers qui écrit — la migration 0003 le dit depuis
+le début, ADR-083 vient de rendre cette provenance lisible.
+
+> Mettre l'historique dans le prompt, c'est T1 par la grande porte : offrir à
+> un tiers la place où l'on écrit les instructions.
+
+Demander au modèle de **pointer du doigt** coûte zéro token d'historique et
+donne le même résultat. C'est la raison d'être de la décision, pas un effet de
+bord heureux.
+
+### Pourquoi c'est sûr — les trois issues, toutes visibles
+
+```text
+marque juste    → l'Assistant résout sur PREUVE (entité évoquée dans la
+                  session ; date calculée par PostgreSQL, ADR-077), et le
+                  Policy Gate fait confirmer la VALEUR obtenue
+marque fausse   → la résolution ne trouve rien, ou trouve deux candidats
+                  → CLARIFY. Une question
+marque absente  → comportement d'ADR-081, inchangé
+```
+
+**Aucun chemin ne mène à une action silencieuse.** La pire dégradation possible
+est une confirmation qui nomme la mauvaise chose — que l'utilisateur refuse.
+
+Trois gardes, toutes éprouvées par sabotage :
+
+**1. La valeur substituée reste `MODEL_OUTPUT`.** Elle vient pourtant du
+résolveur, donc de la base : on pourrait la juger fiable. On ne le fait pas —
+c'est le modèle qui a décidé QUE ce paramètre était un renvoi, et cette
+décision reste la sienne. Conserver `MODEL_OUTPUT` exige **plus** de
+confirmation, jamais moins.
+
+**2. Le vocabulaire est fermé.** `z.enum(['ANAPHORA','TEMPORAL'])`. Un genre
+inventé — `SPATIAL`, `ENTITY` — fait rejeter la réponse entière. Aucun n'a de
+résolveur, et en accepter un silencieusement laisserait le modèle étendre le
+vocabulaire du système.
+
+**3. Une marque sur un paramètre absent est retirée.** Elle ne désigne rien. Ce
+filtrage ne peut que RETIRER une marque, donc rendre le traitement plus
+littéral ; le sens dangereux serait d'en inventer une.
+
+### Ce que ça donne vraiment — et ce que ça ne donne pas
+
+**`TEMPORAL` fonctionne de bout en bout.** *« faudrait que je pense au café
+jeudi »* écrit un rappel daté par PostgreSQL, et Jarvis dit l'instant retenu en
+français. C'est une capacité complète, aujourd'hui.
+
+**`ANAPHORA` transforme un non-sens en question — et pas encore en action.** Le
+verrou de `docs/26 §4.13` est intact : `resolveAnaphora` lit
+`mentioned_entity_ids`, que seul un outil touchant une ENTITÉ renseigne. Une
+tâche, une note, un rappel n'en sont pas. Donc *« annule-la »* après avoir créé
+une tâche donnera *« À quoi fais-tu référence ? »*.
+
+> C'est un progrès réel et une levée partielle. Le présenter comme la levée de
+> `REFERENCE` serait exactement le genre d'affirmation que ce dépôt passe son
+> temps à démonter.
+
+### Ce qui n'est toujours pas mesuré
+
+**Aucun modèle n'a tourné.** Ces tests éprouvent ce que le système fait d'un
+marquage — pas la fréquence à laquelle un modèle réel marque juste. Trois
+nombres restent inconnus, les mêmes qu'à l'ADR-082 plus un :
+
+```text
+?  un 8B choisit-il le bon outil, et à quel taux
+?  quelle latence sur la machine de Julien
+?  les 43 % montent-ils
+?  un 8B pose-t-il la marque de renvoi, ou l'ignore-t-il
+```
+
+Le dernier a une conséquence de conception : `referents` est **optionnel**, et
+un test le fige. Un petit modèle l'ignorera une fois sur deux ; il doit alors
+se comporter exactement comme avant ADR-084, pas échouer.
+
+### Sabotages
+
+```text
+le proposeur rend referents: {}            → 6 rouges
+la provenance retombe à USER après résolution → 1 rouge
+le vocabulaire s'ouvre à n'importe quel mot   → 1 rouge
+```
+
+Et une remarque de méthode : ces tests passent par l'**Assistant**, pas par
+`createTier1`. Éprouver le proposeur seul aurait reproduit le défaut d'ADR-083
+— chaque maillon correct isolément, la chaîne jamais parcourue. Les doubles
+sont aux extrémités ; tout ce qui est entre deux est le vrai code.

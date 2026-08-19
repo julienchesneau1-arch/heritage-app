@@ -40,6 +40,30 @@
  * avant que ça parte**. C'est la version honnête de « il fait mes intentions » :
  * il les fait, après te les avoir montrées.
  *
+ * DÉSIGNER SANS NOMMER — ADR-084
+ * ---------------------------------------------------------------------------
+ * Plus d'un quart d'une conversation réelle désigne une chose sans la renommer
+ * (`REFERENCE` **0/8**, ADR-080). C'est ce qui sépare une conversation d'une
+ * suite d'ordres.
+ *
+ * Le modèle peut désormais MARQUER un paramètre comme renvoi — jamais le
+ * résoudre :
+ *
+ * ```text
+ * « rappelle-moi de la rappeler demain »
+ *   parametres  { title: "la rappeler", due_at: "demain" }
+ *   referents   { title: 'ANAPHORA',    due_at: 'TEMPORAL' }
+ *                        ↓                       ↓
+ *                 le résolveur d'entités   PostgreSQL (ADR-077)
+ *                 sur PREUVE contextuelle  clock_timestamp()
+ * ```
+ *
+ * **Et c'est ce qui évite de mettre l'historique dans le prompt.** Repérer un
+ * pronom est une observation de langue, lisible sur la phrase seule. Savoir ce
+ * qu'il désigne exige la conversation — laquelle contiendra tôt ou tard un
+ * email lu à voix haute. Donner l'historique au modèle serait T1 par la grande
+ * porte ; lui demander de pointer du doigt ne coûte rien.
+ *
  * POURQUOI CE N'EST PAS DANS `engine.ts`
  * ---------------------------------------------------------------------------
  * `propose(text)` est une fonction **pure et synchrone** du texte. ADR-073 a
@@ -90,6 +114,27 @@ const ReponseModele = z.union([
     action: z.literal('APPEL'),
     outil: z.string().min(1),
     parametres: z.record(z.string(), z.unknown()),
+    /**
+     * LES PARAMÈTRES QUI SONT UN RENVOI, PAS UNE DONNÉE — ADR-084.
+     *
+     * Le modèle a le droit de dire *« ce paramètre désigne quelque chose sans
+     * le nommer »*. Il n'a PAS le droit de dire quoi.
+     *
+     * ```text
+     * DROIT     « supprime-la »  → { id: "la" },  referents: { id: 'ANAPHORA' }
+     * PAS DROIT  choisir QUELLE tâche « la » désigne
+     * ```
+     *
+     * La différence est celle entre une observation de LANGUE — il y a un
+     * pronom, une date relative — et une décision sur le MONDE. La première se
+     * lit sur la phrase seule ; la seconde exige la conversation et la base,
+     * que le modèle n'a ni l'une ni l'autre, et n'aura pas (voir §PROMPT).
+     *
+     * C'est ce partage qui permet d'atteindre `REFERENCE` **sans jamais mettre
+     * l'historique de conversation dans le prompt** — lequel contiendrait tôt
+     * ou tard un contenu externe, c'est-à-dire T1 par la grande porte.
+     */
+    referents: z.record(z.string(), z.enum(['ANAPHORA', 'TEMPORAL'])).optional(),
   }),
   z.object({
     action: z.literal('AUCUN'),
@@ -140,7 +185,21 @@ Règles :
 - Sinon : {"action":"AUCUN","compris":"<ce que tu as compris, en une phrase>"}
 - N'invente jamais d'identifiant d'outil absent du catalogue.
 - Ne remplis un paramètre qu'avec ce que l'utilisateur a dit. Ne complète pas.
-- Tu ne décides pas si l'action est autorisée : ce n'est pas ton rôle.`;
+- Tu ne décides pas si l'action est autorisée : ce n'est pas ton rôle.
+
+Quand un paramètre DÉSIGNE une chose sans la nommer, signale-le dans
+"referents", en recopiant quand même les mots employés dans "parametres" :
+- "ANAPHORA" : un pronom ou un renvoi — « la », « celui-là », « le même »
+- "TEMPORAL" : un moment relatif — « demain », « jeudi », « dans 2 heures »
+
+Exemple : « rappelle-moi de la rappeler demain »
+{"action":"APPEL","outil":"reminder_create",
+ "parametres":{"title":"la rappeler","due_at":"demain"},
+ "referents":{"title":"ANAPHORA","due_at":"TEMPORAL"}}
+
+Tu signales qu'il y a un renvoi. Tu ne cherches PAS ce qu'il désigne : tu n'as
+ni la conversation précédente ni la date du jour, et quelqu'un d'autre s'en
+charge avec les bonnes données.`;
 
 /* -------------------------------------------------------------------------- */
 /* Le proposeur                                                               */
@@ -227,6 +286,21 @@ export function createTier1(deps: Tier1Deps): Tier1 {
       const provenance: Record<string, Provenance> = {};
       for (const cle of Object.keys(reponse.parametres)) provenance[cle] = DU_MODELE;
 
+      /* LES RENVOIS — ADR-084.
+
+         On ne garde que les marques qui désignent un paramètre RÉELLEMENT
+         présent. Une marque sur un paramètre absent ne désigne rien : la
+         retenir ferait échouer la résolution en aval sur un champ vide, et
+         transformerait une bizarrerie de modèle en erreur affichée.
+
+         Ce filtrage n'accorde rien — il ne peut que RETIRER une marque, donc
+         que rendre le traitement plus littéral. Le sens dangereux serait
+         l'inverse : inventer une marque que le modèle n'a pas posée. */
+      const referents: Record<string, 'ANAPHORA' | 'TEMPORAL'> = {};
+      for (const [cle, genre] of Object.entries(reponse.referents ?? {})) {
+        if (Object.hasOwn(reponse.parametres, cle)) referents[cle] = genre;
+      }
+
       return ok({
         kind: 'TOOL_CALL',
         toolId: connu.definition.id,
@@ -244,10 +318,27 @@ export function createTier1(deps: Tier1Deps): Tier1 {
            Un modèle qui l'affirmerait affirmerait seulement qu'il le pense —
            et ce serait au modèle de décider s'il faut demander la permission. */
         userConfirms: false,
-        /* Le modèle ne résout aucun référent : il n'a ni la conversation ni la
-           base. S'il croit comprendre « ça », il remplit le paramètre avec ce
-           qu'il croit — et le Policy Gate le fera confirmer. */
-        referents: {},
+        /* ⚠ LE MODÈLE SIGNALE LE RENVOI ; IL NE LE RÉSOUT JAMAIS — ADR-084.
+
+           Ce qui suit est la garantie qui rend cette liberté acceptable, et
+           elle tient parce qu'AUCUN chemin ne mène à une action silencieuse :
+
+             marque juste    → l'Assistant résout sur PREUVE (entité évoquée,
+                               date calculée par la base), et le Policy Gate
+                               fait confirmer la valeur concrète obtenue
+             marque fausse   → la résolution ne trouve rien, ou trouve deux
+                               candidats → CLARIFY. Une QUESTION
+             marque absente  → comportement d'avant : le paramètre garde les
+                               mots du modèle, et se fait confirmer tel quel
+
+           Les trois issues sont visibles. La pire dégradation possible est une
+           confirmation qui nomme la mauvaise chose — que l'utilisateur refuse
+           — jamais une action juste-vraisemblable exécutée sans être montrée.
+
+           Et la valeur SUBSTITUÉE garde la provenance `MODEL_OUTPUT` bien
+           qu'elle vienne du résolveur, donc de la base. C'est délibérément
+           conservateur : ça exige plus de confirmation, jamais moins. */
+        referents,
       });
     },
   };
