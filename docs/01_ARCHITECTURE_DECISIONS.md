@@ -5410,6 +5410,14 @@ n'en fait pas partie, donc *après* lui il n'y a aucune frontière de mot, et
 laissait passer exactement les mots qu'il devait attraper. Remplacé par une
 recherche de sous-chaîne — grossière et sans trou, sur un ensemble clos.
 
+> ⚠ **CORRIGÉ À ADR-075 : ce paragraphe présentait ce piège comme une
+> découverte, et il ne l'était pas.** Il est documenté depuis longtemps dans
+> `src/core/intent/engine.ts` — *« Piège systématique dès qu'on écrit des règles
+> en français. »* J'y suis retombé trois fichiers plus loin, dans le même dépôt.
+> Ce n'est pas un défaut de connaissance mais de **circulation** de la
+> connaissance : une leçon écrite dans un commentaire ne protège que le fichier
+> qui la porte.
+
 **2. Deux chaînes différentes, une seule phrase à l'oreille.** En remplaçant
 `ENGAGE` par « c'est fait », la disjonction avec la table des verdicts est restée
 **verte** : `headline` rend « C'est fait. », une majuscule et un point d'écart.
@@ -5439,3 +5447,136 @@ attendus, et un seul est évident :
    tentation sera de meubler l'attente par une phrase de progression
    (« je regarde… »). Tant qu'elle ne prétend rien, elle est licite ; le jour où
    elle décrit un effet supposé, `S15` est franchi.
+
+---
+
+## ADR-075 — Jarvis mentait sur son propre catalogue
+
+**Statut :** accepté (`docs/26 §4.2 quinquies`, ADR-041, HIGH-4).
+**Référence :** `src/core/intent/engine.ts`, `src/apps/cli/main.ts`,
+`tests/intent/surface-parlee.test.ts`, `tests/intent/capacites-declarees.test.ts`.
+
+### D'où vient cet ADR
+
+D'une question de Julien : *« sommes-nous proches d'un ChatGPT vocal ? »* La
+réponse demandait un chiffre que **rien dans le dépôt ne produisait**. En le
+construisant, un défaut actif est apparu.
+
+### Le chiffre manquant : la surface PARLÉE
+
+`docs/28` compte les outils **écrits**. C'est la bonne mesure de l'ingénierie et
+la mauvaise mesure de ce que l'utilisateur obtient.
+
+```text
+ÉCRITS                       22
+ATTEIGNABLES PAR UNE PHRASE   6      ← avant cet ADR
+                             10      ← après
+```
+
+Un outil qu'aucune phrase ne déclenche n'existe pas pour celui qui parle.
+
+### Le défaut : quatre capacités NIÉES qui existaient
+
+Le moteur répondait *« cette capacité n'est pas encore construite »* à :
+
+| Demande | Outil | Écrit depuis |
+|---|---|---|
+| « cherche sur le web … » | `web_search` | ADR-055 |
+| « retrouve mon devis » | `file_search` | ADR-046 |
+| « qu'ai-je dans mon agenda » | `calendar_read` | ADR-043 |
+| « supprime cette note » | `note_delete` | ADR-067 |
+
+Aucun effet n'était annoncé à tort — **`S15` restait intact, et c'est
+exactement pourquoi rien ne l'a vu.** Le coût est pourtant le même : *une
+capacité niée est aussi absente qu'une capacité manquante*, parce que
+l'utilisateur cesse de la demander.
+
+### La cause : six registres de la même liste
+
+ADR-041 l'avait tranché pour les données. Le même motif, appliqué aux
+capacités :
+
+```text
+KNOWN_BUT_UNAVAILABLE     ce que je dis ne pas savoir
+unavailable()             la liste jointe à ce refus
+la question d'ambiguïté   « ni sur le web, ni dans tes documents »
+le message final          « essaie : … »
+HELP du CLI               l'aide affichée
+les règles elles-mêmes    la seule qui disait vrai
+```
+
+Les cinq premiers sont désormais **dérivés** du sixième : chaque règle porte sa
+formulation canonique (`exemple`), et `capacitesParlees()` est la seule source.
+
+### La décision
+
+1. **Quatre règles** rendent atteignables `web_search`, `file_search`,
+   `briefing_generate` et `system_status` — des outils écrits sans porte.
+2. **Deux messages disent la vraie raison** au lieu de « pas construit » :
+   l'agenda existe mais *aucun agenda n'est connecté* ; supprimer existe mais
+   *seulement sur la dernière action, par `/annule`*. La nuance compte :
+   « pas connecté » dit à l'utilisateur qu'il peut y remédier, « pas construit »
+   lui dit d'attendre.
+3. **Chaque capacité déclarée absente nomme l'outil qui la servirait**
+   (`outilQuiManque`). Un test exige que cet outil n'existe pas — le jour où
+   quelqu'un l'écrit, la CI rougit et force à changer le message. **La prose ne
+   rougit jamais ; une déclaration nommée, si.**
+
+### Ce qu'on a refusé d'élargir
+
+Ajouter `web_search` rendait tentant d'accepter enfin « cherche X » — la
+formulation que les gens emploient. **Ce serait rouvrir HIGH-4** : deviner la
+portée, chercher ailleurs que là où l'utilisateur croyait, et annoncer un
+succès. La portée reste DITE. Ce qui change, c'est qu'il y a désormais **trois
+portées nommables au lieu d'une**, et la question les propose toutes les trois.
+
+### Pourquoi les douze restants ne sont pas un oubli de câblage
+
+```text
+un IDENTIFIANT qu'une phrase ne porte pas    7 outils
+une DATE qu'un Tier 0 ne sait pas résoudre   3 outils
+hors surface conversationnelle               2 outils
+```
+
+Les dates méritent une note : une règle qui calculerait « demain » en
+JavaScript violerait ADR-036/037 — *les fenêtres temporelles sont calculées par
+la base, jamais par l'horloge du processus*. L'agenda est donc bloqué par un
+**invariant**, pas par de la paresse.
+
+### Le cas le plus instructif : « rappelle-moi » ne crée pas un rappel
+
+`reminder_create` existe et dit honnêtement que rien ne sonne (ADR-048). Mais la
+seule phrase française qui devrait l'atteindre est capturée par la règle des
+TÂCHES, placée avant. L'utilisateur obtient une tâche là où il demandait un
+rappel — **une action différente de celle demandée**, le motif même qui avait
+justifié de restreindre `memory_search`.
+
+**Constaté, pas corrigé.** Le corriger demande de trancher ce que « rappelle-moi »
+doit vouloir dire quand rien ne sonne, et cette question appartient à Julien.
+Un test la porte et tombera le jour où elle sera tranchée.
+
+### Sabotage
+
+```text
+re-déclarer une capacité existante comme manquante  → 1 rouge
+un message recopie une capacité au lieu de la dériver → 1 rouge
+un outil devient nommé sans phrase qui l'atteigne    → 1 rouge
+l'extracteur d'outils rend une liste vide            → 1 rouge (assertion de longueur)
+```
+
+### Deux tests de red team ont changé de forme, pas de propriété
+
+`daily-actions` exigeait `UNSUPPORTED` sur « retrouve le devis » — il **figeait
+le mensonge**. Il accepte désormais `UNSUPPORTED` ou `CLARIFY`, et exige en plus
+que les documents soient nommés comme portée possible : plus fort qu'avant. Le
+second vérifiait la phrase *« ni sur le web, ni dans tes documents »* ; il exige
+maintenant que **les trois portées** soient proposées.
+
+> Un test qui gèle une formulation gèle aussi les erreurs qu'elle contient.
+
+### Condition de révision
+
+Le jour où un `Tier 1` local arrive, la tentation sera de lui confier toute la
+compréhension et de supprimer les règles. Elles coûtent zéro, ne varient pas, et
+répondent en **0,0046 ms**. Le `Tier 1` doit prendre ce que les règles ratent —
+les tournures non prévues — pas ce qu'elles réussissent.

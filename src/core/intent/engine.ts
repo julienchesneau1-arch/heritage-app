@@ -86,6 +86,22 @@ const FROM_USER: Provenance = 'USER';
 interface Rule {
   readonly id: string;
   readonly pattern: RegExp;
+  /**
+   * LA FORMULATION CANONIQUE — ce que l'utilisateur doit dire pour l'atteindre.
+   *
+   * ⚠ CE CHAMP EXISTE PARCE QUE LA LISTE DES CAPACITÉS VIVAIT À SIX ENDROITS,
+   * ET QU'ELLE AVAIT DIVERGÉ (ADR-075). Le moteur disait *« je ne sais pas
+   * chercher sur le web »* alors que `web_search` existait depuis ADR-055 ;
+   * *« je ne sais pas accéder à l'agenda »* alors que trois outils d'agenda
+   * étaient écrits. Jarvis mentait sur lui-même — pas sur un effet, sur son
+   * propre catalogue.
+   *
+   * ADR-041 l'avait tranché pour les données : *deux registres du même fait
+   * finissent par diverger, et le jour où ils divergent aucun ne fait
+   * autorité.* Une capacité se déclare donc ICI, à côté de la règle qui la rend
+   * vraie, et nulle part ailleurs.
+   */
+  readonly exemple: string;
   build(match: RegExpMatchArray, raw: string): IntentProposal;
 }
 
@@ -98,6 +114,7 @@ const RULES: readonly Rule[] = [
   /* --- Mémoire : retenir ------------------------------------------------- */
   {
     id: 'memory_add',
+    exemple: '« retiens que … »',
     pattern:
       /^(?:retiens|souviens-toi|rappelle-toi|m[ée]morise)\s+(?:que\b|:)?\s*(.*)$/iu,
     build(match) {
@@ -150,6 +167,7 @@ const RULES: readonly Rule[] = [
      l'ambiguïté qu'il est. */
   {
     id: 'memory_search',
+    exemple: '« que sais-tu sur … »',
     pattern:
       /^(?:qu(?:'|’)est-ce que (?:je sais|tu sais)(?: sur)?|que sais-tu(?: sur)?|qu(?:'|’)as-tu retenu(?: sur)?|(?:cherche|recherche|retrouve)\s+dans\s+(?:ma|ta)\s+m[ée]moire(?:\s+sur)?)\s+(.+)$/iu,
     build(match) {
@@ -168,6 +186,7 @@ const RULES: readonly Rule[] = [
   },
   {
     id: 'memory_search_decision',
+    exemple: '« que sais-tu sur … »',
     // Volontairement permissive : toute question portant sur une décision
     // passée devient une recherche mémoire. Tenter d'énumérer les tournures
     // françaises possibles était fragile — la première version échouait déjà
@@ -210,6 +229,7 @@ const RULES: readonly Rule[] = [
      * que le produit n'a pas.
      */
     id: 'entity_create_explicit',
+    exemple: '« enregistre <nom> comme personne »',
     pattern:
       /^enregistre\s+(.+?)\s+comme\s+(personne|organisation|projet|lieu|produit|document|[ée]v[ée]nement|t[âa]che|objet|appareil|compte)$/iu,
     build(match) {
@@ -269,6 +289,7 @@ const RULES: readonly Rule[] = [
      * entrée-sortie.
      */
     id: 'task_create_anaphora',
+    exemple: '« ajoute … à ma liste »',
     pattern:
       /^ajoute\s+(?:ça|ca|cela|celui-ci|celle-ci)\s+(?:à|a|dans)\s+(?:ma|la|mes)\s+(?:liste|t[âa]ches?).*$/iu,
     build() {
@@ -288,6 +309,7 @@ const RULES: readonly Rule[] = [
 
   {
     id: 'task_create_list',
+    exemple: '« ajoute … à ma liste »',
     pattern: /^ajoute\s+(.+?)\s+(?:à|a|dans)\s+(?:ma|la)\s+liste.*$/iu,
     build(match) {
       return {
@@ -305,6 +327,7 @@ const RULES: readonly Rule[] = [
   },
   {
     id: 'task_create_reminder',
+    exemple: '« ajoute … à ma liste »',
     pattern: /^rappelle-moi\s+(?:de\s+|d(?:'|’))?(.+)$/iu,
     build(match) {
       return {
@@ -322,6 +345,7 @@ const RULES: readonly Rule[] = [
   },
   {
     id: 'task_create_explicit',
+    exemple: '« ajoute … à ma liste »',
     pattern: /^(?:cr[ée]e|ajoute)\s+(?:une\s+)?t[âa]che\s*:?\s*(.+)$/iu,
     build(match) {
       return {
@@ -341,6 +365,7 @@ const RULES: readonly Rule[] = [
   /* --- Tâches : lister --------------------------------------------------- */
   {
     id: 'task_list',
+    exemple: '« mes tâches »',
     pattern:
       /^(?:mes t[âa]ches|liste (?:mes )?t[âa]ches|qu(?:'|’)est-ce que j(?:'|’)ai [àa] faire|quoi de pr[ée]vu)\s*\??$/iu,
     build() {
@@ -361,6 +386,7 @@ const RULES: readonly Rule[] = [
   /* --- Notes ------------------------------------------------------------- */
   {
     id: 'note_create',
+    exemple: '« note … »',
     // `que\b` plutôt que `que\s+` : « Note que » tout court doit capturer une
     // chaîne vide, donc déclencher une demande de précision — et non créer une
     // note dont le contenu serait le mot « que ».
@@ -379,7 +405,141 @@ const RULES: readonly Rule[] = [
       };
     },
   },
+
+  /* ====================================================================== *
+   * LES QUATRE RÈGLES D'ADR-075 — des outils qui existaient sans porte
+   * ====================================================================== *
+   *
+   * Chacune rend atteignable un outil ÉCRIT, ÉPROUVÉ, et que la conversation
+   * n'atteignait pas. Trois d'entre elles ferment un MENSONGE : le moteur
+   * répondait « cette capacité n'est pas encore construite » sur des capacités
+   * construites depuis plusieurs commits.
+   *
+   * LA PORTÉE RESTE EXPLICITE, et c'est ce qui les distingue d'un élargissement
+   * commode. « Cherche X » n'est toujours pas accepté : il ne dit pas OÙ, et
+   * deviner la portée est exactement la substitution silencieuse que HIGH-4
+   * avait fait retirer. Ce qui change, c'est qu'il y a désormais TROIS portées
+   * nommables au lieu d'une.
+   */
+
+  /* --- Web : la portée est DITE ------------------------------------------ */
+  {
+    id: 'web_search_explicit',
+    exemple: '« cherche sur le web … »',
+    pattern:
+      /^(?:cherche|recherche|trouve)\s+(?:sur\s+(?:le\s+web|internet|google)|en\s+ligne)\s+(.+)$/iu,
+    build(match) {
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'web_search',
+        input: { query: clean(match[1] ?? '') },
+        parameterProvenance: { query: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        /* PAS de confirmation implicite. Une recherche web est une SORTIE de
+           données vers un tiers : elle traverse le Data Firewall, et c'est lui
+           qui décide. L'énoncé ne vaut pas accord pour une égression. */
+        userConfirms: false,
+        referents: {},
+      };
+    },
+  },
+
+  /* --- Documents : la portée est DITE ------------------------------------ */
+  {
+    id: 'file_search_explicit',
+    exemple: '« cherche dans mes documents … »',
+    pattern:
+      /^(?:cherche|recherche|trouve)\s+(?:dans\s+(?:mes\s+)?(?:documents?|fichiers?)|le\s+fichier)\s+(.+)$/iu,
+    build(match) {
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'file_search',
+        input: { query: clean(match[1] ?? '') },
+        parameterProvenance: { query: FROM_USER, path: 'SYSTEM', limit: 'SYSTEM' },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: {},
+      };
+    },
+  },
+
+  /* --- Briefing : aucun paramètre à extraire ----------------------------- */
+  {
+    id: 'briefing_du_jour',
+    exemple: '« fais-moi un point »',
+    pattern:
+      /^(?:fais(?:-moi)?\s+un\s+point|o[ùu]\s+en\s+suis-je|ma\s+journ[ée]e|quoi\s+de\s+neuf|r[ée]sume\s+ma\s+journ[ée]e)\s*[?.!]*$/iu,
+    build() {
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'briefing_generate',
+        input: {},
+        parameterProvenance: { limit: 'SYSTEM' },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: {},
+      };
+    },
+  },
+
+  /* --- État du système : aucun paramètre non plus ------------------------ */
+  {
+    id: 'etat_du_systeme',
+    exemple: '« comment vas-tu »',
+    pattern:
+      /^(?:comment\s+(?:vas-tu|ça\s+va|ca\s+va)|[ée]tat\s+du\s+syst[èe]me|tout\s+va\s+bien)\s*[?.!]*$/iu,
+    build() {
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'system_status',
+        input: {},
+        parameterProvenance: {},
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: {},
+      };
+    },
+  },
 ];
+
+/**
+ * CE QUE JARVIS SAIT FAIRE EN L'ÉCOUTANT — la source UNIQUE.
+ *
+ * Dérivée des règles, jamais recopiée. C'est le correctif d'ADR-075 : cette
+ * liste vivait à **six** endroits — deux messages du moteur, la question
+ * d'ambiguïté, l'aide du CLI, et deux tables de capacités absentes — et les six
+ * avaient divergé au fil des outils ajoutés.
+ *
+ * Un texte qui énumère les capacités et qu'aucun mécanisme ne relie aux règles
+ * est un texte qui deviendra faux. La seule question est quand.
+ */
+export function capacitesParlees(): readonly string[] {
+  // `Set` : plusieurs règles servent la même capacité (quatre pour les tâches,
+  // deux pour la mémoire). L'utilisateur n'a pas à connaître nos règles.
+  return [...new Set(RULES.map((r) => r.exemple))];
+}
+
+/**
+ * La formulation canonique d'UNE règle, par son identifiant.
+ *
+ * Pour les messages qui doivent nommer des capacités PRÉCISES plutôt que la
+ * liste entière — la question de portée, par exemple, qui propose trois
+ * endroits où chercher. Sans cette fonction, ce message les recopierait, et il
+ * les recopiait : c'est ainsi qu'il en est venu à affirmer *« ni sur le web,
+ * ni dans tes documents »* alors que les deux existaient.
+ */
+function exempleDe(ruleId: string): string {
+  const rule = RULES.find((r) => r.id === ruleId);
+  /* Un identifiant inconnu est un défaut de programmation, pas une condition
+     d'exploitation : le rendre visible tout de suite vaut mieux qu'afficher un
+     trou dans une phrase adressée à l'utilisateur. */
+  if (rule === undefined) throw new Error(`règle inconnue : ${ruleId}`);
+  return rule.exemple;
+}
 
 /**
  * Expressions qui posent une ÉCHÉANCE.
@@ -421,17 +581,76 @@ const BARE_SEARCH = /^(?:cherche|recherche|retrouve|trouve)\s+(.+)$/iu;
  * phrase, ou s'il l'a parfaitement saisie mais ne sait pas encore le faire
  * (PRD §23, et proposition n°13 « Capability Registry »).
  */
-const KNOWN_BUT_UNAVAILABLE: readonly { pattern: RegExp; capability: string }[] = [
-  { pattern: /\benvoie?\b.*\b(mail|email|message|sms)\b/iu, capability: 'envoyer un message' },
-  { pattern: /\b(rendez-vous|agenda|calendrier|r[ée]union)\b/iu, capability: 'accéder à l\'agenda' },
-  { pattern: /\b(supprime|efface|oublie)\b/iu, capability: 'supprimer une donnée' },
-  { pattern: /\b(allume|[ée]teins|chauffage|lumi[èe]re)\b/iu, capability: 'contrôler la maison' },
-  { pattern: /\bm[ée]t[ée]o\b/iu, capability: 'consulter la météo' },
-  { pattern: /\b(cherche sur le web|recherche web|sur internet|sur google|en ligne)\b/iu, capability: 'chercher sur le web' },
+interface Absente {
+  readonly pattern: RegExp;
+  readonly capability: string;
+  /**
+   * L'outil qui SERVIRAIT cette capacité, ou `null` si aucun n'est écrit.
+   *
+   * ⚠ CE CHAMP REND L'AFFIRMATION VÉRIFIABLE, et c'est tout son objet.
+   * `tests/intent/capacites-declarees.test.ts` exige qu'un outil nommé ici soit
+   * ABSENT du catalogue. Le jour où quelqu'un l'écrit, la CI rougit et force à
+   * changer le message — au lieu de le laisser mentir en silence pendant vingt
+   * commits, ce qui est exactement ce qui s'est passé.
+   */
+  readonly outilQuiManque: string | null;
+}
+
+/**
+ * ⚠ QUATRE DE CES ENTRÉES ÉTAIENT FAUSSES — ADR-075.
+ *
+ * Le moteur répondait *« cette capacité n'est pas encore construite »* pour
+ * `web_search` (écrit à ADR-055), `file_search` (ADR-046), les trois outils
+ * d'agenda (ADR-043/044/045) et `memory_forget` / `note_delete` (ADR-065/067).
+ *
+ * Ce n'est pas un mensonge sur un EFFET — aucune action n'était annoncée à
+ * tort. C'est un mensonge sur le CATALOGUE, et il coûte la même chose :
+ * l'utilisateur renonce à demander ce que Jarvis sait faire.
+ */
+const KNOWN_BUT_UNAVAILABLE: readonly Absente[] = [
   {
-    pattern:
-      /\b(?:cherche|recherche|retrouve|trouve)\b[^]*\b(?:devis|documents?|pdf|fichiers?|factures?|contrats?|pi[èe]ce jointe)\b/iu,
-    capability: 'chercher dans tes documents',
+    pattern: /\benvoie?\b.*\b(mail|email|message|sms)\b/iu,
+    capability: 'envoyer un message',
+    // Vrai : aucun outil d'envoi n'existe, et c'est ce qui bloque A8.
+    outilQuiManque: 'message_send',
+  },
+  {
+    /* L'AGENDA EXISTE — le message change de nature.
+       `calendar_read`, `calendar_create` et `calendar_update` sont écrits et
+       éprouvés. Ce qui manque est double, et aucune des deux moitiés n'est
+       « la capacité » : (1) aucun ADAPTATEUR n'est branché, donc l'outil rend
+       `PROVIDER_UNAVAILABLE` ; (2) une règle `Tier 0` ne peut pas produire les
+       dates ISO qu'il exige — et ADR-036/037 interdisent de les calculer avec
+       l'horloge du processus. Voir ADR-075. */
+    pattern: /\b(rendez-vous|agenda|calendrier|r[ée]union)\b/iu,
+    capability:
+      'accéder à l\'agenda — je sais le lire et l\'écrire, mais aucun agenda ' +
+      'n\'est connecté, et je ne sais pas encore résoudre une date dite en ' +
+      'français',
+    outilQuiManque: null,
+  },
+  {
+    /* SUPPRIMER EXISTE — mais seulement sur ma dernière action.
+       `memory_forget`, `note_delete`, `task_cancel` et `reminder_cancel` sont
+       écrits. Ils exigent un identifiant qu'une phrase ne porte pas : désigner
+       « cette note » demande une résolution qui n'existe que pour la dernière
+       opération, par `/annule`. Le dire vaut mieux que de prétendre l'inverse
+       dans un sens comme dans l'autre. */
+    pattern: /\b(supprime|efface|oublie)\b/iu,
+    capability:
+      'supprimer une donnée — je sais défaire ma dernière action avec ' +
+      '« /annule », mais pas encore supprimer un élément que tu me désignes',
+    outilQuiManque: null,
+  },
+  {
+    pattern: /\b(allume|[ée]teins|chauffage|lumi[èe]re)\b/iu,
+    capability: 'contrôler la maison',
+    outilQuiManque: 'home_control',
+  },
+  {
+    pattern: /\bm[ée]t[ée]o\b/iu,
+    capability: 'consulter la météo',
+    outilQuiManque: 'weather_read',
   },
 ];
 
@@ -441,9 +660,8 @@ function unavailable(capability: string): IntentProposal {
     kind: 'UNSUPPORTED',
     understood: `que tu veux ${capability}`,
     missing:
-      'cette capacité — elle n\'est pas encore construite. ' +
-      'Je sais aujourd\'hui : noter, créer et lister des tâches, ' +
-      'mémoriser et rechercher en mémoire.',
+      `cette capacité — elle n'est pas encore construite. ` +
+      `Je sais aujourd'hui : ${capacitesParlees().join(', ')}.`,
   };
 }
 
@@ -532,10 +750,17 @@ export function createIntentEngine(): IntentEngine {
         return {
           kind: 'CLARIFY',
           understood: 'une demande de recherche',
+          /* ⚠ CETTE QUESTION AFFIRMAIT « ni sur le web, ni dans tes documents ».
+             Les deux étaient FAUX (ADR-075) : `web_search` et `file_search`
+             existent. La portée reste à préciser — c'est la propriété de
+             HIGH-4 et elle ne bouge pas — mais il y a désormais TROIS réponses
+             possibles au lieu d'une seule, et l'utilisateur doit les connaître
+             pour pouvoir choisir. */
           question:
-            `Je ne sais chercher que dans ta mémoire personnelle — ni sur le ` +
-            `web, ni dans tes documents. Dois-je y chercher « ${clean(bare[1] ?? '')} » ? ` +
-            `(sinon, reformule avec « que sais-tu sur … »)`,
+            `Où dois-je chercher « ${clean(bare[1] ?? '')} » ? Précise : ` +
+            `${exempleDe('memory_search')} (ta mémoire), ` +
+            `${exempleDe('web_search_explicit')}, ou ` +
+            `${exempleDe('file_search_explicit')}.`,
         };
       }
 
@@ -543,9 +768,7 @@ export function createIntentEngine(): IntentEngine {
         kind: 'UNSUPPORTED',
         understood: 'ta phrase, mais pas ce qu\'elle demande',
         missing:
-          'une formulation que je reconnais. Essaie : « note … », ' +
-          '« ajoute … à ma liste », « mes tâches », « retiens que … », ' +
-          '« que sais-tu sur … ».',
+          `une formulation que je reconnais. Essaie : ${capacitesParlees().join(', ')}.`,
       };
     },
   };

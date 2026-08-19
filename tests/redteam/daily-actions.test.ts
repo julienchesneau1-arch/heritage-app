@@ -144,11 +144,30 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
     expect(substituted.map((a) => a.label)).toEqual([]);
   });
 
-  it('une recherche de document est refusée, pas détournée', () => {
+  it('une recherche de document est refusée ou PRÉCISÉE, jamais détournée', () => {
+    /* ⚠ CE TEST A CHANGÉ DE FORME, PAS DE PROPRIÉTÉ — ADR-075.
+
+       Il exigeait `UNSUPPORTED`, parce que `file_search` était alors déclaré
+       « pas encore construit ». Il l'était depuis ADR-046 : le moteur mentait
+       sur son propre catalogue, et ce test figeait le mensonge.
+
+       « Retrouve le devis du carreleur » ne dit toujours pas OÙ chercher —
+       Jarvis demande donc, au lieu de deviner. C'est ce que le test voisin dit
+       déjà en toutes lettres : *refuser ou demander sont deux réponses
+       honnêtes ; substituer n'en est pas une.*
+
+       La propriété défendue — RIEN N'EST DÉTOURNÉ — est intacte, et
+       l'assertion est plus forte qu'avant : elle exige que les documents soient
+       NOMMÉS comme portée possible, pas seulement mentionnés dans un refus. */
     const seen = observed.get('chercher un document');
-    expect(seen?.reply.kind).toBe('UNSUPPORTED');
-    if (seen?.reply.kind !== 'UNSUPPORTED') return;
-    expect(seen.reply.understood).toContain('documents');
+    expect(['UNSUPPORTED', 'CLARIFY']).toContain(seen?.reply.kind);
+    const dit =
+      seen?.reply.kind === 'CLARIFY'
+        ? seen.reply.question
+        : seen?.reply.kind === 'UNSUPPORTED'
+          ? `${seen.reply.understood} ${seen.reply.missing}`
+          : '';
+    expect(dit).toContain('documents');
   });
 
   it('une recherche web n\'est jamais détournée, et la limite est dite', () => {
@@ -164,8 +183,18 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
         : seen?.reply.kind === 'UNSUPPORTED'
           ? `${seen.reply.understood} ${seen.reply.missing}`
           : '';
+    /* LES TROIS PORTÉES SONT NOMMÉES — et c'est plus que ce que ce test
+       exigeait avant (ADR-075). Il vérifiait « web » et « mémoire
+       personnelle », à une époque où la question affirmait *« ni sur le web, ni
+       dans tes documents »* : elle annonçait deux incapacités qui étaient
+       fausses toutes les deux.
+
+       Ce qu'on exige désormais est ce dont l'utilisateur a besoin pour
+       RÉPONDRE : les trois endroits où Jarvis sait chercher. Une question qui
+       n'en propose qu'un l'oblige à deviner ce qu'on ne lui a pas dit. */
     expect(dit).toContain('web');
-    expect(dit).toContain('mémoire personnelle');
+    expect(dit).toContain('mémoire');
+    expect(dit).toContain('documents');
   });
 
   it('la recherche mémoire ANNONCE sa portée, même quand elle trouve', () => {

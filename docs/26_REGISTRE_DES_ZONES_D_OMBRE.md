@@ -313,8 +313,20 @@ Les deux vivaient dans `tests/voice/tour.test.ts`, écrit le jour même. Ils
 n'auraient jamais été trouvés en relisant — seulement en cassant exprès ce
 qu'ils protègent.
 
-**`\b` ne marche pas en français.** Le détecteur « aucun accusé de réception ne
-contient de participe passé d'action » employait `/\b(fait|envoy[ée]|…)\b/`.
+**`\b` ne marche pas en français — ET LE DÉPÔT LE SAVAIT DÉJÀ.** Le détecteur
+« aucun accusé de réception ne contient de participe passé d'action » employait
+`/\b(fait|envoy[ée]|…)\b/`.
+
+> ⚠ **Correction d'ADR-074, qui présentait ceci comme une découverte.** Le piège
+> est documenté depuis longtemps dans `src/core/intent/engine.ts`, à la règle
+> `memory_search_decision` : *« en JavaScript, `\b` se fonde sur `\w`,
+> c'est-à-dire l'ASCII. "décidé" se termine par un accent […] Piège
+> systématique dès qu'on écrit des règles en français. »*
+>
+> Je suis retombé dedans **trois fichiers plus loin**, dans le même dépôt, sur
+> la même langue. Ce n'est donc pas un défaut de connaissance : c'est un défaut
+> de CIRCULATION de la connaissance. Une leçon écrite dans un commentaire ne
+> protège que le fichier qui la porte — seul un mécanisme voyage.
 En JavaScript `\b` est défini sur l'**ASCII** : « é » n'en fait pas partie, donc
 après lui il n'existe **aucune frontière de mot**, et `envoyé\b` ne peut pas
 matcher « envoyé » en fin de phrase. Le garde-fou laissait passer précisément les
@@ -578,6 +590,105 @@ rougissait, il est apparu que `hasAnyEffect` seul **bloquait `undoLast`** : une
 annulation sans objet rend `NOT_ATTEMPTED`, la capture n'était jamais marquée,
 et `lastUndoable` l'aurait resservie indéfiniment. D'où `captureConsommee` et
 trois cas au lieu de deux (ADR-068).
+
+### 4.2 quinquies La surface PARLÉE — 6 outils sur 22, et personne ne comptait
+
+**Trouvé en répondant à une question de Julien** : *« sommes-nous proches d'un
+ChatGPT vocal ? »* La réponse demandait un chiffre que **rien dans le dépôt ne
+produisait**.
+
+`docs/28` compte les outils **écrits** : 22, tous éprouvés, tous conformes. Mais
+un outil qu'aucune phrase ne déclenche n'existe pas pour l'utilisateur. Le
+comptage manquant :
+
+```text
+ÉCRITS                      22
+ATTEIGNABLES PAR UNE PHRASE  6     memory_add, memory_search, note_create,
+                                   task_create, task_list, entity_create
+```
+
+**Seize outils sur vingt-deux sont hors d'atteinte de la parole.** Le calendrier,
+la recherche web, le briefing, la recherche de fichiers, la complétion de tâche :
+écrits, testés, invisibles. Cinq autres ne s'atteignent que par une commande
+`/slash`, ce qui n'est pas de la parole.
+
+**Comment le chiffre est prouvé**, et pourquoi il n'est pas « un grep de plus »
+(cf. §4.2 ter) — la dissymétrie est assumée :
+
+| | Moyen | Pourquoi il est valide |
+|---|---|---|
+| **Inatteignable** | absence du `toolId` dans la source du moteur | le moteur ne peut émettre qu'un littéral qu'il nomme — ni concaténation ni table indirecte. Une **impossibilité**, pas une présomption |
+| **Atteignable** | une PHRASE qui le produit | figurer dans la source ne suffit pas : une règle peut être masquée par une autre placée avant |
+
+Un seul des deux moyens aurait menti.
+
+**Le cas le plus instructif : « rappelle-moi » ne crée pas un rappel.**
+`reminder_create` existe et dit honnêtement que rien ne sonne (ADR-048). Mais la
+seule phrase française qui devrait l'atteindre est capturée par la règle des
+TÂCHES, placée avant. L'utilisateur obtient une tâche là où il demandait un
+rappel — **une action différente de celle demandée**, exactement le motif qui
+avait justifié de restreindre `memory_search`.
+
+**Ce que cela change sur la comparaison avec un assistant généraliste.**
+L'écart n'est PAS l'audio, et c'était l'intuition à corriger : c'est la
+**compréhension**. Un ChatGPT vocal atteint 100 % de ses capacités par la parole
+parce qu'un modèle fait la traduction. Jarvis en atteint 27 %, parce que
+`Tier 0` est une liste de règles écrites à la main.
+
+> Une capacité qu'aucune phrase ne déclenche est une capacité que le dépôt
+> possède et que l'utilisateur n'a pas.
+
+**PARTIELLEMENT LEVÉE DANS LE MÊME COMMIT — ADR-075.** Quatre règles ont été
+écrites, et la surface parlée passe de **6 à 10 sur 22**. Le comptage a surtout
+révélé un défaut plus grave que l'absence, traité ci-dessous.
+
+Les douze restants ne sont plus « sans chemin utilisateur » — ils sont hors
+d'atteinte pour des raisons NOMMÉES, dont aucune ne se règle en écrivant une
+règle de plus :
+
+```text
+un IDENTIFIANT qu'une phrase ne porte pas    7 outils
+une DATE qu'un Tier 0 ne sait pas résoudre   3 outils
+hors surface conversationnelle               2 outils
+```
+
+Les dates sont bloquées par un **invariant**, pas par de la paresse : une règle
+qui calculerait « demain » en JavaScript violerait ADR-036/037.
+
+**Ce qui reste ouvert** : un `Tier 1` local, seul capable de traduire une phrase
+libre en appel d'outil. C'est le chantier qu'ADR-017 chiffre.
+
+Mesuré par `tests/intent/surface-parlee.test.ts`, dont la liste est **figée** :
+elle bouge dès qu'une règle est ajoutée.
+
+---
+
+### 4.2 sexies Jarvis NIAIT quatre capacités qu'il possédait — **LEVÉE** (ADR-075)
+
+Trouvé en construisant le comptage ci-dessus, et plus grave que lui.
+
+Le moteur répondait *« cette capacité n'est pas encore construite »* pour
+`web_search` (ADR-055), `file_search` (ADR-046), les trois outils d'agenda
+(ADR-043/044/045) et `note_delete` / `memory_forget` (ADR-065/067).
+
+**Aucun effet n'était annoncé à tort.** `S15` restait donc intact — et c'est
+exactement pourquoi rien ne l'a vu pendant vingt commits. Le coût est le même :
+
+> Une capacité niée est aussi absente qu'une capacité manquante : l'utilisateur
+> cesse de la demander.
+
+**La cause** est celle d'ADR-041, transposée des données aux capacités : la
+liste « ce que je sais faire » vivait à **six endroits**, et les six avaient
+divergé. Les cinq messages en dérivent désormais ; chaque règle porte sa
+formulation canonique.
+
+**Ce qui rend la levée durable** : chaque capacité déclarée absente nomme
+maintenant l'outil qui la servirait, et un test exige que cet outil n'existe
+pas. Le jour où quelqu'un l'écrit, la CI rougit.
+
+> La prose ne rougit jamais. Une déclaration nommée, si.
+
+---
 
 ### 4.3 Couverture globale — 83,89 % des lignes
 

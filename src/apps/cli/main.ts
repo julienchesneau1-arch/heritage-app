@@ -21,6 +21,7 @@ import { stdin, stdout } from 'node:process';
 import { mint } from '../../core/tools/identity.js';
 import { openRuntime, type Runtime } from '../runtime.js';
 import { ecouter } from '../../core/voice/turn.js';
+import { capacitesParlees } from '../../core/intent/engine.js';
 import { auditReport, diagnosticReport, inboxReport } from '../reports.js';
 import type { AssistantReply } from '../../core/assistant.js';
 import {
@@ -37,15 +38,18 @@ const BANNER = `
   Tape « /aide » pour les commandes, « /quitter » pour sortir.
 `;
 
+/* ⚠ CETTE LISTE ÉTAIT ÉCRITE À LA MAIN — le sixième registre de la même chose
+   (ADR-075), et il avait divergé comme les cinq autres : il ignorait
+   `enregistre … comme personne`, ajouté trois commits plus tôt.
+
+   Elle est désormais DÉRIVÉE des règles du moteur. Une capacité ne peut plus
+   exister sans être annoncée, ni être annoncée sans exister. */
 const HELP = `
   Ce que je sais faire aujourd'hui :
 
-    note <texte>                    créer une note
-    ajoute <chose> à ma liste       créer une tâche
-    rappelle-moi de <chose>         créer une tâche
-    mes tâches                      lister les tâches ouvertes
-    retiens que <fait>              mémoriser
-    que sais-tu sur <sujet>         chercher en mémoire
+${capacitesParlees()
+  .map((c) => `    ${c}`)
+  .join('\n')}
 
   Commandes :
 
