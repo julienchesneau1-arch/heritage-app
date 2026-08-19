@@ -60,7 +60,13 @@ const TURNS: readonly Turn[] = [
   { jour: 2, phrase: `Que sais-tu sur Jean ${T}`, aptitude: 'DESAMBIGUISATION' },
 
   /* --- Fil 4 : temporalité --------------------------------------------- */
-  { jour: 1, phrase: `Rappelle-moi jeudi d'appeler le médecin ${T}`, aptitude: 'TEMPOREL' },
+  /* ⚠ CE TOUR A CHANGÉ DE CATÉGORIE — ADR-077, et c'est le seul du fil 4.
+     `ACTION` signifie « une capacité existante est correctement déclenchée ».
+     Jarvis résout désormais « jeudi » — par la BASE, jamais par l'horloge du
+     processus — et crée un vrai rappel daté. Les trois autres tours du fil
+     restent `TEMPOREL` : ils exigent l'agenda, ou une antériorité, qui
+     n'existent toujours pas. */
+  { jour: 1, phrase: `Rappelle-moi jeudi d'appeler le médecin ${T}`, aptitude: 'ACTION' },
   { jour: 1, phrase: 'Qu\'ai-je de prévu jeudi ?', aptitude: 'TEMPOREL' },
   { jour: 2, phrase: 'Décale-le à vendredi', aptitude: 'TEMPOREL' },
   { jour: 2, phrase: 'Qu\'est-ce que je t\'ai demandé hier ?', aptitude: 'TEMPOREL' },
@@ -165,19 +171,39 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     await db.close();
   });
 
-  it('un rappel daté est REFUSÉ, jamais amputé de sa date', () => {
-    // Corrigé (HIGH-5). « Rappelle-moi JEUDI d'appeler le médecin » créait une
-    // tâche intitulée « jeudi d'appeler le médecin », sans échéance, et
-    // répondait « ✓ C'est fait ». L'utilisateur repartait en croyant qu'un
-    // rappel existait pour jeudi.
-    //
-    // Jarvis ne sait pas encore résoudre une date. La seule conduite honnête
-    // est de le dire — pas d'avaler le qualificatif temporel en silence.
+  it('un rappel daté est HONORÉ, et la date retenue est DITE', () => {
+    /* ⚠ CE TEST A CHANGÉ DEUX FOIS, ET CHAQUE FOIS LA PROPRIÉTÉ A TENU.
+
+       1. HIGH-5 — « Rappelle-moi JEUDI d'appeler le médecin » créait une tâche
+          intitulée « jeudi d'appeler le médecin », sans échéance, et répondait
+          « ✓ C'est fait ». L'utilisateur repartait en croyant qu'un rappel
+          existait pour jeudi.
+       2. Le correctif d'alors : REFUSER, en disant qu'on ne sait pas résoudre
+          les dates. Honnête, et inutilisable.
+       3. ADR-077 : la date est résolue — PAR LA BASE — et un vrai rappel est
+          créé.
+
+       La propriété défendue n'a jamais été « refuser ». Elle a toujours été :
+       **la date ne disparaît pas en silence.** Elle est désormais honorée ET
+       dite en français dans la réponse, ce qui est plus fort que refuser. */
     const date = results.find((r) => r.turn.phrase.startsWith('Rappelle-moi jeudi'));
-    expect(date?.reply.kind).toBe('UNSUPPORTED');
-    if (date?.reply.kind !== 'UNSUPPORTED') return;
-    expect(date.reply.understood).toContain('jeudi');
-    expect(date.reply.missing).toContain('échéance');
+    expect(date?.reply.kind).toBe('DONE');
+    if (date?.reply.kind !== 'DONE') return;
+    expect(date.reply.toolId).toBe('reminder_create');
+
+    /* LA DATE RETENUE EST DITE. `reminder_create` ne demande aucune
+       confirmation : si Jarvis ne l'annonçait pas ici, l'heure choisie — 9 h
+       par défaut — serait parfaitement silencieuse. */
+    expect(date.reply.detail).toContain('J’ai retenu');
+    expect(date.reply.detail).toMatch(/jeudi \d{1,2}/u);
+
+    // Et le titre du rappel ne porte PAS la date : elle est déjà l'échéance.
+    const sortie: Record<string, unknown> =
+      typeof date.reply.output === 'object' && date.reply.output !== null
+        ? { ...date.reply.output }
+        : {};
+    expect(String(sortie['text'])).not.toContain('jeudi');
+    expect(String(sortie['text'])).toContain('appeler le médecin');
   });
 
   it('mais un rappel SANS date passe toujours', () => {

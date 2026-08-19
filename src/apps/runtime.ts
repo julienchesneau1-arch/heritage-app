@@ -24,6 +24,7 @@ import { createMemoryStore } from '../core/memory/store.js';
 import { createHybridSearch } from '../core/memory/search.js';
 import { createSessionStore, type SessionStore } from '../core/session/session.js';
 import { createEntityResolver } from '../core/context/resolver.js';
+import { createResolveurTemporel } from '../core/temps/resolution.js';
 import { createIntentEngine, type IntentEngine } from '../core/intent/engine.js';
 import { createEnvSecretVault } from '../core/secrets/vault.js';
 import { createToolGateway, type ToolGateway } from '../core/tools/gateway.js';
@@ -123,6 +124,8 @@ export function buildRuntime(
       // ADR-073 : la résolution de référents vit dans l'Assistant, pas dans le
       // moteur d'intention — `propose()` reste une fonction pure du texte.
       resolver: createEntityResolver(db),
+      // ADR-077 : les dates sont calculées PAR LA BASE, jamais par le processus.
+      temps: createResolveurTemporel(db),
     }),
     undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
     embeddingsAvailable: false,

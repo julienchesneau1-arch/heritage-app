@@ -663,6 +663,57 @@ elle bouge dès qu'une règle est ajoutée.
 
 ---
 
+### 4.2 septies Le `\b` accentué mord pour la QUATRIÈME fois — le motif est ailleurs
+
+En JavaScript, `\b` se fonde sur `\w`, c'est-à-dire l'ASCII. Aucune frontière de
+mot n'existe donc au contact d'un caractère accentué, et `\bà` ou `envoyé\b` ne
+matchent jamais.
+
+**Le dépôt le sait depuis longtemps** : la règle `memory_search_decision` le
+documente en toutes lettres — *« piège systématique dès qu'on écrit des règles
+en français »*.
+
+```text
+ADR-074   détecteur de participes passés     `envoyé\b`   → laissait tout passer
+ADR-075   (correction : ce n'était pas neuf, c'était déjà écrit)
+ADR-077   extraction de l'heure              `\b[àa]`      → « à » restait
+```
+
+Trois occurrences, dans trois fichiers, sur trois mois. La quatrième si l'on
+compte celle d'origine. **Ce n'est pas un défaut de connaissance, c'est un défaut
+de circulation** — et le remède écrit à chaque fois (un commentaire de plus)
+est exactement celui qui ne marche pas.
+
+> Une leçon écrite dans un commentaire ne protège que le fichier qui la porte.
+> Seul un mécanisme voyage.
+
+**Condition de fermeture** : une règle de lint interdisant `\b` dans les motifs
+d'un fichier qui contient des lettres accentuées, ou un utilitaire de frontière
+de mot conscient de l'Unicode que les motifs français devraient employer. Tant
+que le remède reste de la prose, la cinquième occurrence est certaine.
+
+---
+
+### 4.2 octies Un sabotage « non détecté » qui n'avait jamais été appliqué
+
+En éprouvant ADR-077, un sabotage a semblé passer inaperçu. J'ai commencé à
+écrire que le test était faible, avec une explication plausible — l'heure de la
+journée.
+
+**Vérification : la substitution n'avait jamais été appliquée.** Le motif ne
+correspondait pas au texte réel, et le fichier était intact. Le sabotage
+« passait » parce qu'il n'existait pas.
+
+L'explication était bonne — le test comparait bien des instants et n'aurait rien
+vu passé 9 h — mais elle était **supposée, pas mesurée**, et elle aurait pu être
+fausse.
+
+> Un sabotage qui « passe » est d'abord un sabotage à vérifier, pas un test à
+> accuser. Vérifier que la modification a bien eu lieu coûte une ligne ;
+> conclure sans le faire coûte une croyance.
+
+---
+
 ### 4.2 sexies Jarvis NIAIT quatre capacités qu'il possédait — **LEVÉE** (ADR-075)
 
 Trouvé en construisant le comptage ci-dessus, et plus grave que lui.

@@ -20,6 +20,7 @@
  * proposition — y compris quand elle vient de règles écrites par nous.
  */
 import type { Provenance } from '../types/domain.js';
+import { reconnaitre } from '../temps/expression.js';
 
 export type IntentProposal =
   | {
@@ -53,8 +54,25 @@ export type IntentProposal =
        * Le moteur ne RÉSOUT rien : reconnaître qu'un mot désigne autre chose est
        * une décision de texte, donc `Tier 0`. Résoudre demande la base, donc
        * l'Assistant (`docs/26 §4.12`).
+       *
+       * DEUX ESPÈCES DE RÉFÉRENT — ADR-077 a ajouté la seconde.
+       *
+       * ```text
+       * ANAPHORA   « ça », « celui-ci »   → désigne une ENTITÉ évoquée
+       * TEMPORAL   « jeudi », « demain »  → désigne un INSTANT non nommé
+       * ```
+       *
+       * Elles partagent la même table plutôt que d'en avoir deux, et ce n'est
+       * pas de l'économie : ce sont **le même fait** — un champ dont la valeur
+       * n'est pas encore la valeur. Deux tables du même fait finissent par
+       * diverger (ADR-041), et la garde du champ vide devrait alors consulter
+       * les deux en se souvenant de le faire.
+       *
+       * « Jeudi » est bien un référent : il désigne un instant sans le nommer,
+       * et seul un état extérieur — la date du jour, connue de la base — permet
+       * de savoir lequel.
        */
-      readonly referents: Readonly<Record<string, 'ANAPHORA'>>;
+      readonly referents: Readonly<Record<string, 'ANAPHORA' | 'TEMPORAL'>>;
     }
   | {
       readonly kind: 'CLARIFY';
@@ -102,7 +120,15 @@ interface Rule {
    * vraie, et nulle part ailleurs.
    */
   readonly exemple: string;
-  build(match: RegExpMatchArray, raw: string): IntentProposal;
+  /**
+   * `null` = « la forme correspond, mais ce cas n'est pas le mien ».
+   *
+   * Ajouté par ADR-077 : « rappelle-moi … » est un rappel s'il porte une date,
+   * une tâche sinon. Deux règles partagent donc le même motif, et la première
+   * décline. L'alternative — un seul `build` qui choisit son outil — mélangeait
+   * deux capacités dans une règle et rendait `exemple` impossible à écrire.
+   */
+  build(match: RegExpMatchArray, raw: string): IntentProposal | null;
 }
 
 /** Nettoie une capture : espaces, ponctuation finale. */
@@ -322,6 +348,61 @@ const RULES: readonly Rule[] = [
         userConfirms: false,
         // Aucun référent : ces règles portent le texte de l'utilisateur.
         referents: {},
+      };
+    },
+  },
+  /* --- Rappel DATÉ : la règle que Julien attendait — ADR-077 -------------
+     ⚠ ELLE DOIT PRÉCÉDER `task_create_reminder`, qui capture la même phrase.
+
+     Avant ADR-077, « rappelle-moi jeudi d'appeler le médecin » tombait sur la
+     garde `TEMPORAL_QUALIFIER` et rendait UNSUPPORTED : Jarvis disait
+     honnêtement qu'il ne savait pas résoudre les dates. Il le sait désormais,
+     et c'est la base qui les calcule.
+
+     La date n'est PAS résolue ici : `remindAt` porte l'expression telle que
+     dite — « jeudi » — et le marqueur `TEMPORAL` dit à l'Assistant de la faire
+     résoudre. Le moteur reste une fonction pure du texte (ADR-073), et
+     ADR-036/037 restent tenus : aucune horloge de processus n'intervient. */
+  {
+    id: 'reminder_create_date',
+    exemple: '« rappelle-moi jeudi de … »',
+    pattern:
+      /^rappelle-moi\s+(?:de\s+|d(?:'|’))?(.+)$/iu,
+    build(match) {
+      const dit = clean(match[1] ?? '');
+
+      /* UNE SEULE AUTORITÉ SUR CE QU'EST UNE DATE — et la première rédaction
+         en avait deux. Elle employait `temporalQualifier`, dont le motif
+         diffère de celui de `reconnaitre` : « demain matin » y rendait
+         « demain », l'heure du matin était perdue et le texte du rappel
+         devenait « matin de sortir la poubelle ». ADR-041, encore.
+
+         `reconnaitre` est PUR — aucune horloge — donc le moteur reste une
+         fonction du texte (ADR-073), et ADR-036/037 restent tenus. */
+      const lu = reconnaitre(dit);
+
+      /* Sans expression temporelle, ce n'est pas un rappel : c'est une tâche.
+         On rend `null` pour laisser la règle suivante s'en saisir — un rappel
+         sans date ne sonnerait jamais, et prétendre le contraire serait le
+         mensonge que `docs/06` interdit. */
+      if (lu === null) return null;
+
+      /* `remindAt` porte l'énoncé TEL QUEL. L'Assistant lui appliquera la même
+         fonction pure sur le même argument : deux appels déterministes de la
+         même fonction ne peuvent pas diverger — ce n'est donc pas un second
+         registre, contrairement à ce que la forme suggère. */
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'reminder_create',
+        input: { text: lu.reste, remindAt: dit },
+        parameterProvenance: { text: FROM_USER, remindAt: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        /* PAS de confirmation implicite : l'heure retenue peut être un défaut
+           (9 h), et l'utilisateur doit VOIR l'instant avant qu'il soit posé.
+           C'est ce qui rend `HEURE_PAR_DEFAUT` honnête plutôt qu'inventé. */
+        userConfirms: false,
+        referents: { remindAt: 'TEMPORAL' },
       };
     },
   },
@@ -696,6 +777,10 @@ export function createIntentEngine(): IntentEngine {
         const match = raw.match(rule.pattern);
         if (match !== null) {
           const proposal = rule.build(match, raw);
+          /* Une règle peut RECONNAÎTRE la forme et décliner le cas (ADR-077) :
+             « rappelle-moi … » est un rappel s'il porte une date, une tâche
+             sinon. On poursuit alors la boucle au lieu de s'arrêter. */
+          if (proposal === null) continue;
 
           /* --- Aucune échéance ne disparaît en silence (HIGH-5) --------- */
           if (proposal.kind === 'TOOL_CALL' && proposal.toolId === 'task_create') {

@@ -81,6 +81,20 @@ function gatewayRequiringConfirmation(calls: ToolCall[]): ToolGateway {
   };
 }
 
+/**
+ * Résolveur de dates FIGÉ — ADR-077.
+ *
+ * Une date fixe et non un calcul : ces tests éprouvent l'orchestration de
+ * l'Assistant, pas l'arithmétique du calendrier. Celle-ci a son propre fichier,
+ * qui l'éprouve contre PostgreSQL — le seul endroit où elle est vraie.
+ */
+const TEMPS_FIGE = {
+  resoudre: () =>
+    Promise.resolve(
+      ok({ iso: '2026-08-20T09:00:00+02:00', humain: 'jeudi 20 août à 09:00' }),
+    ),
+};
+
 describe('Assistant', () => {
   it('relaie une demande de précision sans rien exécuter', async () => {
     const calls: ToolCall[] = [];
@@ -97,6 +111,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     const reply = await assistant.say('Note que');
@@ -122,6 +137,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     const reply = await assistant.say('Envoie un mail à Paul');
@@ -146,6 +162,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -175,6 +192,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     const asked = await assistant.say('Vire 50 € à Paul');
@@ -207,6 +225,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     await assistant.say('Vire 50 € à Paul');
@@ -237,6 +256,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     await assistant.say('Vire 50 € à Paul', { confirm: true });
@@ -265,6 +285,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     await expect(assistant.say('Vire 50 € à Paul', { confirm: true })).rejects.toThrow();
@@ -293,6 +314,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -323,6 +345,7 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      temps: TEMPS_FIGE,
     });
 
     await assistant.say('Retiens que Jean travaille chez Orano');

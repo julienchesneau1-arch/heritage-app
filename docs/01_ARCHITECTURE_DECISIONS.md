@@ -5711,3 +5711,141 @@ Si l'adaptateur Google Agenda arrive **avant** la résolution de dates, la
 tentation sera de calculer les dates en TypeScript pour livrer plus vite. Ce
 serait franchir ADR-036/037 sur le chemin le plus visible du produit. L'ordre
 n'est pas négociable : **dates d'abord, agenda ensuite.**
+
+---
+
+## ADR-077 — Résoudre une date sans jamais la calculer
+
+**Statut :** accepté (ADR-036, ADR-037, ADR-073, `docs/06`).
+**Référence :** `src/core/temps/expression.ts`, `src/core/temps/resolution.ts`,
+`tests/temps/resolution.test.ts`.
+
+### Le verrou, et pourquoi ce n'était pas celui qu'on croyait
+
+Julien veut ses rappels là où il regarde : *« je vais plus sur l'agenda que sur
+une liste de tâches »*. ADR-076 a cherché l'adaptateur Google et trouvé autre
+chose :
+
+```text
+reminder_create              exige  remindAt en ISO
+calendar_read/create/update  exigent des dates ISO
+```
+
+**Aucune règle `Tier 0` ne pouvait produire une date.** Le verrou n'était donc
+ni l'adaptateur, ni un `Tier 1` : c'était la résolution temporelle, qui bloquait
+quatre outils à elle seule.
+
+### La décision : reconnaître ici, calculer là-bas
+
+ADR-036/037 interdisent de calculer une fenêtre temporelle avec l'horloge du
+processus. La tentation était d'y voir un obstacle. C'est en réalité le plan :
+
+```text
+« rappelle-moi jeudi »
+  ↓  expression.ts — PUR, aucune horloge
+{ base: 'JOUR_SEMAINE', jourSemaine: 4, heure: 9 }
+  ↓  resolution.ts — PostgreSQL calcule
+2026-08-20T07:00:00Z   ·   « jeudi 20 août à 09:00 »
+```
+
+Même partage qu'ADR-073 pour les référents : **le `Tier 0` reconnaît, la base
+résout**. Reconnaître est une décision de texte ; résoudre demande un état.
+
+`expression.ts` ne contient le nom d'aucune primitive d'horloge JavaScript, pas
+même en commentaire — un test le vérifie en texte brut. Le détecteur reste bête
+pour deux raisons : le rendre malin lui ouvrirait un trou, et un fichier qui ne
+contient nulle part l'appel interdit ne permet à personne de le recopier depuis
+la ligne d'à côté.
+
+### « Jeudi » est un référent
+
+Les dates rejoignent la table `referents` au lieu d'en avoir une seconde. Ce
+n'est pas de l'économie : c'est **le même fait** — un champ dont la valeur n'est
+pas encore la valeur.
+
+```text
+ANAPHORA   « ça », « celui-ci »   → une ENTITÉ évoquée      → contexte
+TEMPORAL   « jeudi », « demain »  → un INSTANT non nommé    → base
+```
+
+Deux tables du même fait divergent (ADR-041), et la garde du champ vide devrait
+alors penser à consulter les deux.
+
+### L'heure par défaut, et le raisonnement que j'ai dû corriger
+
+« Rappelle-moi jeudi » ne dit pas d'heure. Refuser serait inutilisable ; choisir
+en silence serait inventer. J'ai retenu **9 h**, en écrivant que c'était
+acceptable *parce que la confirmation le montre*.
+
+**Mesuré ensuite : `reminder_create` ne demande aucune confirmation.** Mon
+raisonnement portait sur un chemin que cette action ne prend pas — le défaut
+était parfaitement silencieux.
+
+Jarvis annonce donc l'instant retenu **dans sa réponse**, en français, et la
+formulation vient du même calcul que la valeur écrite :
+
+```text
+État réel vérifié : rappel « appeler le médecin » présent…
+  J'ai retenu : jeudi 20 août à 09:00.
+```
+
+> Un défaut montré n'est pas un mensonge ; un défaut silencieux en est un.
+
+### Quatre défauts trouvés en chemin, tous par la mesure
+
+**1. Le `\b` accentué — quatrième occurrence.** `RE_HEURE` commençait par
+`\b[àa]`. En JavaScript `\b` se fonde sur l'ASCII : entre une espace et « à » il
+n'y a aucune frontière de mot. « jeudi à 14h de rappeler le carreleur » ne
+retirait donc que « 14h », laissait « à », et le texte devenait « de rappeler le
+carreleur ». Le piège est documenté dans ce dépôt depuis longtemps, puis
+re-documenté en ADR-074 et ADR-075. **Il mord toujours, parce qu'un commentaire
+ne voyage pas.**
+
+**2. Deux registres de « ce qu'est une date ».** La règle d'intention employait
+`temporalQualifier`, dont le motif diffère de `reconnaitre`. « demain matin »
+rendait « demain » : l'heure du matin perdue ET le texte abîmé en « matin de
+sortir la poubelle ». `reconnaitre` est désormais seul à dire ce qu'il a
+consommé, et rend le `reste`.
+
+**3. La confirmation s'affichait en anglais.** `TMDay`/`TMMonth` suivent le
+`lc_time` de la base : mesuré, « Wednesday 19 August ». La phrase que
+l'utilisateur relit avant qu'un rappel soit posé aurait différé d'une machine à
+l'autre. Les noms français sont désormais un tableau explicite dans la requête.
+
+**4. La frontière a fait son travail.** L'ISO portait un décalage (`+00:00`), or
+`z.string().datetime()` ne l'accepte pas par défaut : l'outil répondait « Entrée
+invalide ». C'est exactement le rôle qu'ADR-016 donne à la validation de
+frontière — le défaut est mort à l'entrée de l'outil, pas dans un rappel posé à
+une heure fausse. L'ISO est désormais en UTC avec `Z`, la forme lisible reste en
+heure locale.
+
+### Un sabotage qui n'en était pas un
+
+Le sabotage « le jour de semaine peut tomber aujourd'hui » a d'abord semblé non
+détecté. **Vérification : ma substitution n'avait jamais été appliquée** — le
+motif ne correspondait pas. Appliquée correctement, elle est détectée.
+
+Le correctif du test reste néanmoins justifié : il comparait des INSTANTS
+(`iso > clock_timestamp()`), ce qui n'aurait rien vu passé 9 h du matin. Il
+compare désormais des JOURS. C'est le motif de `docs/26 §2.6` — *« un test qui
+ne passait que 23 heures sur 24 »*.
+
+> Un sabotage qui « passe » est d'abord un sabotage à vérifier, pas un test à
+> accuser.
+
+### Ce que cela débloque, et ce que cela ne débloque pas
+
+`reminder_create` est atteignable par la parole : **11 outils sur 22** au lieu
+de 10. Le rappel apparaît dans le briefing du matin (ADR-048/049), qui est
+lui-même atteignable depuis ADR-075 par « fais-moi un point ».
+
+Les trois outils d'agenda restent hors d'atteinte, mais **la nature du blocage a
+changé** : ce n'est plus une impossibilité de conception, c'est du câblage —
+aucun adaptateur n'est branché, et leurs règles restent à écrire.
+
+### Condition de révision
+
+Le jour où l'adaptateur Google Agenda arrivera, la tentation sera d'écrire une
+seconde reconnaissance de date, plus riche, à côté de celle-ci. Ce serait
+recréer le défaut n°2 à plus grande échelle. `expression.ts` s'étend ; il ne se
+double pas.

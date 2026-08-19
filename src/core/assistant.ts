@@ -23,6 +23,8 @@
  */
 import { mint, type OperationIdentity } from './tools/identity.js';
 import type { IntentEngine } from './intent/engine.js';
+import { reconnaitre } from './temps/expression.js';
+import type { ResolveurTemporel } from './temps/resolution.js';
 import type { EntityResolver } from './context/resolver.js';
 import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
@@ -125,6 +127,14 @@ export interface AssistantDeps {
    * c'est sa place.
    */
   readonly resolver: EntityResolver;
+  /**
+   * Le résolveur de dates — ADR-077.
+   *
+   * REQUIS, pas optionnel : un champ optionnel est un champ qu'on oublie, et
+   * l'oublier ici ferait échouer « rappelle-moi jeudi » en production alors
+   * que tous les tests passeraient avec un double qui le fournit.
+   */
+  readonly temps: ResolveurTemporel;
 }
 
 export function createAssistant(deps: AssistantDeps): Assistant {
@@ -155,8 +165,17 @@ export function createAssistant(deps: AssistantDeps): Assistant {
          exactement ce qui distingue « résoudre » de « choisir à la place de
          quelqu'un ». */
       let input: Readonly<Record<string, unknown>> = proposal.input;
-      const aResoudre = Object.keys(proposal.referents);
-      if (aResoudre.length > 0) {
+      /* Les deux espèces de référent partagent une table (ADR-077) mais pas un
+         résolveur : l'une interroge le contexte de conversation, l'autre la
+         base. On les sépare ici, à un seul endroit. */
+      const anaphores = Object.entries(proposal.referents)
+        .filter(([, genre]) => genre === 'ANAPHORA')
+        .map(([cle]) => cle);
+      const temporels = Object.entries(proposal.referents)
+        .filter(([, genre]) => genre === 'TEMPORAL')
+        .map(([cle]) => cle);
+
+      if (anaphores.length > 0) {
         if (options.sessionId === undefined) {
           /* Sans session, il n'y a pas de « contexte récent ». Deviner
              reviendrait à inventer le passé de la conversation. */
@@ -183,9 +202,48 @@ export function createAssistant(deps: AssistantDeps): Assistant {
         const nom = resolution.value.entity.displayName;
         input = Object.fromEntries(
           Object.entries(proposal.input).map(([cle, valeur]) =>
-            aResoudre.includes(cle) ? [cle, nom] : [cle, valeur],
+            anaphores.includes(cle) ? [cle, nom] : [cle, valeur],
           ),
         );
+      }
+
+      /* RÉSOUDRE LES DATES — ADR-077, et le MÊME interdit qu'au-dessus.
+
+         « Jeudi » désigne un instant sans le nommer : c'est un référent, au
+         même titre que « ça ». La différence est ce qui le résout — la base et
+         non le contexte de conversation — pas la nature du problème.
+
+         `reconnaitre` est rejoué ICI sur le même argument que dans le moteur.
+         Deux appels déterministes d'une fonction pure ne peuvent pas diverger :
+         ce n'est pas un second registre, c'est le même calcul refait pour rien
+         — et « pour rien » coûte quelques microsecondes. */
+      const lisible: Record<string, string> = {};
+      for (const cle of temporels) {
+        const brut = input[cle];
+        if (typeof brut !== 'string') {
+          return { kind: 'ERROR', message: `date illisible pour « ${cle} »` };
+        }
+        const lu = reconnaitre(brut);
+        if (lu === null) {
+          /* ON DEMANDE, ON NE POSE PAS UNE DATE PAR DÉFAUT. Un rappel posé
+             pour un moment que l'utilisateur n'a pas dit est pire qu'un rappel
+             absent : il crée une confiance fausse. */
+          return {
+            kind: 'CLARIFY',
+            question:
+              'Pour quand exactement ? Je comprends « demain », « jeudi », ' +
+              '« demain matin », « dans 2 heures », « jeudi à 14h ».',
+          };
+        }
+        const instant = await deps.temps.resoudre(lu.expression);
+        if (!instant.ok) return { kind: 'ERROR', message: instant.error.message };
+
+        input = { ...input, [cle]: instant.value.iso };
+        /* La forme LISIBLE sert la confirmation. C'est elle qui rend honnête
+           l'heure par défaut : l'utilisateur voit « jeudi 20 août à 09:00 »
+           avant toute écriture, et peut corriger. Un défaut montré n'est pas
+           un mensonge ; un défaut silencieux en serait un. */
+        lisible[cle] = instant.value.humain;
       }
 
       /* LE POINT DE FRAPPE UNIQUE — ADR-030.
@@ -221,7 +279,12 @@ export function createAssistant(deps: AssistantDeps): Assistant {
                tris du même fait finissent par diverger. */
             const values: Record<string, string> = {};
             for (const v of readConfirmables(result.error.details)) {
-              values[v.nom] = v.rendu;
+              /* La date résolue s'affiche en FRANÇAIS, pas en ISO — ADR-077.
+                 `2026-08-20T09:00:00+02:00` ne se relit pas, et c'est
+                 précisément cette relecture qui rend acceptable l'heure par
+                 défaut. Les deux formes viennent du même calcul, dans la même
+                 requête : elles ne peuvent pas désigner deux instants. */
+              values[v.nom] = lisible[v.nom] ?? v.rendu;
             }
             return {
               kind: 'CONFIRM',
@@ -242,11 +305,29 @@ export function createAssistant(deps: AssistantDeps): Assistant {
            note, tâche, mémoire — n'est pas une entité résoluble, et la liste
            reste vide plutôt que d'être remplie approximativement. */
         const touchee = result.value.resource;
+
+        /* ⚠ LA DATE RETENUE SE DIT, MÊME SANS CONFIRMATION — ADR-077.
+
+           J'avais justifié `HEURE_PAR_DEFAUT` par « elle est montrée dans la
+           confirmation ». Mesuré ensuite : `reminder_create` ne DEMANDE aucune
+           confirmation. Le défaut de 9 h était donc parfaitement silencieux, et
+           mon raisonnement portait sur un chemin que cette action ne prend pas.
+
+           Un défaut montré n'est pas un mensonge ; un défaut silencieux en est
+           un. Jarvis dit donc l'instant qu'il a retenu, en français, dans la
+           réponse elle-même — et la forme vient du MÊME calcul que la valeur
+           écrite. */
+        const quand = Object.values(lisible);
+        const detail =
+          quand.length > 0
+            ? `${result.value.verification.detail}\n  J’ai retenu : ${quand.join(', ')}.`
+            : result.value.verification.detail;
+
         return {
           kind: 'DONE',
           status: result.value.status,
           toolId: proposal.toolId,
-          detail: result.value.verification.detail,
+          detail,
           output: result.value.output,
           mentionedEntityIds:
             touchee !== null && touchee.kind === 'entity' ? [touchee.id] : [],

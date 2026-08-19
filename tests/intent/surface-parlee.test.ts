@@ -82,6 +82,9 @@ const PHRASES: Readonly<Record<string, string>> = {
   file_search: 'cherche dans mes documents le devis du carreleur',
   briefing_generate: 'fais-moi un point',
   system_status: 'comment vas-tu',
+  /* ADR-077 — le verrou des DATES tombe, et c'est lui qui bloquait le cas
+     d'usage réel de Julien : « je vais plus sur l'agenda que sur une liste ». */
+  reminder_create: 'rappelle-moi jeudi d’appeler le médecin',
 };
 
 describe('la surface parlée de Jarvis', () => {
@@ -102,7 +105,7 @@ describe('la surface parlée de Jarvis', () => {
     }
   });
 
-  it('LE CHIFFRE — 10 outils atteignables par la parole sur 22 écrits', () => {
+  it('LE CHIFFRE — 11 outils atteignables par la parole sur 22 écrits', () => {
     /* ⚠ C'EST LE CHIFFRE QUI RÉPOND À « SOMMES-NOUS PROCHES D'UN CHATGPT
        VOCAL ? », ET IL N'ÉTAIT COMPTÉ NULLE PART.
 
@@ -130,7 +133,6 @@ describe('la surface parlée de Jarvis', () => {
       'memory_forget', //   idem — atteignable par `/annule`
       'note_delete', //     idem — atteignable par `/annule`
       'reminder_cancel', // idem — atteignable par `/annule`
-      'reminder_create', // « rappelle-moi » crée une TÂCHE : décision de Julien
       'task_cancel', //     exige un identifiant — atteignable par `/annule`
       'task_complete', //   exige un identifiant de tâche
     ]);
@@ -141,12 +143,16 @@ describe('la surface parlée de Jarvis', () => {
        écrivant une règle de plus.
 
          un IDENTIFIANT qu'une phrase ne porte pas   7 outils
-         une DATE qu'un Tier 0 ne sait pas résoudre  3 outils
+         une DATE non encore câblée à l'outil        3 outils (agenda)
 
-       La première demande une résolution par désignation (« cette note ») ; la
-       seconde une résolution de date, qu'ADR-036/037 interdisent de bricoler
-       avec l'horloge du processus. Ce sont deux chantiers, pas un oubli. */
-    expect(atteignables).toHaveLength(10);
+       La première demande une résolution par désignation (« cette note »).
+
+       ⚠ LA SECONDE A CHANGÉ DE NATURE AVEC ADR-077. La résolution de dates
+       EXISTE désormais, et elle a débloqué `reminder_create`. Les trois outils
+       d'agenda restent hors d'atteinte pour une autre raison : aucun
+       adaptateur n'est branché, et leurs règles restent à écrire. Ce n'est plus
+       un verrou de conception, c'est du câblage. */
+    expect(atteignables).toHaveLength(11);
     expect(enregistres).toHaveLength(22);
   });
 
