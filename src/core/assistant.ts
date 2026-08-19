@@ -25,6 +25,7 @@ import { mint, type OperationIdentity } from './tools/identity.js';
 import type { IntentEngine } from './intent/engine.js';
 import { reconnaitre } from './temps/expression.js';
 import type { ResolveurTemporel } from './temps/resolution.js';
+import type { Tier1 } from './intent/tier1.js';
 import type { EntityResolver } from './context/resolver.js';
 import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
@@ -135,12 +136,40 @@ export interface AssistantDeps {
    * que tous les tests passeraient avec un double qui le fournit.
    */
   readonly temps: ResolveurTemporel;
+  /**
+   * Le `Tier 1`, ou `null` — ADR-081.
+   *
+   * `null` est un état NORMAL et déclaré : aucun modèle local n'est installé
+   * par défaut, et Jarvis fonctionne entièrement sans (invariants I1/I2). Le
+   * champ est REQUIS pour que son absence soit un choix écrit, pas un oubli.
+   */
+  readonly tier1: Tier1 | null;
 }
 
 export function createAssistant(deps: AssistantDeps): Assistant {
   return {
     async say(text: string, options: SayOptions = {}): Promise<AssistantReply> {
-      const proposal = deps.intent.propose(text);
+      /* L'ORDRE EST UNE PROPRIÉTÉ — ADR-081.
+
+         `Tier 0` d'abord, toujours. Ses règles sont déterministes, gratuites,
+         répondent en 4,6 µs, et marquent leurs paramètres `USER` : là où elles
+         suffisent, aucune confirmation n'est exigée. Passer par le modèle
+         d'abord ajouterait latence, variabilité ET une confirmation, pour un
+         résultat identique.
+
+         Le `Tier 1` ne parle donc que sur ce que les règles n'ont pas compris.
+         `CLARIFY` ne le déclenche pas : une question posée est un travail
+         accompli, pas un échec — la relancer au modèle reviendrait à ignorer une
+         ambiguïté que `Tier 0` a su nommer. */
+      let proposal = deps.intent.propose(text);
+
+      if (proposal.kind === 'UNSUPPORTED' && deps.tier1 !== null) {
+        const repli = await deps.tier1.propose(text);
+        /* Un `Tier 1` en panne ne casse pas Jarvis : on garde la réponse du
+           `Tier 0`, qui était honnête. Une dégradation se subit, elle ne se
+           propage pas. */
+        if (repli.ok) proposal = repli.value;
+      }
 
       if (proposal.kind === 'CLARIFY') {
         return { kind: 'CLARIFY', question: proposal.question };

@@ -112,6 +112,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     const reply = await assistant.say('Note que');
@@ -138,6 +139,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     const reply = await assistant.say('Envoie un mail à Paul');
@@ -163,6 +165,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -193,6 +196,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     const asked = await assistant.say('Vire 50 € à Paul');
@@ -226,6 +230,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     await assistant.say('Vire 50 € à Paul');
@@ -257,6 +262,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     await assistant.say('Vire 50 € à Paul', { confirm: true });
@@ -286,6 +292,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     await expect(assistant.say('Vire 50 € à Paul', { confirm: true })).rejects.toThrow();
@@ -315,6 +322,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -346,6 +354,7 @@ describe('Assistant', () => {
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
+      tier1: null,
     });
 
     await assistant.say('Retiens que Jean travaille chez Orano');

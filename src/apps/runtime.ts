@@ -145,6 +145,16 @@ export function buildRuntime(
       resolver: createEntityResolver(db),
       // ADR-077 : les dates sont calculées PAR LA BASE, jamais par le processus.
       temps: createResolveurTemporel(db),
+      /* ⚠ `null` TANT QU'AUCUN MODÈLE LOCAL N'EST BRANCHÉ — ADR-081.
+
+         Aucun `ModelProvider` local n'existe encore dans le dépôt : le
+         construire ici reviendrait à annoncer une compréhension qu'on n'a pas.
+         Jarvis reste entièrement fonctionnel sans (I1, I2) — il comprend moins
+         de formulations, et le dit.
+
+         Cette ligne changera le jour où un runtime local sera écrit, et le test
+         de câblage de `tests/redteam/wiring.test.ts` le remarquera. */
+      tier1: null,
     }),
     undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
     embeddingsAvailable: false,

@@ -424,7 +424,7 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Trois modules de logique hors circuit
+### 4.1 Quatre modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
@@ -436,6 +436,7 @@ jamais atteints par le produit**.
 | `context/packet.ts` | l'assemblage du paquet de contexte n'a aucun appelant — résoudre une référence et composer un contexte sont deux choses, et une seule est faite | un consommateur du paquet |
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
+| `intent/tier1.ts` | aucun `ModelProvider` local n'existe — `runtime.ts` pose `tier1: null` | dès qu'un runtime local est écrit |
 | ~~`tools/outcome.ts`~~ | **LEVÉE (ADR-065)** — `memory_forget` projette son statut sur la ligne mémoire ET chaque dérivé hors cascade ; une mémoire vit à plusieurs endroits, donc l'oubli est multi-cibles | — |
 
 **Ce compteur a une histoire, et elle vaut d'être lue :**
@@ -448,7 +449,18 @@ jamais atteints par le produit**.
 5   − quarantine/processor.ts (ADR-055) — web_search ingère, le Gateway scelle
 4   − tools/outcome.ts (ADR-065) — memory_forget projette sur plusieurs cibles
 3   − context/resolver.ts (ADR-073) — l'Assistant résout « ça » avant d'agir
+4   + intent/tier1.ts (ADR-081) — l'enveloppe de sûreté écrite AVANT le modèle
 ```
+
+> **La dernière ligne monte, et c'est assumé.** Ce compteur n'est pas une note
+> à minimiser : il mesure l'écart entre ce qui est écrit et ce qui sert. Le
+> `Tier 1` y entre pour la même raison délibérée que le CostGate — l'enveloppe
+> de sûreté s'écrit **à froid**, avant la capacité qu'elle encadre. Clouer
+> `userConfirms` à `false` et marquer chaque paramètre `MODEL_OUTPUT` est
+> beaucoup plus facile maintenant qu'après, quand un modèle tournera enfin et
+> qu'on aura hâte de le voir répondre.
+>
+> Le faire baisser en branchant un modèle qui n'existe pas serait le tricher.
 
 > **Le titre a dit « Cinq » pendant toute la période où il valait six.**
 > `wiring.test.ts` l'affirmait pourtant (`toHaveLength(6)`) ; ce document non.

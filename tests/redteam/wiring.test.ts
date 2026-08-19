@@ -149,6 +149,24 @@ describe('RED TEAM — code mort en production', () => {
            branché — et ce test le signalera si on oublie de l'y brancher. */
         'src/core/cost/gate.ts',
 
+        /* `Tier 1` — ADR-081. Écrit, éprouvé, et appelé par PERSONNE, parce
+           qu'aucun `ModelProvider` local n'existe encore dans le dépôt.
+
+           C'est le même ordre délibéré que le CostGate deux entrées plus haut :
+           l'ENVELOPPE DE SÛRETÉ est écrite avant la capacité qu'elle encadre.
+           Chaque paramètre marqué `MODEL_OUTPUT`, chaque outil vérifié contre
+           le catalogue réel, `userConfirms` cloué à `false` — tout cela est
+           beaucoup plus facile à écrire à froid qu'après, quand un modèle
+           tourne enfin et qu'on a hâte de le voir répondre.
+
+           Le construire aujourd'hui annoncerait une compréhension qu'on n'a
+           pas : `runtime.ts` pose donc `tier1: null`, et Jarvis dit ce qu'il ne
+           comprend pas plutôt que de deviner.
+
+           Il sortira de cette liste le jour où un runtime local sera branché —
+           et ce test le signalera si on oublie de l'y brancher. */
+        'src/core/intent/tier1.ts',
+
         /* ⚠ `src/core/tools/outcome.ts` A QUITTÉ CETTE LISTE — ADR-065.
            Il y figurait avec ce commentaire : « pas encore branché […] jusqu'à
            ce qu'un outil multi-cibles existe ». Cet outil existe :
@@ -162,7 +180,7 @@ describe('RED TEAM — code mort en production', () => {
     );
   });
 
-  it('trois modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('quatre modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
     /* Le chiffre est asserté, pas seulement la liste : c'est ce qui force à
        PASSER ICI quand un module cesse d'être atteint — ou le devient.
@@ -187,7 +205,12 @@ describe('RED TEAM — code mort en production', () => {
        l'Assistant, qui résout les référents avant d'invoquer un outil. Le
        Context Engine attendait cela depuis `docs/26 §4.12` — et il l'a obtenu
        SANS modèle, par trois causes tombées l'une après l'autre. */
-    expect(deadLogic).toHaveLength(3);
+    /* **À QUATRE avec ADR-081** : `intent/tier1.ts` rejoint la liste, et c'est
+       une AUGMENTATION assumée. Le compteur d'orphelins n'est pas une note à
+       minimiser — il mesure l'écart entre ce qui est écrit et ce qui sert.
+       Le faire baisser en branchant un modèle qui n'existe pas serait le
+       tricher. */
+    expect(deadLogic).toHaveLength(4);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

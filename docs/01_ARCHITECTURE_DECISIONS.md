@@ -6222,3 +6222,135 @@ nommée — et le jour où elle baisse sans raison, la CI le dira. Le piège ser
 la faire monter en ajoutant des règles `Tier 0` pour les phrases exactes du
 scénario : le chiffre grimperait sans que rien ne s'améliore. **Les trente tours
 sont un échantillon, pas une cible.**
+
+---
+
+## ADR-081 — Tier 1 : parler librement, sans donner l'autorité
+
+**Statut :** accepté (`CLAUDE.md` règle 1, ADR-017, ADR-024, ADR-073, ADR-080).
+**Référence :** `src/core/intent/tier1.ts`, `tests/intent/tier1.test.ts`,
+`src/core/assistant.ts`.
+
+### L'objectif de Julien, dit sans détour
+
+> *« Que je puisse parler librement, et que Jarvis comprenne et fasse vraiment
+> mes intentions. »*
+
+ADR-080 avait chiffré l'écart : **43 %** d'une conversation réelle aboutit, et
+`REFERENCE` tombe à `0/8`. Dis *« ajoute du café à ma liste »* et ça marche ; dis
+*« faudrait que je pense au café »* et rien ne se passe.
+
+### Ce qui change, et ce qui ne change surtout pas
+
+```text
+CHANGE        la COMPRÉHENSION — n'importe quelle formulation est admise
+NE CHANGE PAS l'AUTORITÉ — la sortie du modèle reste une entrée non fiable
+```
+
+`CLAUDE.md` règle 1 : *« Le modèle propose, le système décide. »* Ce module en
+est l'application littérale.
+
+### Le mécanisme qui rend ça sûr existait DÉJÀ
+
+C'est le point remarquable de cet ADR : **il n'a fallu inventer aucune
+protection**. Elles étaient toutes écrites, et attendaient ce moment.
+
+```text
+MODEL_OUTPUT            provenance, déjà dans la taxonomie (ADR-024)
+isUntrusted()           la range avec EXTERNAL_UNTRUSTED
+Policy Gate 2a          provenance non fiable + paramètre SENSIBLE → L4
+L4                      confirmation portant sur la VALEUR concrète
+ModelProvider           interface, avec `structuredOutput` qui VALIDE déjà
+```
+
+Le résultat en une image :
+
+```text
+« faudrait que je pense au café »
+  ↓ le modèle propose
+task_create { title: "acheter du café" }      ← MODEL_OUTPUT
+  ↓ Policy Gate : non fiable + sensible → L4
+« Créer la tâche « acheter du café » ? »      ← la VALEUR est montrée
+```
+
+**Tu parles librement, et tu vois toujours ce qui a été compris avant que ça
+parte.** C'est la version honnête de « il fait mes intentions » : il les fait,
+après te les avoir montrées.
+
+### Trois refus, et ils comptent plus que la fonctionnalité
+
+**1. Le schéma de frontière est pauvre.** Le modèle rend un identifiant d'outil
+et des paramètres. **Ni provenance, ni autonomie, ni `userConfirms`.** Ces champs
+décident de ce qui s'exécute sans demander : les lui laisser écrire, c'est lui
+confier la clé du Policy Gate. Un test lit le schéma et refuse qu'ils y entrent.
+
+**2. `userConfirms` est cloué à `false`.** Une règle `Tier 0` peut affirmer que
+l'énoncé vaut confirmation — elle reconnaît une formule impérative exacte. Un
+modèle qui l'affirmerait affirmerait seulement qu'il le pense, et déciderait
+lui-même s'il faut demander la permission.
+
+**3. L'outil doit exister dans le catalogue RÉEL**, relu à chaque appel. Un
+modèle qui hallucine `payment_make` ne produit aucun appel — et l'invention est
+**nommée** à l'utilisateur, ce qui vaut mieux qu'un « je n'ai pas compris ».
+
+### L'ordre est une propriété, pas une optimisation
+
+`Tier 0` d'abord. `Tier 1` **seulement sur ce que les règles n'ont pas compris**.
+
+Les règles sont déterministes, gratuites, répondent en **4,6 µs**, et marquent
+leurs paramètres `USER` : là où elles suffisent, **aucune confirmation n'est
+exigée**. Passer par le modèle d'abord ajouterait latence, variabilité *et* une
+confirmation, pour un résultat identique.
+
+`CLARIFY` ne déclenche pas le `Tier 1` : une question posée est un travail
+accompli, pas un échec. La relancer au modèle reviendrait à ignorer une
+ambiguïté que `Tier 0` a su nommer.
+
+### Le prompt ne transporte que du fiable
+
+Trois éléments, et rien d'autre : les instructions, le catalogue, l'énoncé de
+l'utilisateur — **la seule entrée fiable du système**. Le test le prouve en
+recomposant le message système et en comparant : rien ne peut s'y glisser sans
+faire tomber l'égalité.
+
+Le catalogue ne divulgue ni autonomie, ni sensibilité, ni réversibilité. Ce sont
+les propriétés sur lesquelles le Policy Gate décide ; un modèle n'a pas à
+raisonner dessus, encore moins à les optimiser.
+
+> Un contenu d'email dans un prompt, c'est la menace T1 par la grande porte. Le
+> jour où l'on voudra enrichir le prompt, ce sera une décision d'architecture —
+> pas un ajout de commodité.
+
+### Une preuve comportementale a remplacé un mauvais indicateur
+
+La première version de ce test cherchait des mots-clés — « email », « memory » —
+dans la source. Mauvais à deux titres : elle attrapait mes propres
+**commentaires** (septième fois), et n'aurait rien vu d'une donnée injectée sous
+un autre nom. On regarde désormais ce qui **part réellement**.
+
+### ⚠ Ce qui n'est pas branché, et pourquoi c'est délibéré
+
+**Aucun `ModelProvider` local n'existe dans le dépôt.** `runtime.ts` pose
+`tier1: null`, et `wiring.test.ts` compte donc **quatre** modules hors circuit au
+lieu de trois.
+
+Ce compteur qui monte est assumé. C'est le même ordre que le CostGate
+(ADR-040) : **l'enveloppe de sûreté s'écrit à froid, avant la capacité qu'elle
+encadre.** Clouer `userConfirms` à `false` est beaucoup plus facile maintenant
+qu'après, quand un modèle tournera enfin et qu'on aura hâte de le voir répondre.
+
+Et aucun de ces tests n'a parlé à un vrai modèle. Ils prouvent que la
+compréhension **ne donne aucune autorité** ; ils ne prouvent rien de la
+compréhension elle-même.
+
+### Condition de révision
+
+Le jour où un runtime local sera branché, deux tentations viendront ensemble :
+
+1. **faire remonter le chiffre d'ADR-080** en mesurant les trente tours avec le
+   modèle. Légitime — mais l'échantillon n'est pas une cible, et un modèle qui
+   apprendrait ces phrases-là ne prouverait rien ;
+2. **retirer une confirmation** parce que « le modèle a bien compris ». C'est
+   exactement le geste que les trois refus ci-dessus rendent visible. La
+   confirmation n'est pas une friction à optimiser : c'est ce qui distingue
+   *proposer* de *décider*.
