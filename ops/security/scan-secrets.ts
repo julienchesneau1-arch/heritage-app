@@ -53,8 +53,24 @@ export const PATTERNS: readonly Pattern[] = [
     regex: /\bey[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\b/,
   },
   {
+    /* ⚠ LE MOTIF DISTINGUE UN NOM D'UNE VALEUR — ADR-079, ET IL NE LE FAISAIT PAS.
+
+       Il signalait `clientSecret: 'GOOGLE_OAUTH_CLIENT_SECRET'` : le NOM d'une
+       variable d'environnement, jamais un identifiant. Le faux positif n'est pas
+       gratuit — il pousse à blanchir un fichier, et un fichier blanchi laisse
+       passer le vrai secret qu'on y ajoutera plus tard.
+
+       Une valeur entièrement en `MAJUSCULES_AVEC_TIRETS_BAS` est un identifiant
+       par convention, jamais un secret : les jetons réels mêlent les casses et
+       portent des tirets ou des points. On l'exclut donc — c'est une précision,
+       pas un affaiblissement, et le contrôle négatif l'éprouve.
+
+       LE DRAPEAU `i` A DÛ TOMBER pour cela : sous `i`, `[A-Z0-9_]` matche aussi
+       les minuscules, et l'exclusion aurait avalé « supersecret123 ». Les
+       casses usuelles du mot-clé sont donc énumérées. */
     name: 'Mot de passe en dur',
-    regex: /(password|passwd|secret)\s*[:=]\s*['"][^'"\s]{8,}['"]/i,
+    regex:
+      /(?:password|passwd|secret|Password|Passwd|Secret|PASSWORD|PASSWD|SECRET)\s*[:=]\s*['"](?![A-Z0-9_]{8,}['"])[^'"\s]{8,}['"]/,
   },
 ];
 
@@ -88,6 +104,20 @@ interface PatternException {
 }
 
 const PATTERN_EXCEPTIONS: readonly PatternException[] = [
+  {
+    file: /^tests\/providers\/google-calendar\.test\.ts$/,
+    pattern: 'Mot de passe en dur',
+    why:
+      "Le fichier PROUVE qu'aucun secret ne fuit vers l'API : il lui faut donc " +
+      'des valeurs qui ressemblent à des secrets, sans quoi les assertions ' +
+      '« la requête ne contient pas X » passeraient parce que rien ne ' +
+      "correspond, non parce que le cloisonnement fonctionne. Même raison qu'au " +
+      'scénario doré B11. Les valeurs sont des littéraux inutilisables, ' +
+      'préfixés « ULTRA-SECRET- » pour se dénoncer à la lecture.\n' +
+      '⚠ L\'exception ne couvre PAS `src/providers/google/calendar.ts` : le ' +
+      'faux positif y a été corrigé en RENOMMANT les clés. On ne fait pas taire ' +
+      'une garde sur le fichier qui manipule les jetons.',
+  },
   {
     file: /^tests\/unit\/config\.test\.ts$/,
     pattern: 'Mot de passe en dur',

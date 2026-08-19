@@ -31,16 +31,17 @@ const enabled = databaseAvailable();
 describe('reconnaître une expression temporelle', () => {
   it('reconnaît les formes du français courant', () => {
     const cas: readonly [string, ExpressionTemporelle][] = [
-      ['demain', { base: 'DEMAIN', heure: HEURE_PAR_DEFAUT }],
-      ['demain matin', { base: 'DEMAIN', heure: 9 }],
-      ['demain soir', { base: 'DEMAIN', heure: 19 }],
-      ['après-demain', { base: 'APRES_DEMAIN', heure: HEURE_PAR_DEFAUT }],
-      ['jeudi', { base: 'JOUR_SEMAINE', jourSemaine: 4, heure: HEURE_PAR_DEFAUT }],
-      ['jeudi à 14h', { base: 'JOUR_SEMAINE', jourSemaine: 4, heure: 14 }],
-      ['dans 3 jours', { base: 'DANS_N_JOURS', jours: 3, heure: HEURE_PAR_DEFAUT }],
+      ['demain', { base: 'DEMAIN', heure: HEURE_PAR_DEFAUT, minute: 0 }],
+      ['demain matin', { base: 'DEMAIN', heure: 9, minute: 0 }],
+      ['demain soir', { base: 'DEMAIN', heure: 19, minute: 0 }],
+      ['après-demain', { base: 'APRES_DEMAIN', heure: HEURE_PAR_DEFAUT, minute: 0 }],
+      ['jeudi', { base: 'JOUR_SEMAINE', jourSemaine: 4, heure: HEURE_PAR_DEFAUT, minute: 0 }],
+      ['jeudi à 14h', { base: 'JOUR_SEMAINE', jourSemaine: 4, heure: 14, minute: 0 }],
+      ['jeudi à 8h30', { base: 'JOUR_SEMAINE', jourSemaine: 4, heure: 8, minute: 30 }],
+      ['dans 3 jours', { base: 'DANS_N_JOURS', jours: 3, heure: HEURE_PAR_DEFAUT, minute: 0 }],
       ['dans 2 heures', { base: 'DANS_N_HEURES', heures: 2 }],
       ['dans 30 minutes', { base: 'DANS_N_MINUTES', minutes: 30 }],
-      ['ce soir', { base: 'AUJOURD_HUI', heure: 19 }],
+      ['ce soir', { base: 'AUJOURD_HUI', heure: 19, minute: 0 }],
     ];
     for (const [texte, attendu] of cas) {
       expect(reconnaitre(texte)?.expression, texte).toEqual(attendu);
@@ -109,6 +110,67 @@ describe('reconnaître une expression temporelle', () => {
     }
   });
 
+  it('LES MINUTES SURVIVENT — « 8h30 » n’est pas 8h00', () => {
+    /* ⚠ DÉFAUT TROUVÉ EN M'AUDITANT, ET IL ÉTAIT SILENCIEUX.
+
+       Le motif capturait déjà les minutes en second groupe ; la fonction ne
+       lisait que le premier. « jeudi à 8h30 » posait un rappel à 8 h 00, sans
+       rien dire. Une demi-heure d'écart sur un rendez-vous médical, c'est un
+       rendez-vous manqué.
+
+       Aucun test ne portait de minutes : le défaut n'était pas caché, il
+       n'était pas REGARDÉ. Une capture inutilisée ne saute pas aux yeux d'une
+       relecture. */
+    expect(reconnaitre('jeudi à 8h30')?.expression).toEqual({
+      base: 'JOUR_SEMAINE',
+      jourSemaine: 4,
+      heure: 8,
+      minute: 30,
+    });
+    expect(reconnaitre('demain à 14h45')?.expression).toEqual({
+      base: 'DEMAIN',
+      heure: 14,
+      minute: 45,
+    });
+  });
+
+  it('une MINUTE hors bornes ne se replie pas — elle n’est pas comprise', () => {
+    /* Même refus que pour l'heure : « 8h75 » replié sur 9 h 15 inventerait un
+       moment que personne n'a dit. `null` fait DEMANDER. */
+    expect(reconnaitre('jeudi à 8h75')).toBeNull();
+    expect(reconnaitre('jeudi à 8h99')).toBeNull();
+  });
+
+  it('un moment de la journée ne fabrique PAS de minutes', () => {
+    // « demain matin » est 9 h pile. Prétendre 9 h 07 inventerait une précision.
+    expect(reconnaitre('demain matin')?.expression).toEqual({
+      base: 'DEMAIN',
+      heure: 9,
+      minute: 0,
+    });
+  });
+
+  it('une HEURE SEULE désigne sa prochaine occurrence', () => {
+    /* ⚠ CE CAS MANQUAIT, ET SON ABSENCE PRODUISAIT LE DÉFAUT INVERSE.
+
+       « rappelle-moi à 14h d'appeler Paul » n'était pas reconnu comme daté :
+       la règle des tâches s'en saisissait et créait une tâche INTITULÉE « à 14h
+       d'appeler Paul », sans échéance, annoncée « c'est fait ». HIGH-5 mot pour
+       mot — et la garde censée l'attraper ne se déclenchait pas, à cause du
+       `\b` accentué (ADR-079). */
+    expect(reconnaitre('à 14h')?.expression).toEqual({
+      base: 'HEURE_SEULE',
+      heure: 14,
+      minute: 0,
+    });
+    expect(reconnaitre('à 14h d’appeler Paul')?.reste).toBe('appeler Paul');
+  });
+
+  it('un JOUR l’emporte sur l’heure seule — l’ordre est une propriété', () => {
+    // « jeudi à 8h30 » doit rester un jeudi, pas la prochaine occurrence de 8h30.
+    expect(reconnaitre('jeudi à 8h30')?.expression.base).toBe('JOUR_SEMAINE');
+  });
+
   it('LE MODULE DE RECONNAISSANCE N’A AUCUNE HORLOGE', () => {
     /* ⚠ L'INVARIANT D'ADR-036/037, ÉPROUVÉ PAR LA STRUCTURE.
 
@@ -137,7 +199,7 @@ describe.runIf(enabled)('résoudre par la base', () => {
   });
 
   it('rend un instant ISO et une forme LISIBLE, issus du même calcul', async () => {
-    const r = await createResolveurTemporel(db).resoudre({ base: 'DEMAIN', heure: 9 });
+    const r = await createResolveurTemporel(db).resoudre({ base: 'DEMAIN', heure: 9, minute: 0 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     /* UTC avec « Z » : c'est la seule forme que `z.string().datetime()`
@@ -164,7 +226,7 @@ describe.runIf(enabled)('résoudre par la base', () => {
        faire contre `new Date()` du test reproduirait ici l'erreur que le module
        existe pour empêcher. */
     const resolveur = createResolveurTemporel(db);
-    const demain = await resolveur.resoudre({ base: 'DEMAIN', heure: 9 });
+    const demain = await resolveur.resoudre({ base: 'DEMAIN', heure: 9, minute: 0 });
     expect(demain.ok).toBe(true);
     if (!demain.ok) return;
 
@@ -188,7 +250,7 @@ describe.runIf(enabled)('résoudre par la base', () => {
        connaît pas et n'a pas besoin de connaître. */
     const resolveur = createResolveurTemporel(db);
     for (let jour = 1; jour <= 7; jour++) {
-      const r = await resolveur.resoudre({ base: 'JOUR_SEMAINE', jourSemaine: jour, heure: 9 });
+      const r = await resolveur.resoudre({ base: 'JOUR_SEMAINE', jourSemaine: jour, heure: 9, minute: 0 });
       expect(r.ok, `jour ${String(jour)}`).toBe(true);
       if (!r.ok) continue;
 
@@ -246,6 +308,36 @@ describe.runIf(enabled)('résoudre par la base', () => {
     // la forme lisible — celle que l'utilisateur relit — porte bien 14:00.
     expect(lu.reste).toBe('');
     expect(r.value.humain).toContain('à 14:00');
+  });
+
+  it('la BASE honore les minutes — bout en bout', async () => {
+    const lu = reconnaitre('jeudi à 8h30');
+    expect(lu).not.toBeNull();
+    if (lu === null) return;
+    const r = await createResolveurTemporel(db).resoudre(lu.expression);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // La forme LISIBLE est celle que l'utilisateur relit : elle doit dire 08:30.
+    expect(r.value.humain).toContain('à 08:30');
+  });
+
+  it('l’heure seule ne tombe JAMAIS dans le passé', async () => {
+    /* Éprouvé sur les VINGT-QUATRE heures, dont celle qu'il est — que le test
+       ne connaît pas et n'a pas besoin de connaître. C'est la base qui tranche
+       entre aujourd'hui et demain. */
+    const resolveur = createResolveurTemporel(db);
+    for (let h = 0; h < 24; h++) {
+      const r = await resolveur.resoudre({ base: 'HEURE_SEULE', heure: h, minute: 0 });
+      expect(r.ok, `heure ${String(h)}`).toBe(true);
+      if (!r.ok) continue;
+      const futur = await db.query<{ futur: boolean }>(
+        'SELECT ($1::timestamptz > clock_timestamp()) AS futur',
+        [r.value.iso],
+      );
+      expect(futur.ok && futur.value.rows[0]?.futur, `${String(h)} h → ${r.value.humain}`).toBe(
+        true,
+      );
+    }
   });
 
   it('AUCUNE HORLOGE DE PROCESSUS dans le résolveur non plus', () => {

@@ -85,6 +85,43 @@ describe('motifs du scan de secrets', () => {
     }
   });
 
+  it('un NOM de variable d’environnement n’est pas un secret', () => {
+    /* ⚠ PRÉCISION AJOUTÉE PAR ADR-079, ET ELLE A UN ENJEU.
+
+       Le motif signalait `clientSecret: 'GOOGLE_OAUTH_CLIENT_SECRET'` — un nom,
+       pas une valeur. Un faux positif n'est pas gratuit : il pousse à blanchir
+       un fichier, et un fichier blanchi laisse passer le vrai secret qu'on y
+       ajoutera plus tard. Ici, sur le fichier qui manipule les jetons OAuth.
+
+       Une valeur entièrement en MAJUSCULES_AVEC_TIRETS_BAS est un identifiant
+       par convention. Les jetons réels mêlent les casses. */
+    const motif = PATTERNS.find((p) => p.name === 'Mot de passe en dur');
+    expect(motif).toBeDefined();
+    for (const nom of [
+      "clientSecret: 'GOOGLE_OAUTH_CLIENT_SECRET'",
+      "secret: 'STRIPE_WEBHOOK_SIGNING_SECRET'",
+      'PASSWORD = "DATABASE_PASSWORD_ENV"',
+    ]) {
+      expect(motif?.regex.test(nom), nom).toBe(false);
+    }
+  });
+
+  it('CONTRÔLE NÉGATIF — une VRAIE valeur reste attrapée', () => {
+    /* Sans lui, l'exclusion ci-dessus pourrait être trop large et personne ne le
+       verrait : le test précédent passerait d'autant mieux que le motif serait
+       cassé. On lui donne des secrets de forme réaliste. */
+    const motif = PATTERNS.find((p) => p.name === 'Mot de passe en dur');
+    for (const vrai of [
+      "clientSecret: 'GOCSPX-aB3dEf7hIjKlMnOpQrSt'",
+      'password = "supersecret123"',
+      "secret: 'ya29.a0AfB_byC-longue-valeur'",
+      // Majuscules ET minuscules mêlées : ce n'est pas un nom d'identifiant.
+      "secret = 'ABCDEF_ghijkl_123456'",
+    ]) {
+      expect(motif?.regex.test(vrai), vrai).toBe(true);
+    }
+  });
+
   it('reconnaît une clé Google plus longue que sa taille nominale', () => {
     // Régression : le `\b` final faisait échouer ce cas précis.
     const google = PATTERNS.find((p) => p.name === 'Clé Google');

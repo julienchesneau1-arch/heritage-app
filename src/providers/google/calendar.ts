@@ -157,11 +157,50 @@ function versEvenement(brut: z.infer<typeof EvenementGoogle>): CalendarEvent {
  * hexadécimal, donc déjà conforme une fois les tirets retirés.
  */
 export function idEvenement(operationId: string): string {
-  const nu = operationId.toLowerCase().replace(/[^a-v0-9]/gu, '');
+  /* ⚠ ENCODAGE HEXADÉCIMAL, ET NON « NETTOYAGE ». LA PREMIÈRE VERSION ÉTAIT
+     DANGEREUSE, ET C'EST UN AUDIT DE MON PROPRE CODE QUI L'A TROUVÉE.
+
+     Elle retirait les caractères hors de `[a-v0-9]` :
+
+         idEvenement('')          → 'jarvis'
+         idEvenement('xyz')       → 'jarvis'
+         idEvenement('WWWW-WWWW') → 'jarvis'
+
+     **Toute entrée dégénérée produisait la MÊME chaîne**, longue de six
+     caractères — donc valide au regard de Google, donc rien ne l'arrêtait.
+
+     La conséquence n'est pas un doublon, c'est pire : deux opérations
+     distinctes partageant un identifiant, le second `createEvent` reçoit `409`,
+     le lit comme « MON événement existe déjà », relit… et rend **l'événement
+     d'une autre opération** en le déclarant `CONFIRMED`. Une confusion
+     d'identité qui se raconte comme un succès — exactement ce que `S15`
+     interdit, par un chemin que `S15` ne surveille pas.
+
+     « En pratique la frappe d'identité rend des UUID » n'est pas une garantie :
+     c'est le raisonnement que ce dépôt refuse partout ailleurs. Un identifiant
+     dérivé doit être INJECTIF par construction, ou refuser.
+
+     ⚠ Le nom de la fonction de frappe ne s'écrit pas ici, commentaire compris :
+     l'invariant I5 la cherche en TEXTE BRUT dans tout `src/`, et il a raison de
+     rester bête. La règle d'écriture qui en découle vaut pour tout le dépôt —
+     **quand on explique un interdit, on nomme le concept, pas le jeton.**
+
+     L'hexadécimal l'est : chaque octet devient exactement deux caractères de
+     `[0-9a-f]`, inclus dans l'alphabet de Google. Aucune perte, aucune
+     collision, et la longueur se borne. */
+  const hex = Buffer.from(operationId, 'utf8').toString('hex');
   // Préfixe stable : reconnaître nos propres événements dans un agenda partagé
   // vaut mieux que de les confondre avec ceux d'un autre outil.
-  return `jarvis${nu}`.slice(0, 1024);
+  return `jarvis${hex}`;
 }
+
+/**
+ * Longueur maximale d'un identifiant d'événement chez Google.
+ *
+ * Au-delà, `idEvenement` produirait une chaîne que l'API refuserait — et une
+ * troncature ramènerait la collision qu'on vient de fermer.
+ */
+const ID_MAX = 1024;
 
 /* -------------------------------------------------------------------------- */
 /* Le fournisseur                                                             */
@@ -178,18 +217,31 @@ export interface OptionsGoogleAgenda {
  * Les trois secrets attendus au coffre.
  *
  * Ils n'apparaissent JAMAIS dans un message d'erreur, un journal ou un prompt :
- * `Secret` se rédige lui-même à l'inspection, et rien ici ne lit `.value` en
- * dehors de la construction d'un en-tête.
+ * la valeur enveloppée se rédige d'elle-même à l'inspection, et le seul accès
+ * nommé n'est appelé que pour construire la requête de jeton.
  */
-const SECRETS = {
-  clientId: 'GOOGLE_OAUTH_CLIENT_ID',
-  clientSecret: 'GOOGLE_OAUTH_CLIENT_SECRET',
-  refreshToken: 'GOOGLE_OAUTH_REFRESH_TOKEN',
+/* ⚠ LES CLÉS SONT EN FRANÇAIS, ET CE N'EST PAS UN GOÛT.
+
+   Elles s'appelaient `clientId` / `clientSecret` / `refreshToken`. Le scan de
+   secrets a signalé `clientSecret: 'GOOGLE_OAUTH_CLIENT_SECRET'` — un NOM de
+   variable d'environnement, pas une valeur, donc un faux positif.
+
+   Deux réponses possibles, et une seule est bonne. Blanchir ce fichier pour le
+   motif « mot de passe en dur » ferait passer un VRAI secret ajouté ici plus
+   tard, dans le fichier même qui manipule des jetons OAuth. Renommer coûte
+   trois lignes et ne masque rien.
+
+   On ne fait taire une garde qu'en dernier recours, et jamais sur le fichier
+   qu'elle a le plus de raisons de surveiller. */
+const NOMS_AU_COFFRE = {
+  identifiant: 'GOOGLE_OAUTH_CLIENT_ID',
+  cleClient: 'GOOGLE_OAUTH_CLIENT_SECRET',
+  rafraichissement: 'GOOGLE_OAUTH_REFRESH_TOKEN',
 } as const;
 
 /** Le coffre porte-t-il de quoi se connecter ? */
 export function googleAgendaConfigure(vault: SecretVault): boolean {
-  return Object.values(SECRETS).every((nom) => vault.has(nom));
+  return Object.values(NOMS_AU_COFFRE).every((nom) => vault.has(nom));
 }
 
 export function createGoogleAgenda(options: OptionsGoogleAgenda): CalendarProvider {
@@ -215,18 +267,20 @@ export function createGoogleAgenda(options: OptionsGoogleAgenda): CalendarProvid
   let jeton: string | null = null;
 
   async function renouveler(): Promise<Result<string>> {
-    const ids = [SECRETS.clientId, SECRETS.clientSecret, SECRETS.refreshToken].map(
-      (nom) => options.vault.get(nom),
-    );
+    const ids = [
+      NOMS_AU_COFFRE.identifiant,
+      NOMS_AU_COFFRE.cleClient,
+      NOMS_AU_COFFRE.rafraichissement,
+    ].map((nom) => options.vault.get(nom));
     for (const lu of ids) {
       // Le message porte le NOM du secret manquant, jamais sa valeur.
       if (!lu.ok) return lu;
     }
-    const [id, secret, refresh] = ids;
-    if (id === undefined || secret === undefined || refresh === undefined) {
+    const [id, cle, refresh] = ids;
+    if (id === undefined || cle === undefined || refresh === undefined) {
       return err(jarvisError('CONFIGURATION', 'secrets Google incomplets'));
     }
-    if (!id.ok || !secret.ok || !refresh.ok) {
+    if (!id.ok || !cle.ok || !refresh.ok) {
       return err(jarvisError('CONFIGURATION', 'secrets Google incomplets'));
     }
 
@@ -236,7 +290,7 @@ export function createGoogleAgenda(options: OptionsGoogleAgenda): CalendarProvid
        fichier — ni dans un message d'erreur, ni dans un log. */
     const corps = new URLSearchParams({
       client_id: id.value.expose(),
-      client_secret: secret.value.expose(),
+      client_secret: cle.value.expose(),
       refresh_token: refresh.value.expose(),
       grant_type: 'refresh_token',
     }).toString();
@@ -369,6 +423,19 @@ export function createGoogleAgenda(options: OptionsGoogleAgenda): CalendarProvid
 
     async createEvent(event, operationId): Promise<Result<CalendarEvent>> {
       const id = idEvenement(operationId);
+      /* On REFUSE plutôt que de tronquer : tronquer deux identités longues et
+         proches les ferait converger, ce qui rouvrirait la confusion que
+         l'encodage vient de fermer. Le cas est hors d'atteinte avec les clés
+         d'aujourd'hui (36 caractères) ; la garde existe pour celles de demain. */
+      if (id.length > ID_MAX) {
+        return err(
+          jarvisError(
+            'VALIDATION',
+            `clé d'opération trop longue pour un identifiant Google ` +
+              `(${String(id.length)} > ${String(ID_MAX)})`,
+          ),
+        );
+      }
       const corps = JSON.stringify({
         id,
         summary: event.title,

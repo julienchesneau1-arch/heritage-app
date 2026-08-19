@@ -88,12 +88,34 @@ const JOURS: Readonly<Record<string, number>> = {
  * hostile jusqu'à validation.
  */
 export type ExpressionTemporelle =
-  | { readonly base: 'AUJOURD_HUI'; readonly heure: number }
-  | { readonly base: 'DEMAIN'; readonly heure: number }
-  | { readonly base: 'APRES_DEMAIN'; readonly heure: number }
+  | { readonly base: 'AUJOURD_HUI'; readonly heure: number; readonly minute: number }
+  | { readonly base: 'DEMAIN'; readonly heure: number; readonly minute: number }
+  | { readonly base: 'APRES_DEMAIN'; readonly heure: number; readonly minute: number }
   /** Prochaine occurrence STRICTEMENT future de ce jour (ISO 1–7). */
-  | { readonly base: 'JOUR_SEMAINE'; readonly jourSemaine: number; readonly heure: number }
-  | { readonly base: 'DANS_N_JOURS'; readonly jours: number; readonly heure: number }
+  | {
+      readonly base: 'JOUR_SEMAINE';
+      readonly jourSemaine: number;
+      readonly heure: number;
+      readonly minute: number;
+    }
+  | {
+      readonly base: 'DANS_N_JOURS';
+      readonly jours: number;
+      readonly heure: number;
+      readonly minute: number;
+    }
+  /**
+   * Une heure SANS jour : « rappelle-moi à 14h ».
+   *
+   * Désigne la PROCHAINE occurrence de cette heure — aujourd'hui si elle est
+   * encore devant, demain sinon. Même convention que `JOUR_SEMAINE` : un rappel
+   * ne se pose jamais dans le passé.
+   *
+   * Ce cas manquait, et son absence produisait le défaut inverse : « à 14h »
+   * n'étant pas reconnu, la règle des tâches s'en saisissait et créait une tâche
+   * INTITULÉE « à 14h d'appeler Paul », sans échéance (ADR-079).
+   */
+  | { readonly base: 'HEURE_SEULE'; readonly heure: number; readonly minute: number }
   /** Décalage à partir de MAINTENANT, pas du début de journée. */
   | { readonly base: 'DANS_N_HEURES'; readonly heures: number }
   | { readonly base: 'DANS_N_MINUTES'; readonly minutes: number };
@@ -125,19 +147,83 @@ function sansAccent(valeur: string): string {
    `memory_search_decision`, « piège systématique dès qu'on écrit des règles en
    français » — puis re-documenté en ADR-074 et ADR-075. Il continue de mordre
    parce qu'un commentaire ne voyage pas : seul un mécanisme le ferait. */
-const RE_HEURE = /(?:[àa]\s*)?(\d{1,2})\s*h(?:\s*(\d{2}))?\b/iu;
+const RE_HEURE = /(?:[àa]\s*)?(\d{1,2})\s*h(?:\s*(\d{2}))?(?![\p{L}\p{N}_])/iu;
 
 /** Les moments nommés, en un seul motif — pour détecter ET pour retirer. */
-const RE_MOMENT = /\b(?:matin|apr[èe]s-midi|soir|midi)\b/iu;
+const RE_MOMENT = /(?<![\p{L}\p{N}_])(?:matin|apr[èe]s-midi|soir|midi)(?![\p{L}\p{N}_])/iu;
 
-function heureExplicite(texte: string): number | null {
+/**
+ * L'heure ET LA MINUTE d'un énoncé.
+ *
+ * ⚠ LA MINUTE ÉTAIT CAPTURÉE PUIS JETÉE. Le motif portait déjà `(\d{2})` en
+ * second groupe, et la fonction ne lisait que le premier :
+ *
+ *     « jeudi à 8h30 »  →  8 h 00
+ *
+ * L'utilisateur disait 8 h 30, Jarvis posait 8 h 00, et ne le disait pas. Une
+ * demi-heure d'écart sur un rendez-vous médical, c'est un rendez-vous manqué —
+ * et c'est le motif « une action DIFFÉRENTE de celle demandée » qui a déjà
+ * justifié de restreindre `memory_search` (HIGH-4).
+ *
+ * Trouvé en s'auditant, pas en lisant : la capture inutilisée ne saute pas aux
+ * yeux, et aucun test ne portait de minutes.
+ */
+/**
+ * Trois issues, et la troisième est celle qui manquait.
+ *
+ * ⚠ DISTINGUER « ABSENTE » DE « ILLISIBLE » N'EST PAS UN RAFFINEMENT.
+ *
+ * La première version n'en avait que deux — un nombre ou `null` — et repliait
+ * l'illisible sur l'absent. Mesuré :
+ *
+ *     « rappelle-moi jeudi à 8h75 de X »
+ *       → un rappel à 9 h 00, INTITULÉ « 8h75 »
+ *
+ * L'heure fautive était **avalée en silence**, exactement le défaut HIGH-5 que
+ * `TEMPORAL_QUALIFIER` avait été écrit pour fermer, revenu par une autre porte.
+ *
+ * Ne rien dire d'une heure est une information : on prend le défaut. Dire une
+ * heure qui n'existe pas en est une autre : on ne comprend pas, et on demande.
+ * C'est la même distinction que `POSITIVE_ABSENCE` contre `INCONCLUSIVE` dans
+ * le Verification Engine — une absence constatée n'est pas une ignorance.
+ */
+type LectureHeure =
+  | { readonly kind: 'ABSENTE' }
+  | { readonly kind: 'LUE'; readonly heure: number; readonly minute: number }
+  | { readonly kind: 'ILLISIBLE' };
+
+/**
+ * L'heure ET LA MINUTE d'un énoncé.
+ *
+ * ⚠ LA MINUTE ÉTAIT CAPTURÉE PUIS JETÉE. Le motif portait déjà `(\d{2})` en
+ * second groupe, et la fonction ne lisait que le premier :
+ *
+ *     « jeudi à 8h30 »  →  8 h 00
+ *
+ * L'utilisateur disait 8 h 30, Jarvis posait 8 h 00, et ne le disait pas. Une
+ * demi-heure d'écart sur un rendez-vous médical, c'est un rendez-vous manqué —
+ * et c'est le motif « une action DIFFÉRENTE de celle demandée » qui a déjà
+ * justifié de restreindre `memory_search` (HIGH-4).
+ *
+ * Trouvé en s'auditant, pas en lisant : une capture inutilisée ne saute pas aux
+ * yeux, et aucun test ne portait de minutes.
+ */
+function heureExplicite(texte: string): LectureHeure {
   const m = RE_HEURE.exec(texte);
-  if (m === null) return null;
+  if (m === null) return { kind: 'ABSENTE' };
+
   const heure = Number(m[1]);
   // Une heure hors bornes n'est pas une heure. On préfère ne rien comprendre
   // plutôt que de poser un rappel à 25 h en le repliant sur 1 h du matin.
-  if (!Number.isInteger(heure) || heure < 0 || heure > 23) return null;
-  return heure;
+  if (!Number.isInteger(heure) || heure < 0 || heure > 23) return { kind: 'ILLISIBLE' };
+
+  const brut = m[2];
+  if (brut === undefined) return { kind: 'LUE', heure, minute: 0 };
+  const minute = Number(brut);
+  // Même refus : « 8h75 » replié sur 9 h 15 inventerait un moment que personne
+  // n'a dit — et l'ignorer laisserait « 8h75 » dans le TITRE du rappel.
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return { kind: 'ILLISIBLE' };
+  return { kind: 'LUE', heure, minute };
 }
 
 /** Le moment de la journée nommé, s'il y en a un. */
@@ -186,12 +272,20 @@ export function reconnaitre(texte: string): Reconnaissance | null {
   /* L'heure et le moment sont retirés du texte AVANT tout, parce qu'ils
      peuvent être n'importe où : « rappelle-moi jeudi à 14h » comme
      « rappelle-moi à 14h jeudi ». */
-  const heureDite = heureExplicite(texte);
+  const lue = heureExplicite(texte);
+  /* UNE HEURE DITE MAIS ILLISIBLE ARRÊTE TOUT. La replier sur le défaut
+     poserait un rappel à une heure que l'utilisateur n'a pas donnée, en
+     laissant sa faute de frappe dans le titre. */
+  if (lue.kind === 'ILLISIBLE') return null;
+
   const momentDit = moment(texte);
-  const heure = heureDite ?? momentDit ?? HEURE_PAR_DEFAUT;
+  const heure = lue.kind === 'LUE' ? lue.heure : (momentDit ?? HEURE_PAR_DEFAUT);
+  /* Un moment de la journée ne porte pas de minute : « demain matin » est 9 h
+     pile, et prétendre 9 h 07 serait inventer une précision. */
+  const minute = lue.kind === 'LUE' ? lue.minute : 0;
 
   let reste = texte;
-  if (heureDite !== null) reste = sans(reste, RE_HEURE);
+  if (lue.kind === 'LUE') reste = sans(reste, RE_HEURE);
   if (momentDit !== null) reste = sans(reste, RE_MOMENT);
 
   const rendre = (
@@ -203,10 +297,10 @@ export function reconnaitre(texte: string): Reconnaissance | null {
      évite qu'une expression précise soit avalée par une plus large — la même
      faute que la règle des tâches commettait sur « ajoute ça » (ADR-073). */
   if (/\bapres-demain\b/u.test(nu)) {
-    return rendre({ base: 'APRES_DEMAIN', heure }, /\bapr[èe]s-demain\b/iu);
+    return rendre({ base: 'APRES_DEMAIN', heure, minute }, /(?<![\p{L}\p{N}_])apr[èe]s-demain(?![\p{L}\p{N}_])/iu);
   }
   if (/\bdemain\b/u.test(nu)) {
-    return rendre({ base: 'DEMAIN', heure }, /\bdemain\b/iu);
+    return rendre({ base: 'DEMAIN', heure, minute }, /\bdemain\b/iu);
   }
 
   const dansJours = /\bdans\s+(\d+)\s*jours?\b/u.exec(nu);
@@ -215,7 +309,10 @@ export function reconnaitre(texte: string): Reconnaissance | null {
     // Deux ans est déjà absurde pour un rappel ; au-delà, c'est une faute de
     // frappe qu'il vaut mieux ne pas comprendre que d'exécuter.
     if (jours > 0 && jours <= 730) {
-      return rendre({ base: 'DANS_N_JOURS', jours, heure }, /\bdans\s+\d+\s*jours?\b/iu);
+      return rendre(
+        { base: 'DANS_N_JOURS', jours, heure, minute },
+        /\bdans\s+\d+\s*jours?\b/iu,
+      );
     }
     return null;
   }
@@ -244,10 +341,17 @@ export function reconnaitre(texte: string): Reconnaissance | null {
   for (const [nom, jourSemaine] of Object.entries(JOURS)) {
     if (new RegExp(`\\b${nom}\\b`, 'u').test(nu)) {
       return rendre(
-        { base: 'JOUR_SEMAINE', jourSemaine, heure },
+        { base: 'JOUR_SEMAINE', jourSemaine, heure, minute },
         new RegExp(`\\b${nom}\\b`, 'iu'),
       );
     }
+  }
+
+  /* UNE HEURE EXPLICITE SANS JOUR — « rappelle-moi à 14h ».
+     Placée APRÈS les jours : « jeudi à 14h » doit rester un jeudi. Ici il n'y a
+     plus de jour possible, donc l'heure désigne sa prochaine occurrence. */
+  if (lue.kind === 'LUE') {
+    return { expression: { base: 'HEURE_SEULE', heure, minute }, reste: nettoyerReste(reste) };
   }
 
   /* « ce soir », « ce matin » : un moment SANS jour désigne aujourd'hui. On ne
@@ -255,7 +359,7 @@ export function reconnaitre(texte: string): Reconnaissance | null {
      deviendrait un rappel pour ce matin. */
   if (momentDit !== null && /\bce\s|cet\s|cette\s/u.test(nu)) {
     return {
-      expression: { base: 'AUJOURD_HUI', heure },
+      expression: { base: 'AUJOURD_HUI', heure, minute },
       reste: nettoyerReste(sans(reste, /\b(?:ce|cet|cette)\b/iu)),
     };
   }

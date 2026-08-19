@@ -142,7 +142,7 @@ const RULES: readonly Rule[] = [
     id: 'memory_add',
     exemple: '« retiens que … »',
     pattern:
-      /^(?:retiens|souviens-toi|rappelle-toi|m[ée]morise)\s+(?:que\b|:)?\s*(.*)$/iu,
+      /^(?:retiens|souviens-toi|rappelle-toi|m[ée]morise)\s+(?:que(?![\p{L}\p{N}_])|:)?\s*(.*)$/iu,
     build(match) {
       const content = clean(match[1] ?? '');
       return {
@@ -223,7 +223,7 @@ const RULES: readonly Rule[] = [
     // accent, donc aucune frontière de mot n'y est reconnue et `\b` échoue.
     // Piège systématique dès qu'on écrit des règles en français.
     pattern:
-      /^(?:qu|que|quoi|rappelle)[^]*?\bd[ée]cid[ée]e?s?(?![\p{L}])\s*(?:concernant|pour|[àa] propos de|sur|au sujet de)?\s*(.*)$/iu,
+      /^(?:qu|que|quoi|rappelle)[^]*?(?<![\p{L}\p{N}_])d[ée]cid[ée]e?s?(?![\p{L}\p{N}_])\s*(?:concernant|pour|[àa] propos de|sur|au sujet de)?\s*(.*)$/iu,
     build(match, raw) {
       const subject = clean(match[1] ?? '');
       return {
@@ -637,7 +637,7 @@ function exempleDe(ruleId: string): string {
  * différente de celle demandée.
  */
 const TEMPORAL_QUALIFIER =
-  /\b(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|apr[èe]s-demain|ce soir|ce matin|cet apr[èe]s-midi|la semaine prochaine|le mois prochain|dans\s+\d+\s*(?:minutes?|heures?|jours?|semaines?|mois)|[àa]\s*\d{1,2}\s*h|avant\s+(?:le|la|demain)|le\s+\d{1,2}\s*\/\s*\d{1,2})/iu;
+  /(?<![\p{L}\p{N}_])(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|apr[èe]s-demain|ce soir|ce matin|cet apr[èe]s-midi|la semaine prochaine|le mois prochain|dans\s+\d+\s*(?:minutes?|heures?|jours?|semaines?|mois)|[àa]\s*\d{1,2}\s*h|avant\s+(?:le|la|demain)|le\s+\d{1,2}\s*\/\s*\d{1,2})/iu;
 
 /** Renvoie l'expression temporelle trouvée, ou `null`. */
 function temporalQualifier(text: string): string | null {
@@ -703,7 +703,7 @@ const KNOWN_BUT_UNAVAILABLE: readonly Absente[] = [
        `PROVIDER_UNAVAILABLE` ; (2) une règle `Tier 0` ne peut pas produire les
        dates ISO qu'il exige — et ADR-036/037 interdisent de les calculer avec
        l'horloge du processus. Voir ADR-075. */
-    pattern: /\b(rendez-vous|agenda|calendrier|r[ée]union)\b/iu,
+    pattern: /(?<![\p{L}\p{N}_])(rendez-vous|agenda|calendrier|r[ée]union)(?![\p{L}\p{N}_])/iu,
     capability:
       'accéder à l\'agenda — je sais le lire et l\'écrire, mais aucun agenda ' +
       'n\'est connecté, et je ne sais pas encore résoudre une date dite en ' +
@@ -724,12 +724,12 @@ const KNOWN_BUT_UNAVAILABLE: readonly Absente[] = [
     outilQuiManque: null,
   },
   {
-    pattern: /\b(allume|[ée]teins|chauffage|lumi[èe]re)\b/iu,
+    pattern: /(?<![\p{L}\p{N}_])(allume|[ée]teins|chauffage|lumi[èe]re)(?![\p{L}\p{N}_])/iu,
     capability: 'contrôler la maison',
     outilQuiManque: 'home_control',
   },
   {
-    pattern: /\bm[ée]t[ée]o\b/iu,
+    pattern: /(?<![\p{L}\p{N}_])m[ée]t[ée]o(?![\p{L}\p{N}_])/iu,
     capability: 'consulter la météo',
     outilQuiManque: 'weather_read',
   },

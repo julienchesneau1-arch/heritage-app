@@ -743,6 +743,61 @@ que le remède reste de la prose, la cinquième occurrence est certaine.
 
 ---
 
+> ### ✅ FERMÉE — ADR-079, et la cinquième occurrence était DÉJÀ LÀ
+>
+> La prédiction ci-dessus était juste, et elle l'était au passé : la cinquième
+> occurrence existait déjà quand ces lignes ont été écrites, dans
+> `TEMPORAL_QUALIFIER`. **Défaut vivant :**
+>
+> ```text
+> « rappelle-moi à 14h d'appeler Paul »
+>   →  une TÂCHE intitulée « à 14h d'appeler Paul », sans échéance, « c'est fait »
+> ```
+>
+> Mot pour mot le défaut HIGH-5 que cette garde avait été écrite pour fermer.
+> Elle ne partait pas, parce que `\b[àa]` ne matche jamais « à ».
+>
+> `tests/architecture/frontieres-de-mot.test.ts` est le mécanisme annoncé. Il a
+> trouvé **neuf** occurrences, dont une seconde que je n'avais pas vue :
+> `/\b(allume|[ée]teins|…)\b/` ne reconnaissait pas « éteins ».
+>
+> Sept des neuf « marchaient » par accident — leurs branches finissent en ASCII.
+> Toutes réécrites avec des frontières Unicode : elles marchent désormais pour de
+> vrai, là où elles marchaient par endroits.
+>
+> **Limite déclarée** : le détecteur ne voit que les littéraux. Une regex
+> construite par `new RegExp(\`…\`)` lui échappe — il y en a dans
+> `expression.ts`, sûres parce qu'appliquées à du texte désaccentué, mais rien
+> ne le vérifie.
+
+---
+
+### 4.2 nonies M'auditer trouve ce que relire ne trouve pas — quatre défauts
+
+**Demandé par Julien : *« challenge-toi »*.** Un audit adversarial de mes propres
+ADR-074 à ADR-078, écrites vite, a rendu quatre défauts — deux vivants.
+
+| | Défaut | Comment il a été trouvé |
+|---|---|---|
+| 1 | `idEvenement` non injectif : toute entrée dégénérée → `'jarvis'` | en **essayant** des entrées dégénérées |
+| 2 | minutes capturées puis jetées : « 8h30 » → 8 h 00 | en **essayant** une heure avec minutes |
+| 3 | heure illisible avalée : « 8h75 » → 9 h 00, titre « 8h75 » | en **corrigeant** le n° 2 |
+| 4 | HIGH-5 revenu, garde inerte : « à 14h » → tâche sans échéance | en **suivant** le n° 3 jusqu'au bout |
+
+Aucun n'aurait été trouvé en relisant. Le premier demande d'essayer des entrées
+qu'on n'écrit pas spontanément ; le deuxième est une **capture inutilisée**, qui
+ne saute pas aux yeux ; les deux derniers ne se voient qu'en tirant sur le fil du
+précédent.
+
+> Un défaut n'est pas caché parce qu'il est subtil. Il est caché parce que rien
+> ne le REGARDE. Aucun test ne portait de minutes ; le champ existait.
+
+---
+
+
+
+---
+
 ### 4.2 octies Un sabotage « non détecté » qui n'avait jamais été appliqué
 
 En éprouvant ADR-077, un sabotage a semblé passer inaperçu. J'ai commencé à

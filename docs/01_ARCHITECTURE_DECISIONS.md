@@ -5958,3 +5958,178 @@ un succès. Un succès ne prouve que le chemin nominal. Les trois cas qui porten
 les garanties — `409`, `412`, absence d'etag — ne se produisent pas
 spontanément : **il faudra les provoquer**, en modifiant l'événement depuis
 l'interface web pendant qu'un test tourne.
+
+---
+
+## ADR-079 — Le mécanisme qui remplace quatre commentaires
+
+**Statut :** accepté (`docs/26 §4.2 septies`, HIGH-4, HIGH-5, ADR-013).
+**Référence :** `tests/architecture/frontieres-de-mot.test.ts`,
+`src/core/temps/expression.ts`, `src/providers/google/calendar.ts`.
+
+### D'où vient cet ADR
+
+D'une demande de Julien : *« challenge-toi, ne laisse aucune zone d'ombre »*.
+J'avais beaucoup écrit et vite sur ADR-074 à ADR-078. Un audit adversarial de
+mon propre code a trouvé **quatre défauts**, dont deux vivants en production.
+
+### Défaut 1 — `idEvenement` n'était pas injectif
+
+```text
+idEvenement('')          → 'jarvis'
+idEvenement('xyz')       → 'jarvis'
+idEvenement('WWWW-WWWW') → 'jarvis'
+```
+
+La fonction *retirait* les caractères hors de `[a-v0-9]`. Toute entrée dégénérée
+produisait la **même** chaîne, longue de six caractères — donc valide au regard
+de Google, donc rien ne l'arrêtait.
+
+La conséquence n'est pas un doublon, c'est pire : deux opérations partageant un
+identifiant, le second `createEvent` reçoit `409`, le lit comme *« mon événement
+existe déjà »*, relit… et rend **l'événement d'une autre opération** en le
+déclarant `CONFIRMED`. Une confusion d'identité qui se raconte comme un succès —
+ce que `S15` interdit, par un chemin que `S15` ne surveille pas.
+
+*« En pratique les clés sont des UUID »* n'est pas une garantie : c'est le
+raisonnement que ce dépôt refuse partout ailleurs. Corrigé par un **encodage
+hexadécimal**, injectif par construction, avec refus au-delà de la longueur
+admise — tronquer ferait converger deux identités longues et proches.
+
+### Défaut 2 — les minutes étaient capturées puis jetées
+
+```text
+« jeudi à 8h30 »  →  8 h 00
+```
+
+Le motif portait déjà `(\d{2})` en second groupe ; la fonction ne lisait que le
+premier. Une demi-heure d'écart sur un rendez-vous médical, c'est un rendez-vous
+manqué. **Aucun test ne portait de minutes** : le défaut n'était pas caché, il
+n'était pas regardé — une capture inutilisée ne saute pas aux yeux d'une
+relecture.
+
+### Défaut 3 — « absente » et « illisible » étaient confondus
+
+En corrigeant le défaut 2, la mesure a montré pire :
+
+```text
+« rappelle-moi jeudi à 8h75 de X »  →  un rappel à 9 h 00, INTITULÉ « 8h75 »
+```
+
+L'heure fautive était **avalée en silence**. Ne rien dire d'une heure est une
+information — on prend le défaut. Dire une heure qui n'existe pas en est une
+autre — on ne comprend pas, et on demande. C'est la distinction que le
+Verification Engine fait déjà entre `POSITIVE_ABSENCE` et `INCONCLUSIVE` : une
+absence constatée n'est pas une ignorance.
+
+### Défaut 4 — HIGH-5 était revenu, et sa garde ne se déclenchait pas
+
+```text
+« rappelle-moi à 14h d'appeler Paul »
+  →  une TÂCHE intitulée « à 14h d'appeler Paul », sans échéance, « c'est fait »
+```
+
+C'est **mot pour mot** le défaut que `docs/11` HIGH-5 décrit et que
+`TEMPORAL_QUALIFIER` avait été écrit pour fermer. La garde existait. Elle ne
+partait pas — parce qu'elle commençait par `\b[àa]`, et qu'en JavaScript `\b` se
+définit sur l'ASCII : **il n'y a aucune frontière de mot au contact de « à »**.
+
+### La cause commune, et le remède qui avait échoué quatre fois
+
+```text
+1  memory_search_decision   trouvé à l'écriture, corrigé, COMMENTÉ
+2  ADR-074  détecteur de participes passés   `envoyé\b`
+3  ADR-075  constat : ce n'était pas neuf — c'était déjà écrit
+4  ADR-077  extraction de l'heure            `\b[àa]`
+5  ADR-079  TEMPORAL_QUALIFIER               défaut VIVANT
+```
+
+Quatre fois, le remède a été d'écrire la leçon dans un commentaire. Quatre fois,
+elle n'a protégé que le fichier qui la portait.
+
+**`tests/architecture/frontieres-de-mot.test.ts` est le mécanisme.** Il extrait
+les littéraux d'expression régulière de `src/` et refuse qu'un `\b` cohabite
+avec une lettre accentuée.
+
+### Pourquoi la règle est GROSSIÈRE, et ce que ça a coûté
+
+La première version regardait l'**adjacence** — `\bà`, `é\b`. Elle a raté deux
+des cinq cas, dont le défaut vivant : le `\b` y suit une parenthèse, et c'est à
+l'exécution que l'accent se retrouve à son contact.
+
+Savoir si une frontière peut toucher un accent demande de simuler toutes les
+branches — c'est-à-dire un moteur d'expressions régulières. On applique donc la
+règle sans trou : `\b` et accent ne cohabitent pas.
+
+**Le mécanisme a trouvé neuf occurrences, dont une que je n'avais pas vue** :
+
+```text
+/\b(allume|[ée]teins|chauffage|lumi[èe]re)\b/
+  →  « éteins le salon » n'était PAS reconnu
+```
+
+Sept des neuf « marchaient » — par accident, parce que leurs branches finissent
+en ASCII. Les réécrire n'était donc pas un coût pour rien : elles marchent
+désormais **pour de vrai**, là où elles marchaient *par endroits*.
+
+Le remplacement est une frontière consciente de l'Unicode :
+`(?<![\p{L}\p{N}_])` et `(?![\p{L}\p{N}_])`.
+
+### Une amélioration que le correctif rendait nécessaire
+
+Fermer le défaut 4 rendait « rappelle-moi à 14h » honnête mais inutilisable — il
+était refusé. `HEURE_SEULE` désigne désormais la **prochaine occurrence** de
+cette heure, aujourd'hui ou demain, **tranchée par la base**. Même convention que
+les jours de la semaine : un rappel ne se pose jamais dans le passé. Éprouvé sur
+les vingt-quatre heures.
+
+### La règle d'écriture que je n'appliquais pas
+
+En consignant tout ceci, l'invariant `I5` a rougi : mon commentaire citait le nom
+de la fonction de frappe d'identité, que le détecteur cherche en texte brut. Sixième
+fois qu'un détecteur attrape ma prose plutôt que mon code.
+
+> Quand on explique un interdit, on nomme le **concept**, pas le jeton.
+
+Les détecteurs restent bêtes — un détecteur assez malin pour ignorer les
+commentaires a un trou, et un fichier qui ne contient nulle part l'appel interdit
+ne permet à personne de le recopier depuis la ligne d'à côté.
+
+### Défaut 5 — le scanner corrigé a mordu dès sa première vraie exécution
+
+ADR-078 avait réparé le scan de secrets : il lisait `HEAD` en annonçant l'arbre
+de travail. Sa première exécution sur du code réellement commité a signalé deux
+choses que l'ancien laissait passer.
+
+Les deux étaient des **faux positifs**, et c'est là que la décision se joue :
+
+| Fichier | Réponse | Pourquoi |
+|---|---|---|
+| `providers/google/calendar.ts` | **renommer les clés** | blanchir aurait masqué un vrai secret ajouté plus tard **dans le fichier qui manipule les jetons** |
+| `tests/providers/google-calendar.test.ts` | exception nominative | le fichier PROUVE la non-fuite : il lui faut des valeurs qui ressemblent à des secrets, sinon les assertions passeraient parce que rien ne correspond |
+
+Restait l'**historique**, que renommer ne nettoie pas. Plutôt que de le blanchir,
+le motif a été rendu plus précis : une valeur entièrement en
+`MAJUSCULES_AVEC_TIRETS_BAS` est un identifiant par convention, jamais un jeton.
+C'est une précision, pas un affaiblissement — un contrôle négatif vérifie que
+`GOCSPX-…`, `ya29.…` et `supersecret123` restent attrapés.
+
+> Un faux positif n'est pas gratuit : il pousse à blanchir un fichier, et un
+> fichier blanchi laisse passer le vrai secret qu'on y ajoutera plus tard.
+
+Le drapeau `i` a dû tomber pour exprimer l'exclusion : sous `i`, `[A-Z0-9_]`
+matche aussi les minuscules et aurait avalé « supersecret123 ». Les casses du
+mot-clé sont donc énumérées — le genre de détail qui ne se voit qu'en
+l'éprouvant.
+
+### Condition de révision
+
+Le détecteur de frontières ne voit que les **littéraux**. Une regex construite
+par `new RegExp` avec un gabarit lui échappe, et il y en a dans `expression.ts` —
+elles sont sûres parce qu'elles s'appliquent à du texte désaccentué, mais rien ne
+le vérifie. C'est la limite connue, déclarée ici plutôt que découverte plus tard.
+
+Le motif « mot de passe en dur », lui, suppose que les casses usuelles du
+mot-clé suffisent. Un `SeCrEt` échapperait. C'est le prix de l'exclusion
+sensible à la casse, et il est assumé : un code écrit ainsi se voit à la
+relecture, un faux positif chronique ne se voit plus.

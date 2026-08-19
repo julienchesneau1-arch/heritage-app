@@ -60,25 +60,45 @@ function requete(expr: ExpressionTemporelle): { sql: string; params: unknown[] }
 
   switch (expr.base) {
     case 'AUJOURD_HUI':
-      return { sql: `${jour} + make_interval(hours => $1::int)`, params: [expr.heure] };
+      return {
+        sql: `${jour} + make_interval(hours => $1::int, mins => $2::int)`,
+        params: [expr.heure, expr.minute],
+      };
 
     case 'DEMAIN':
       return {
-        sql: `${jour} + make_interval(days => 1, hours => $1::int)`,
-        params: [expr.heure],
+        sql: `${jour} + make_interval(days => 1, hours => $1::int, mins => $2::int)`,
+        params: [expr.heure, expr.minute],
       };
 
     case 'APRES_DEMAIN':
       return {
-        sql: `${jour} + make_interval(days => 2, hours => $1::int)`,
-        params: [expr.heure],
+        sql: `${jour} + make_interval(days => 2, hours => $1::int, mins => $2::int)`,
+        params: [expr.heure, expr.minute],
       };
 
     case 'DANS_N_JOURS':
       return {
-        sql: `${jour} + make_interval(days => $1::int, hours => $2::int)`,
-        params: [expr.jours, expr.heure],
+        sql: `${jour} + make_interval(days => $1::int, hours => $2::int, mins => $3::int)`,
+        params: [expr.jours, expr.heure, expr.minute],
       };
+
+    case 'HEURE_SEULE': {
+      /* LA PROCHAINE OCCURRENCE DE CETTE HEURE — aujourd'hui ou demain, et
+         c'est la BASE qui tranche. Le calculer ici demanderait de savoir
+         l'heure qu'il est, ce qu'ADR-036/037 interdisent.
+
+         Même convention que `JOUR_SEMAINE` : jamais dans le passé. « Rappelle-moi
+         à 9h » dit à 15 h désigne demain matin, pas ce matin — un rappel qui
+         serait refusé pour une raison que l'utilisateur ne comprendrait pas. */
+      const cible = `${jour} + make_interval(hours => $1::int, mins => $2::int)`;
+      return {
+        sql:
+          `CASE WHEN ${cible} > clock_timestamp() THEN ${cible} ` +
+          `ELSE ${cible} + interval '1 day' END`,
+        params: [expr.heure, expr.minute],
+      };
+    }
 
     case 'DANS_N_HEURES':
       return {
@@ -108,8 +128,8 @@ function requete(expr: ExpressionTemporelle): { sql: string; params: unknown[] }
         sql:
           `${jour} + make_interval(` +
           `days => (((($1::int - EXTRACT(ISODOW FROM clock_timestamp())::int) + 6) % 7) + 1), ` +
-          `hours => $2::int)`,
-        params: [expr.jourSemaine, expr.heure],
+          `hours => $2::int, mins => $3::int)`,
+        params: [expr.jourSemaine, expr.heure, expr.minute],
       };
   }
 }
