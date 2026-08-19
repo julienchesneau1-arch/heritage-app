@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 64 %**
+## 1. Étendue fonctionnelle — **≈ 65 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -29,14 +29,14 @@ nombre de cases à cocher.
 |---|---|---|---|---|
 | −1 Audit du terrain | 3 % | **100 %** | 3,0 | `docs/08`, `docs/10` |
 | 0 Fondations | 12 % | **100 %** | 12,0 | `gate:phase0` ✅ |
-| 1 Mémoire et Contexte | 12 % | **90 %** | 10,8 | `gate:phase1` ✅ — le Context Engine **résout désormais** (`entity_create` peuple, la boucle évoque : ADR-071/072). Reste qu'**aucune règle Tier 0 ne mène à l'outil** : l'utilisateur ne peut rien DIRE qui crée une entité. La porte éprouve le MODULE ; la case de `docs/02` promet « **Jarvis** demande » |
+| 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ — et **A2 est levé** (ADR-071/072/073) : Jarvis résout « ça » depuis le contexte récent, et **demande** dès que la lecture est ambiguë. La case de `docs/02` — « Jarvis demande » — est tenue par le produit, plus seulement par le module |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
 | 3 Les 10 outils restants | 12 % | **100 %** | 12,0 | **15 outils sur 15** (+`egress_review`, hors liste, en Phase 4). `web_search` livré (ADR-055) — et il met en circuit la séparation Privileged/Quarantined, hors circuit depuis ADR-004 |
 | 4 Confidentialité, coût, indépendance | 13 % | **80 %** | 10,4 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router ✗** |
 | 5 Voix | 10 % | **0 %** | 0,0 | rien |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 64 %** | |
+| **TOTAL** | 100 % | | **≈ 65 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -53,17 +53,17 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 80 %**
+## 2. Profondeur de preuve — **≈ 81 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
 | **Invariants de sécurité S1–S15** (`docs/03`) | **9 des 15** nommément référencés dans les tests | **60 %** |
-| **Tests dorés A·B·C** (`docs/05`) | **28 des 30** référencés, 2 déclarés bloqués | **93 %** |
+| **Tests dorés A·B·C** (`docs/05`) | **29 des 30** référencés, 1 déclaré bloqué | **97 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 80 %** |
+| **Moyenne** | | **≈ 81 %** |
 
 ### Le chiffre des invariants était FAUX, et dans le sens qui flatte
 
@@ -144,7 +144,8 @@ compteur `couverts/bloqués` est passé de 23/7 à **24/6**, puis **25/5** avec
 `briefing_generate`, **26/4** avec `egress_review`, et **27/3** avec
 `web_search` (ADR-055), et **28/2** avec `memory_forget` — le droit à l'oubli,
 premier des cinq outils inverses écrit (ADR-065) ; trois autres ont suivi
-(ADR-067).
+(ADR-067). Enfin **29/1 avec A2** (ADR-073) — la résolution de référents, après
+trois motifs successifs tous tombés.
 
 **Et surtout, le lien est désormais MÉCANIQUE.**
 `tests/golden/contract.test.ts` lit `docs/05`, en extrait les identifiants, et
@@ -254,11 +255,11 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **72 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **73 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
-| 05 | Tests dorés | **28/30 référencés**, 2 bloqués déclarés — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |
+| 05 | Tests dorés | **29/30 référencés**, 1 bloqué déclaré — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |
 | 06 | Prompt maître | appliqué à chaque session |
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
 | 08·09·10·11 | Audits | faits, conclusions intégrées |
@@ -307,8 +308,8 @@ entier, et aucun ne renforce ce qui existe.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 64 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 80 %     ce qu'on peut en démontrer
+ÉTENDUE FONCTIONNELLE   ≈ 65 %     ce que Jarvis sait faire
+PROFONDEUR DE PREUVE    ≈ 81 %     ce qu'on peut en démontrer
 ```
 
 > ⚠ **CETTE SECTION A CONTREDIT LE RESTE DU DOCUMENT.** Elle affichait encore

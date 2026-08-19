@@ -116,11 +116,20 @@ describe('RED TEAM — code mort en production', () => {
            liste quand elle est payée, et ce test l'aurait signalé si on avait
            oublié de l'en retirer. */
 
-        // Context Engine — résolution d'entités et détection d'ambiguïté.
-        // `QUICKSTART.md` promet « il ne devine pas : deux homonymes → il
-        // demande lequel ». Ce chemin n'existe pas dans la boucle réelle.
+        /* Context Engine — `packet.ts` SEUL reste hors circuit.
+
+           ⚠ `resolver.ts` A QUITTÉ CETTE LISTE — ADR-073. Le commentaire disait :
+           « `QUICKSTART.md` promet *il ne devine pas : deux homonymes → il
+           demande lequel*. Ce chemin n'existe pas dans la boucle réelle. »
+
+           Il existe : l'Assistant résout les référents avant d'invoquer un
+           outil, et rend une QUESTION dès que la lecture est ambiguë,
+           introuvable, ou sans contexte. La promesse du QUICKSTART est tenue.
+
+           `packet.ts` — l'assemblage du paquet de contexte — n'a toujours aucun
+           appelant. La distinction est le sujet : résoudre une référence et
+           composer un contexte sont deux choses, et une seule est faite. */
         'src/core/context/packet.ts',
-        'src/core/context/resolver.ts',
 
         // Journalisation applicative avec redaction (03 §9). Aucun appelant :
         // les exigences de log — identifiant de requête, latence, coût,
@@ -153,7 +162,7 @@ describe('RED TEAM — code mort en production', () => {
     );
   });
 
-  it('quatre modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('trois modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
     /* Le chiffre est asserté, pas seulement la liste : c'est ce qui force à
        PASSER ICI quand un module cesse d'être atteint — ou le devient.
@@ -172,8 +181,13 @@ describe('RED TEAM — code mort en production', () => {
        `memory_forget`, qui projette son statut sur la ligne mémoire et sur
        chaque dérivé hors cascade. Le modèle d'effet par cible attendait un
        outil multi-cibles depuis Foundation 4 ; le droit à l'oubli en est un,
-       parce qu'une mémoire vit à plusieurs endroits. */
-    expect(deadLogic).toHaveLength(4);
+       parce qu'une mémoire vit à plusieurs endroits.
+
+       **À trois avec ADR-073** : `context/resolver.ts` est appelé par
+       l'Assistant, qui résout les référents avant d'invoquer un outil. Le
+       Context Engine attendait cela depuis `docs/26 §4.12` — et il l'a obtenu
+       SANS modèle, par trois causes tombées l'une après l'autre. */
+    expect(deadLogic).toHaveLength(3);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });
@@ -233,17 +247,21 @@ describe('RED TEAM — code mort en production', () => {
     expect(cli).toContain('/annule');
   });
 
-  it('DÉMONSTRATION — la boucle réelle ne résout aucune entité, donc ne lève aucune ambiguïté', async () => {
-    // Corollaire du précédent, vérifié côté code plutôt que côté prose : le
-    // fichier qui porte la boucle n'a aucun lien, direct ou transitif, avec le
-    // resolver.
+  it('la boucle réelle RÉSOUT les référents — et le moteur reste pur', () => {
+    /* ⚠ CE TEST A CHANGÉ DE CAMP — ADR-073.
+       Il démontrait que « la boucle réelle ne résout aucune entité » : le
+       fichier portant la boucle n'avait aucun lien avec le résolveur.
+
+       Il en a un désormais, et à UN SEUL endroit — c'est le sujet. La
+       résolution vit dans l'Assistant ; le moteur d'intention, lui, n'a
+       toujours aucun lien avec le résolveur, et c'est la propriété qu'on a
+       refusé de vendre : `propose(text)` reste une fonction PURE du texte. */
     const assistant = readFileSync(join(ROOT, 'src', 'core', 'assistant.ts'), 'utf8');
-    expect(assistant).not.toContain('context/');
-    expect(assistant).not.toContain('resolver');
+    expect(assistant).toContain('resolveAnaphora');
 
     const intent = readFileSync(join(ROOT, 'src', 'core', 'intent', 'engine.ts'), 'utf8');
     expect(intent).not.toContain('resolver');
-    await Promise.resolve();
+    expect(intent).not.toContain('context/');
   });
 
   it('DÉMONSTRATION — 5 clés de configuration sur 16 n\'ont aucun effet', () => {

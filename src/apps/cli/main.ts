@@ -317,7 +317,10 @@ async function handleText(
   // La clé d'opération est fixée AVANT le premier essai : confirmer ne crée pas
   // une nouvelle opération, cela rejoue la même (idempotence, ADR-013).
   const operationId = mint();
-  let reply = await runtime.assistant.say(line, { operationId });
+  /* LA SESSION EST TRANSMISE — ADR-073. Sans elle, un référent (« ajoute ça à
+     ma liste ») produit une QUESTION plutôt qu'une supposition : `docs/05 §A2`
+     interdit de deviner quand deux lectures diffèrent. */
+  let reply = await runtime.assistant.say(line, { operationId, sessionId });
 
   if (reply.kind === 'CONFIRM') {
     const answer = await ask(confirmationPrompt(reply.reason, reply.values));
@@ -339,6 +342,7 @@ async function handleText(
     reply = await runtime.assistant.say(line, {
       operationId: reply.operationId,
       confirm: true,
+      sessionId,
     });
   }
 

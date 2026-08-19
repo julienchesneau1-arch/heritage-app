@@ -181,13 +181,23 @@ describe('confirmation implicite', () => {
 describe('le moteur ne décide rien', () => {
   it('ne produit jamais qu\'une proposition — aucune exécution', () => {
     const proposal = toolCall('Ajoute du café à ma liste');
-    // Pas de champ « autorisé », « exécuté », « confirmé ». La proposition
-    // traverse le Policy Gate comme n'importe quelle autre.
+    /* Pas de champ « autorisé », « exécuté », « confirmé ». La proposition
+       traverse le Policy Gate comme n'importe quelle autre.
+
+       ⚠ `referents` A REJOINT LA LISTE — ADR-073, et il ne fait pas exception
+       à la règle : il DÉSIGNE ce qui reste à résoudre, il ne résout rien. Le
+       moteur signale « ce mot renvoie à autre chose » ; c'est l'Assistant qui
+       va chercher, parce que chercher demande la base.
+
+       Le champ est ici plutôt qu'absent parce que l'énumération est le test :
+       tout champ ajouté au moteur doit passer par cette liste, donc par la
+       question « celui-ci décide-t-il quelque chose ? ». */
     expect(Object.keys(proposal).sort()).toEqual([
       'confidence',
       'input',
       'kind',
       'parameterProvenance',
+      'referents',
       'tier',
       'toolId',
       'userConfirms',

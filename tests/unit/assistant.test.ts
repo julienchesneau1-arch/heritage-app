@@ -28,6 +28,8 @@ const TOOL_CALL: IntentProposal = {
   confidence: 1,
   tier: 0,
   userConfirms: false,
+  // ADR-073 : toujours présent, vide quand le texte porte le contenu lui-même.
+  referents: {},
 };
 
 function success(): GatewayResult {
@@ -88,6 +90,13 @@ describe('Assistant', () => {
       setGuardConfirmed: () => undefined,
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     const reply = await assistant.say('Note que');
@@ -106,6 +115,13 @@ describe('Assistant', () => {
       setGuardConfirmed: () => undefined,
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     const reply = await assistant.say('Envoie un mail à Paul');
@@ -123,6 +139,13 @@ describe('Assistant', () => {
       setGuardConfirmed: () => undefined,
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -145,6 +168,13 @@ describe('Assistant', () => {
       setGuardConfirmed: () => undefined,
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     const asked = await assistant.say('Vire 50 € à Paul');
@@ -170,6 +200,13 @@ describe('Assistant', () => {
       setGuardConfirmed: () => undefined,
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     await assistant.say('Vire 50 € à Paul');
@@ -193,6 +230,13 @@ describe('Assistant', () => {
       setGuardConfirmed: (value: boolean) => states.push(value),
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     await assistant.say('Vire 50 € à Paul', { confirm: true });
@@ -214,6 +258,13 @@ describe('Assistant', () => {
       setGuardConfirmed: (value: boolean) => states.push(value),
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     await expect(assistant.say('Vire 50 € à Paul', { confirm: true })).rejects.toThrow();
@@ -235,6 +286,13 @@ describe('Assistant', () => {
       setGuardConfirmed: () => undefined,
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     const reply = await assistant.say('Vire 50 € à Paul');
@@ -258,6 +316,13 @@ describe('Assistant', () => {
       setGuardConfirmed: (value: boolean) => states.push(value),
       // S13 (ADR-069) : l'interrupteur est FOURNI, jamais deviné.
       cloudEnabled: false,
+      /* ADR-073 : un résolveur qui ne trouve rien. Ces tests ne portent pas
+         sur la résolution, et un référent non résolu doit produire une
+         QUESTION — jamais une supposition. */
+      resolver: {
+        resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+        resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
     });
 
     await assistant.say('Retiens que Jean travaille chez Orano');

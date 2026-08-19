@@ -224,31 +224,29 @@ describe.runIf(enabled)('entity_create / entity_delete', () => {
    * CE QUI RESTE BLOQUÉ — mesuré, pas supposé
    * ==================================================================== */
 
-  it('A2 reste bloqué — mais plus DU TOUT pour la même raison', () => {
-    /* ⚠ CE TEST A CHANGÉ DEUX FOIS EN DEUX COMMITS, ET C'EST LE SIGNE QU'IL
-       SUIT QUELQUE CHOSE DE RÉEL.
+  it('A2 est LEVÉ — et le chemin complet est nommé', () => {
+    /* ⚠ CE TEST A CHANGÉ TROIS FOIS EN TROIS COMMITS, ET CHAQUE FOIS UNE CAUSE
+       EST TOMBÉE POUR DE BON :
 
-       Il vérifiait d'abord qu'aucun appelant ne renseigne `mentionedEntityIds`.
-       ADR-072 l'a câblé : la boucle enregistre désormais ce que l'échange a
-       évoqué, et `resolveAnaphora` a de la matière.
+         rien ne peuple `entities`             → ADR-071
+         aucun appelant n'évoque d'entité      → ADR-072
+         aucune règle Tier 0 n'atteint l'outil → ADR-073
 
-       CE QUI TIENT est en amont : **aucune règle du moteur d'intention ne mène
-       à `entity_create`.** L'utilisateur ne peut rien DIRE qui crée une entité.
-       L'outil n'est atteignable que par un appel direct — donc par un test,
-       jamais par une conversation.
-
-       Un outil que la conversation n'atteint pas est un outil que le PRODUIT
-       n'a pas. Le distinguer de « l'outil existe » est tout ce que
-       `docs/26 §4.12` a jamais défendu. */
+       Il vérifie désormais que la chaîne EXISTE aux trois endroits. Le
+       scénario de bout en bout, lui, vit dans `tests/golden/a2-referent.test.ts`
+       — par du texte, jamais par un appel direct. */
     const moteur = readFileSync('src/core/intent/engine.ts', 'utf8');
-    expect(moteur).not.toContain('entity_create');
+    expect(moteur).toContain('entity_create');
+    expect(moteur).toContain("referents: { title: 'ANAPHORA' }");
 
-    /* ET LA SECONDE RAISON, ARCHITECTURALE. `propose(text)` est synchrone ; le
-       résolveur est asynchrone et sur base. Résoudre « ça » exigerait une passe
-       de résolution ENTRE l'intention et l'appel d'outil — un chantier, pas une
-       règle à ajouter. Ce test tombera le jour où `propose` deviendra
-       asynchrone, ce qui est exactement le moment où il faudra y repenser. */
+    /* ET LA PROPRIÉTÉ QU'ON A REFUSÉ DE VENDRE : `propose` reste SYNCHRONE.
+       La rendre asynchrone était la voie courte vers A2 ; elle aurait fait
+       dépendre la compréhension d'une entrée-sortie. La résolution vit dans
+       l'Assistant, qui était déjà asynchrone. */
     expect(moteur).toContain('propose(text: string): IntentProposal');
+
+    const assistant = readFileSync('src/core/assistant.ts', 'utf8');
+    expect(assistant).toContain('resolveAnaphora');
   });
 
   it('la boucle ÉVOQUE désormais les entités — la cause précédente est tombée', () => {

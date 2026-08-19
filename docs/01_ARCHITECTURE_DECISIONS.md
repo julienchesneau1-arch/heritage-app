@@ -5189,3 +5189,104 @@ déclaration explicite d'entité, puis une passe de résolution entre intention 
 outil. Le second suppose de rendre `propose` asynchrone **ou** de sortir la
 résolution du moteur — c'est cette décision-là qu'il faudra prendre, et elle
 n'est pas prise ici.
+
+---
+
+## ADR-073 — Résoudre « ça » : la propriété qu'on a refusé de vendre
+
+**Statut :** accepté (`docs/05 §A2`, CRITIQUE).
+**Référence :** ADR-071, ADR-072, `docs/26 §4.12`, `src/core/intent/engine.ts`,
+`src/core/assistant.ts`, `src/core/context/resolver.ts`.
+
+### La décision
+
+Deux voies menaient à A2. J'ai pris la seconde.
+
+| | Coût |
+|---|---|
+| Rendre `propose()` **asynchrone** | la voie courte — et elle vend une propriété |
+| Résoudre **dans l'Assistant** | un peu plus de câblage, rien de perdu |
+
+`propose(text)` est une fonction **pure du texte** : déterministe, éprouvable
+sans base, incapable d'échouer pour une raison d'infrastructure. La rendre
+asynchrone aurait fait dépendre la **compréhension** d'une entrée-sortie.
+
+L'Assistant, lui, est déjà asynchrone et orchestre déjà. C'est sa place.
+
+> Le moteur SIGNALE un référent ; il ne le résout pas. Reconnaître qu'un mot
+> désigne autre chose est une décision de texte, donc `Tier 0`. Résoudre demande
+> la base.
+
+### Le défaut qui était ACTIF
+
+« Ajoute **ça** à ma liste » matchait la règle générale des tâches et créait une
+tâche **intitulée « ça »**. Le moteur passait le référent comme s'il était le
+texte voulu. Ce n'était pas un piège pour plus tard — c'était le comportement du
+jour.
+
+### L'interdit gouverne le bloc
+
+`docs/05 §A2` : *« Interdit : deviner si deux interprétations ont un impact
+différent. »*
+
+Quatre issues, **une seule agit** :
+
+```text
+RESOLVED    → on substitue
+AMBIGUOUS   → le résolveur formule LA question (une seule, 05/A3)
+NOT_FOUND   → on demande
+pas de session → on demande
+```
+
+Aucun chemin ne remplit un paramètre par défaut. C'est ce qui distingue
+*résoudre* de *choisir à la place de quelqu'un*.
+
+### Une garde existante avait raison avant l'exception
+
+Le moteur refuse un outil dont un paramètre est vide — *« une règle qui capture
+une chaîne vide n'a rien compris »*. Ma règle de référent l'a déclenchée, et
+c'était juste : la garde traduit « l'utilisateur n'a pas dit quoi mettre ».
+
+Or ici il l'a dit : **il a dit « ça »**. Le champ n'est pas MANQUANT, il est
+DIFFÉRÉ. Sans l'exception, Jarvis répondait *« que dois-je retenir
+exactement ? »* à quelqu'un qui venait de désigner quelque chose — la question
+de celui qui n'a pas écouté.
+
+### A2 est LEVÉ, après trois motifs successifs
+
+```text
+1. « Context Engine hors circuit »       → mauvais diagnostic (docs/26 §4.12)
+2. rien ne peuple `entities`             → ADR-071
+3. aucun appelant n'évoque d'entité      → ADR-072
+4. aucune règle Tier 0 n'atteint l'outil → ADR-073
+```
+
+Chacun est tombé **pour de bon**, et chacun avait été remplacé par un plus
+précis. Aucun n'a été effacé pour faire tomber un compteur.
+
+**Et sans modèle.** L'ADR d'origine concluait qu'il faudrait un Tier 1 ; sa
+propre condition de révision prévoyait le chemin explicite, et c'est celui-là
+qui a servi. Zéro euro, zéro dépendance.
+
+### Ce que cela change ailleurs
+
+`context/resolver.ts` quitte les modules hors circuit — trois au lieu de quatre.
+`QUICKSTART.md` promettait *« il ne devine pas : deux homonymes → il demande
+lequel »* ; la promesse est tenue par le produit, plus seulement par le module.
+
+`packet.ts` reste orphelin, et la distinction est le sujet : **résoudre une
+référence et composer un contexte sont deux choses**, une seule est faite.
+
+### Sabotage
+
+```text
+l'Assistant devine au lieu de demander → 1 rouge (l'INTERDIT)
+la garde oublie l'exception            → 3 rouges (le référent redevient vide)
+```
+
+### Condition de révision
+
+Le jour où un `Tier 1` arrive, la tentation sera de lui confier la
+reconnaissance d'entités **et** la résolution. La seconde n'a pas besoin de lui :
+elle est exacte, locale et gratuite. Ne la remplacer que si un modèle fait
+mieux — mesuré, pas supposé.

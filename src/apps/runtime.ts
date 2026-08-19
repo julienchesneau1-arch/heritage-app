@@ -23,6 +23,7 @@ import { createMemoryInbox, type MemoryInbox } from '../core/memory/inbox.js';
 import { createMemoryStore } from '../core/memory/store.js';
 import { createHybridSearch } from '../core/memory/search.js';
 import { createSessionStore, type SessionStore } from '../core/session/session.js';
+import { createEntityResolver } from '../core/context/resolver.js';
 import { createIntentEngine, type IntentEngine } from '../core/intent/engine.js';
 import { createEnvSecretVault } from '../core/secrets/vault.js';
 import { createToolGateway, type ToolGateway } from '../core/tools/gateway.js';
@@ -119,6 +120,9 @@ export function buildRuntime(
       gateway,
       setGuardConfirmed: setUserConfirmed,
       cloudEnabled: options.cloudEnabled ?? false,
+      // ADR-073 : la résolution de référents vit dans l'Assistant, pas dans le
+      // moteur d'intention — `propose()` reste une fonction pure du texte.
+      resolver: createEntityResolver(db),
     }),
     undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
     embeddingsAvailable: false,

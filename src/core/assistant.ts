@@ -23,6 +23,7 @@
  */
 import { mint, type OperationIdentity } from './tools/identity.js';
 import type { IntentEngine } from './intent/engine.js';
+import type { EntityResolver } from './context/resolver.js';
 import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
 import type { Mode, VerificationStatus } from './types/domain.js';
@@ -70,6 +71,14 @@ export interface SayOptions {
   readonly operationId?: OperationIdentity;
   readonly confirm?: boolean;
   readonly mode?: Mode;
+  /**
+   * La conversation en cours, pour résoudre « ça » — ADR-073.
+   *
+   * OPTIONNELLE, et c'est un fait plutôt qu'un oubli : un appelant sans session
+   * existe. Mais son absence ne relâche RIEN — sans elle, un référent produit
+   * une question, jamais une supposition.
+   */
+  readonly sessionId?: string;
 }
 
 export interface Assistant {
@@ -103,6 +112,19 @@ export interface AssistantDeps {
    * que le choix de l'utilisateur soit HONORÉ.
    */
   readonly cloudEnabled: boolean;
+  /**
+   * LE RÉSOLVEUR DE RÉFÉRENTS — ADR-073.
+   *
+   * La résolution vit ICI plutôt que dans le moteur d'intention, et le choix
+   * est une propriété qu'on refuse de perdre : `propose(text)` est une fonction
+   * PURE du texte — déterministe, éprouvable sans base, incapable d'échouer
+   * pour une raison d'infrastructure.
+   *
+   * La rendre asynchrone aurait fait dépendre la COMPRÉHENSION d'une
+   * entrée-sortie. L'Assistant, lui, est déjà asynchrone et orchestre déjà :
+   * c'est sa place.
+   */
+  readonly resolver: EntityResolver;
 }
 
 export function createAssistant(deps: AssistantDeps): Assistant {
@@ -121,6 +143,51 @@ export function createAssistant(deps: AssistantDeps): Assistant {
         };
       }
 
+      /* RÉSOUDRE LES RÉFÉRENTS — `docs/05 §A2`, ADR-073.
+
+         > *Attendu : Jarvis résout le référent depuis le contexte récent.*
+         > *Interdit : **deviner** si deux interprétations ont un impact
+         >  différent.*
+
+         L'INTERDIT GOUVERNE TOUT CE BLOC. Quatre issues, une seule agit :
+         résolu → on substitue ; ambigu, introuvable, ou pas de session → **on
+         demande**. Aucun chemin ne remplit un paramètre par défaut, et c'est
+         exactement ce qui distingue « résoudre » de « choisir à la place de
+         quelqu'un ». */
+      let input: Readonly<Record<string, unknown>> = proposal.input;
+      const aResoudre = Object.keys(proposal.referents);
+      if (aResoudre.length > 0) {
+        if (options.sessionId === undefined) {
+          /* Sans session, il n'y a pas de « contexte récent ». Deviner
+             reviendrait à inventer le passé de la conversation. */
+          return {
+            kind: 'CLARIFY',
+            question: 'À quoi fais-tu référence ? Je n’ai pas de conversation en cours.',
+          };
+        }
+
+        const resolution = await deps.resolver.resolveAnaphora(options.sessionId);
+        if (!resolution.ok) return { kind: 'ERROR', message: resolution.error.message };
+
+        if (resolution.value.kind === 'AMBIGUOUS') {
+          // Le résolveur formule LA question — une seule à la fois (`05/A3`).
+          return { kind: 'CLARIFY', question: resolution.value.question };
+        }
+        if (resolution.value.kind === 'NOT_FOUND') {
+          return {
+            kind: 'CLARIFY',
+            question: 'À quoi fais-tu référence ? Rien n’a été évoqué récemment.',
+          };
+        }
+
+        const nom = resolution.value.entity.displayName;
+        input = Object.fromEntries(
+          Object.entries(proposal.input).map(([cle, valeur]) =>
+            aResoudre.includes(cle) ? [cle, nom] : [cle, valeur],
+          ),
+        );
+      }
+
       /* LE POINT DE FRAPPE UNIQUE — ADR-030.
          Une intention utilisateur donne UNE identité d'opération. Tout ce qui
          suit — reprise, vérification, et un jour repli sur un autre
@@ -135,7 +202,7 @@ export function createAssistant(deps: AssistantDeps): Assistant {
       try {
         const result = await deps.gateway.invoke({
           toolId: proposal.toolId,
-          input: proposal.input,
+          input,
           parameterProvenance: proposal.parameterProvenance,
           operationId,
           actor: 'USER',

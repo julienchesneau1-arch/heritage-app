@@ -39,6 +39,22 @@ export type IntentProposal =
        * ordinaire n'est pas confirmée — elle passe par le Memory Inbox.
        */
       readonly userConfirms: boolean;
+      /**
+       * LES PARAMÈTRES QUI DÉSIGNENT SANS NOMMER — ADR-073.
+       *
+       * Toujours présent, le plus souvent vide. Chaque clé est un paramètre
+       * d'`input` dont la valeur est un RÉFÉRENT — « ça », « celui-ci » — et
+       * non le contenu voulu.
+       *
+       * ⚠ CE CHAMP FERME UN DÉFAUT ACTIF. « Ajoute **ça** à ma liste » matchait
+       * la règle des tâches et créait une tâche INTITULÉE « ça ». Le moteur
+       * passait le référent comme s'il était le texte.
+       *
+       * Le moteur ne RÉSOUT rien : reconnaître qu'un mot désigne autre chose est
+       * une décision de texte, donc `Tier 0`. Résoudre demande la base, donc
+       * l'Assistant (`docs/26 §4.12`).
+       */
+      readonly referents: Readonly<Record<string, 'ANAPHORA'>>;
     }
   | {
       readonly kind: 'CLARIFY';
@@ -111,6 +127,8 @@ const RULES: readonly Rule[] = [
         // Le verbe employé est un ordre de mémorisation : c'est la
         // confirmation.
         userConfirms: true,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
       };
     },
   },
@@ -143,6 +161,8 @@ const RULES: readonly Rule[] = [
         confidence: 0.9,
         tier: 0,
         userConfirms: false,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
       };
     },
   },
@@ -169,11 +189,103 @@ const RULES: readonly Rule[] = [
         confidence: 0.85,
         tier: 0,
         userConfirms: false,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
+      };
+    },
+  },
+
+  /* --- Entités : enregistrer ce que l'utilisateur NOMME (ADR-073) --------- */
+  {
+    /**
+     * « enregistre Pierre Dupont comme personne »
+     *
+     * AUCUNE EXTRACTION. Le genre est DIT par l'utilisateur, pas déduit du nom :
+     * « Dupont » ne devient pas une personne parce qu'il ressemble à un nom. La
+     * reconnaissance d'entités reste hors de portée du `Tier 0` — ce que cette
+     * règle fait, c'est obéir à une déclaration explicite.
+     *
+     * Sans elle, `entity_create` n'était atteignable que par un appel direct à
+     * la passerelle : un outil que la conversation n'atteint pas est un outil
+     * que le produit n'a pas.
+     */
+    id: 'entity_create_explicit',
+    pattern:
+      /^enregistre\s+(.+?)\s+comme\s+(personne|organisation|projet|lieu|produit|document|[ée]v[ée]nement|t[âa]che|objet|appareil|compte)$/iu,
+    build(match) {
+      /* La table est ici et NULLE PART AILLEURS : deux tables de correspondance
+         finiraient par diverger (ADR-041). Les valeurs sont celles de
+         `EntityKind`, que `tests/tools/entities.test.ts` rapproche déjà de la
+         contrainte SQL — la chaîne complète est donc liée. */
+      const GENRES: Readonly<Record<string, string>> = {
+        personne: 'PERSON',
+        organisation: 'ORGANIZATION',
+        projet: 'PROJECT',
+        lieu: 'PLACE',
+        produit: 'PRODUCT',
+        document: 'DOCUMENT',
+        evenement: 'EVENT',
+        tache: 'TASK',
+        objet: 'OBJECT',
+        appareil: 'DEVICE',
+        compte: 'ACCOUNT',
+      };
+      // Les accents sont retirés pour la CLÉ seulement — « événement » et
+      // « evenement » désignent la même chose, et l'utilisateur ne doit pas
+      // avoir à savoir laquelle nous attendions.
+      const brut = (match[2] ?? '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/gu, '');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'entity_create',
+        input: { displayName: clean(match[1] ?? ''), kind: GENRES[brut] ?? 'OBJECT' },
+        parameterProvenance: { displayName: FROM_USER, kind: FROM_USER },
+        confidence: 0.95,
+        tier: 0,
+        // Une déclaration explicite VAUT confirmation : « enregistre X » est une
+        // demande, pas une déduction (PRD §137, même raison que « retiens que »).
+        userConfirms: true,
+        referents: {},
       };
     },
   },
 
   /* --- Tâches : créer ---------------------------------------------------- */
+  {
+    /**
+     * « ajoute ça à ma liste » — LE RÉFÉRENT, ADR-073.
+     *
+     * ⚠ CETTE RÈGLE FERME UN DÉFAUT ACTIF. La règle générale ci-dessous matchait
+     * « ajoute **ça** à ma liste » et créait une tâche **intitulée « ça »**. Le
+     * moteur passait le référent comme s'il était le texte voulu.
+     *
+     * Elle est placée AVANT la règle générale : l'ordre est la sémantique.
+     *
+     * Le moteur ne résout rien — il SIGNALE. Résoudre demande la base, donc
+     * l'Assistant. `propose()` reste une fonction pure du texte, et c'est une
+     * propriété qu'on garde : la compréhension ne doit pas dépendre d'une
+     * entrée-sortie.
+     */
+    id: 'task_create_anaphora',
+    pattern:
+      /^ajoute\s+(?:ça|ca|cela|celui-ci|celle-ci)\s+(?:à|a|dans)\s+(?:ma|la|mes)\s+(?:liste|t[âa]ches?).*$/iu,
+    build() {
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'task_create',
+        // Volontairement VIDE : l'Assistant le remplira, ou demandera.
+        input: { title: '', dueAt: null },
+        parameterProvenance: { title: FROM_USER, dueAt: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: { title: 'ANAPHORA' },
+      };
+    },
+  },
+
   {
     id: 'task_create_list',
     pattern: /^ajoute\s+(.+?)\s+(?:à|a|dans)\s+(?:ma|la)\s+liste.*$/iu,
@@ -186,6 +298,8 @@ const RULES: readonly Rule[] = [
         confidence: 0.95,
         tier: 0,
         userConfirms: false,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
       };
     },
   },
@@ -201,6 +315,8 @@ const RULES: readonly Rule[] = [
         confidence: 0.9,
         tier: 0,
         userConfirms: false,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
       };
     },
   },
@@ -216,6 +332,8 @@ const RULES: readonly Rule[] = [
         confidence: 0.95,
         tier: 0,
         userConfirms: false,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
       };
     },
   },
@@ -234,6 +352,8 @@ const RULES: readonly Rule[] = [
         confidence: 0.95,
         tier: 0,
         userConfirms: false,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
       };
     },
   },
@@ -254,6 +374,8 @@ const RULES: readonly Rule[] = [
         confidence: 0.95,
         tier: 0,
         userConfirms: false,
+        // Aucun référent : ces règles portent le texte de l'utilisateur.
+        referents: {},
       };
     },
   },
@@ -372,12 +494,25 @@ export function createIntentEngine(): IntentEngine {
               };
             }
           }
-          // Une règle qui capture une chaîne vide n'a rien compris : mieux
-          // vaut demander que proposer un outil avec un paramètre vide.
+          /* Une règle qui capture une chaîne vide n'a rien compris : mieux
+             vaut demander que proposer un outil avec un paramètre vide.
+
+             ⚠ SAUF SI LE CHAMP EST UN RÉFÉRENT — ADR-073, et cette garde avait
+             raison de rougir avant l'exception. Elle traduit « l'utilisateur
+             n'a pas dit quoi mettre ». Or pour « ajoute **ça** à ma liste », il
+             l'a dit : il a dit « ça ». Le champ n'est pas MANQUANT, il est
+             DIFFÉRÉ — l'Assistant le résoudra, ou demandera lui-même.
+
+             La distinction compte : sans elle, on répondrait « que dois-je
+             retenir exactement ? » à quelqu'un qui vient de désigner quelque
+             chose. C'est la question de celui qui n'a pas écouté. */
           if (
             proposal.kind === 'TOOL_CALL' &&
-            Object.values(proposal.input).some(
-              (v) => typeof v === 'string' && v.length === 0,
+            Object.entries(proposal.input).some(
+              ([cle, v]) =>
+                typeof v === 'string' &&
+                v.length === 0 &&
+                proposal.referents[cle] === undefined,
             )
           ) {
             return {

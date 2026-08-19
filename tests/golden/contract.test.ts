@@ -135,36 +135,6 @@ type Blocage =
     };
 
 const BLOQUES: Readonly<Record<string, Blocage>> = {
-  A2: {
-    /* ⚠ TROISIÈME MOTIF, ET DEUX CAUSES SONT RÉELLEMENT TOMBÉES.
-
-       `entity_create` peuple `entities` (ADR-071), et la boucle renseigne
-       désormais `mentionedEntityIds` (ADR-072) : `resolveAnaphora` a de la
-       matière, et rend `RESOLVED`.
-
-       CE QUI TIENT est en amont de tout cela : **aucune règle du moteur
-       d'intention ne mène à `entity_create`.** L'utilisateur ne peut rien DIRE
-       qui crée une entité — l'outil n'est atteignable que par un appel direct
-       à la passerelle, donc par un test, jamais par une conversation.
-
-       ET UNE SECONDE RAISON, ARCHITECTURALE : `propose(text)` est SYNCHRONE,
-       quand le résolveur est asynchrone et sur base. Résoudre « ça » ne peut
-       donc pas se faire dans l'étape d'intention ; il faudrait une passe de
-       résolution entre l'intention et l'appel d'outil. C'est un chantier, pas
-       une règle à ajouter.
-
-       Déclarer A2 débloqué parce que le mécanisme fonctionne serait, pour la
-       troisième fois, la faute de `docs/26 §4.12`. */
-    motif:
-      "les deux causes précédentes sont tombées (ADR-071, ADR-072), mais AUCUNE " +
-      "règle Tier 0 ne mène à `entity_create` : rien de ce que l'utilisateur dit " +
-      'ne crée une entité, et `propose()` étant synchrone, la résolution ' +
-      "d'anaphore ne peut pas vivre dans l'étape d'intention",
-    outilHorsIntention: {
-      outil: 'entity_create',
-      moteur: 'src/core/intent/engine.ts',
-    },
-  },
   A8: {
     motif: "aucun outil d'email n'existe — Phase 3",
     // Le registre des outils ne doit mentionner aucun email, sous aucune forme.
@@ -341,7 +311,10 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
        d'une dette datée. A7 l'a quittée à son tour avec `briefing_generate`,
        C4 avec `egress_review`, puis **B4 avec `web_search`** (ADR-055), puis
        **C3 avec `memory_forget`** (ADR-065) — le droit à l'oubli, premier
-       outil inverse écrit sur les cinq déclarés.
+       outil inverse écrit sur les cinq déclarés — puis **A2 avec la résolution
+       de référents** (ADR-073), après TROIS motifs successifs tous tombés :
+       rien ne peuplait `entities`, puis aucun appelant n'évoquait d'entité,
+       puis aucune règle Tier 0 n'atteignait l'outil.
 
        ⚠ CES DEUX LIGNES NE LISENT QUE LA TABLE, et il faut le dire ici plutôt
          que de laisser croire le contraire : c'est le test au-dessus — « chaque
@@ -353,8 +326,8 @@ describe('docs/05 — le contrat de non-régression est-il tenu ?', () => {
        adversariale ligne C2 ») ; il y entre désormais par seize tests
        d'arrêt d'urgence. Même nombre, autre vérité — la démonstration qu'un
        compteur ne vaut que par la règle de reconnaissance qui l'alimente. */
-    expect(couverts).toBe(28);
-    expect(bloques).toBe(2);
+    expect(couverts).toBe(29);
+    expect(bloques).toBe(1);
     expect(bloques / ids.length).toBeLessThan(0.25);
   });
 

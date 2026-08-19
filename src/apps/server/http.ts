@@ -144,6 +144,8 @@ export function createHandler(deps: HandlerDeps) {
       });
 
       const reply = await runtime.assistant.say(checked.data.text, {
+        // ADR-073 : sans session, un référent devient une question, pas un pari.
+        sessionId,
         ...(checked.data.operationId === undefined
           ? {}
           : // Identité proposée par le client : frontière explicite (ADR-030).

@@ -186,7 +186,16 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
 
   it('les chiffres des SCÉNARIOS DORÉS collent au document et au test', () => {
     const couverts = nombre(AVANCEMENT, /\*\*(\d+) des 30\*\* référencés/);
-    const bloques = nombre(AVANCEMENT, /\*\*\d+ des 30\*\* référencés, (\d+) déclarés bloqués/);
+    /* LE PLURIEL EST TOLÉRÉ, ET C'EST LA MESURE QUI CÈDE. Le jour où il n'est
+       resté qu'UN scénario bloqué, `docs/28` a écrit « 1 déclaré bloqué » — du
+       français correct — et ce test a rougi sur la grammaire.
+
+       Un test qui impose une faute d'accord pour se satisfaire mesure sa propre
+       commodité. Le document reste juste ; le motif s'élargit. */
+    const bloques = nombre(
+      AVANCEMENT,
+      /\*\*\d+ des 30\*\* référencés, (\d+) déclarés? bloqués?/,
+    );
     expect(couverts, 'ligne scénarios introuvable').not.toBeNull();
     expect(bloques).not.toBeNull();
 

@@ -289,7 +289,7 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Quatre modules de logique hors circuit
+### 4.1 Trois modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
@@ -297,7 +297,8 @@ jamais atteints par le produit**.
 | Module | Ce qui manque | Condition de réouverture |
 |---|---|---|
 | ~~`quarantine/processor.ts`~~ | **LEVÉE (ADR-055)** — `web_search` est la première ingestion du dépôt, et le Tool Gateway appelle `sealExternal` | — |
-| `context/packet.ts` · `resolver.ts` | **rien ne crée d'entité** — voir §4.12, la cause est plus profonde que « pas branché » | une capacité d'extraction d'entités, donc un modèle (Tier 1+) |
+| ~~`context/resolver.ts`~~ | **LEVÉE (ADR-073)** — l'Assistant résout les référents avant d'invoquer un outil, et DEMANDE dès que la lecture est ambiguë | — |
+| `context/packet.ts` | l'assemblage du paquet de contexte n'a aucun appelant — résoudre une référence et composer un contexte sont deux choses, et une seule est faite | un consommateur du paquet |
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
 | ~~`tools/outcome.ts`~~ | **LEVÉE (ADR-065)** — `memory_forget` projette son statut sur la ligne mémoire ET chaque dérivé hors cascade ; une mémoire vit à plusieurs endroits, donc l'oubli est multi-cibles | — |
@@ -311,6 +312,7 @@ jamais atteints par le produit**.
 6   − privacy/classify.ts (F2) — le Policy Gate l'appelle
 5   − quarantine/processor.ts (ADR-055) — web_search ingère, le Gateway scelle
 4   − tools/outcome.ts (ADR-065) — memory_forget projette sur plusieurs cibles
+3   − context/resolver.ts (ADR-073) — l'Assistant résout « ça » avant d'agir
 ```
 
 > **Le titre a dit « Cinq » pendant toute la période où il valait six.**
@@ -884,7 +886,7 @@ ment dans l'autre sens.
 doit piloter `cloudEnabled` — au même moment que le branchement du CostGate
 (§4.1), et pour la même raison.
 
-### 4.12 Le Context Engine — il a désormais quelque chose à résoudre
+### 4.12 ~~Le Context Engine~~ — LEVÉE : Jarvis résout « ça », et demande sinon
 
 > ⚠ **MOITIÉ LEVÉE — ADR-071.** Ce qui suit disait : *« il n'a RIEN à
 > résoudre »*. `entity_create` peuple `entities` sur demande explicite de
@@ -898,14 +900,24 @@ doit piloter `cloudEnabled` — au même moment que le branchement du CostGate
 > `mentionedEntityIds` : CLI et passerelle web enregistrent ce que l'échange a
 > touché, sans aucune inférence — l'outil DÉCLARE la ressource.
 >
-> **CE QUI TIENT, ET C'EST EN AMONT DE TOUT :** aucune règle du moteur
-> d'intention ne mène à `entity_create`. **L'utilisateur ne peut rien DIRE qui
-> crée une entité.** Un outil que la conversation n'atteint pas est un outil que
-> le produit n'a pas.
+> **TROISIÈME ET DERNIÈRE MOITIÉ LEVÉE — ADR-073.** Une règle `Tier 0` atteint
+> `entity_create` (« enregistre X comme document »), et l'Assistant résout les
+> référents avant d'invoquer un outil.
 >
-> Et une raison d'architecture : `propose(text)` est SYNCHRONE quand le résolveur
-> est asynchrone et sur base. Résoudre « ça » exigerait une passe entre
-> l'intention et l'appel d'outil — un chantier, pas une règle.
+> **A2 EST LEVÉ.** Éprouvé de bout en bout dans
+> `tests/golden/a2-referent.test.ts` — par du texte, jamais par un appel direct.
+>
+> ⚠ **ET LA PROPRIÉTÉ QU'ON A REFUSÉ DE VENDRE.** Rendre `propose()` asynchrone
+> était la voie courte. Elle aurait fait dépendre la COMPRÉHENSION d'une
+> entrée-sortie : `propose(text)` reste une fonction pure du texte,
+> déterministe, éprouvable sans base. La résolution vit dans l'Assistant, qui
+> était déjà asynchrone.
+>
+> **Ce qui reste** : `packet.ts` — composer un paquet de contexte est autre
+> chose que résoudre une référence, et une seule des deux est faite.
+>
+> Trois motifs successifs, tous tombés pour de bon, chacun remplacé par un plus
+> précis. Aucun n'a été effacé pour faire tomber un compteur.
 
 Le diagnostic d'origine, conservé parce qu'il reste exact sur la seconde moitié :
 
