@@ -260,6 +260,80 @@ Quatre sabotages ; seul le dernier, qui reproduit l'**état d'origine exact**,
 fait rougir le test qui encode la trouvaille. *Un sabotage partiel donne une
 conclusion partielle.*
 
+### 2.6-quater Un test rouge une fois sur deux — et c'est l'assertion qui avait tort
+
+**Trouvé par la porte de sortie d'ADR-074, sur un test qui n'a rien à voir
+avec elle.** `tests/lab/lease-semantics.test.ts` affirmait, sur vingt reprises
+simultanées d'un bail expiré :
+
+```text
+lease_generation === 4 + vainqueurs      « autant de générations que de vainqueurs »
+```
+
+Mesurée cinq fois de suite : **trois rouges, deux verts**. Le réflexe naturel —
+« c'est de la concurrence, c'est flaky » — aurait enterré une **dixième
+occurrence du motif de §2** : *une affirmation que le mécanisme censé l'établir
+n'établit pas.*
+
+L'entrelacement qui la casse est réel et parfaitement licite :
+
+```text
+A lit la génération 4, la PREND par compare-and-swap  → 5, bail à A
+C lit 5 (A n'a pas encore statué), la PREND           → 6, bail à C
+A tente d'écrire son verdict sous le bail 5           → REFUSÉ, périmé
+C écrit le sien sous le bail 6                        → vainqueur
+```
+
+Deux générations, **un** vainqueur. Le système fait exactement ce qu'ADR-035
+promet : `writeAuthoritative` refuse l'écriture d'un exécutant périmé. **La
+mesure disait la vérité ; l'assertion se figurait qu'une prise de bail menait
+toujours à un verdict.**
+
+La loi exacte : une génération est consommée par chaque **prise réussie**, et
+toute prise finit *vainqueur* ou *périmée*. Les refusés d'`OPERATION_IN_FLIGHT`
+n'ont jamais pris le bail.
+
+```text
+lease_generation === 4 + vainqueurs + périmés
+```
+
+Plus **forte** que l'ancienne, pas plus permissive : elle compte les deux issues
+au lieu d'en ignorer une. Sabotage : en retirant l'incrément de génération de
+`claimForRecovery`, le test rend `expected 4 to be 24`. Huit exécutions
+consécutives au vert après correctif.
+
+> Un test intermittent est pire qu'un test absent : il apprend à lire le rouge
+> comme du bruit. Et la fois où il dit vrai est indiscernable des autres.
+
+---
+
+### 2.6-quinquies Deux gardes de test qui ne gardaient rien, trouvés par sabotage
+
+Les deux vivaient dans `tests/voice/tour.test.ts`, écrit le jour même. Ils
+n'auraient jamais été trouvés en relisant — seulement en cassant exprès ce
+qu'ils protègent.
+
+**`\b` ne marche pas en français.** Le détecteur « aucun accusé de réception ne
+contient de participe passé d'action » employait `/\b(fait|envoy[ée]|…)\b/`.
+En JavaScript `\b` est défini sur l'**ASCII** : « é » n'en fait pas partie, donc
+après lui il n'existe **aucune frontière de mot**, et `envoyé\b` ne peut pas
+matcher « envoyé » en fin de phrase. Le garde-fou laissait passer précisément les
+mots qu'il devait attraper. Remplacé par une recherche de sous-chaîne — grossière,
+sans trou, sur un ensemble clos de trois phrases.
+
+**Deux chaînes différentes, une seule phrase à l'oreille.** Le test « aucun accusé
+ne partage de phrase avec la table des verdicts » comparait des chaînes exactes.
+En y injectant « c'est fait », il est resté **vert** : `headline` rend
+« C'est fait. » — une majuscule et un point d'écart. À l'écrit deux chaînes ; à
+l'oral **la même phrase**, et la propriété défendue est justement qu'un auditeur
+ne puisse pas les confondre. La comparaison se fait désormais sur ce qui
+s'entend.
+
+> Un test qui protège de l'ORAL doit comparer ce qui s'entend. Comparer ce qui
+> s'écrit, c'est mesurer une autre propriété que celle qu'on annonce.
+
+---
+
 ### 2.7 Deux fichiers à 0 % de couverture — faux positif
 
 `src/core/policy/evaluator.ts` et `src/providers/contract.ts` : **types purs**,

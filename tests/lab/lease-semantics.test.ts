@@ -277,10 +277,40 @@ describe.runIf(enabled)('couche 02 — le bail', () => {
     }
 
     /* Et la sérialisation est réelle : chaque verdict écrit a consommé une
-       génération distincte. Autant de générations que de vainqueurs, jamais
-       deux vainqueurs sur la même. */
+       génération distincte. Jamais deux vainqueurs sur la même.
+
+       ⚠ CETTE ASSERTION ÉTAIT INTERMITTENTE, ET C'EST ELLE QUI AVAIT TORT.
+       Elle affirmait `4 + winners` : autant de générations que de vainqueurs.
+       Mesurée cinq fois de suite, elle est tombée trois fois. Un test qui rougit
+       une fois sur deux est pire qu'un test absent — il apprend à ignorer le
+       rouge.
+
+       Ce qu'elle avait manqué est un entrelacement RÉEL, pas un aléa :
+
+         A lit la génération 4, la PREND par compare-and-swap  → 5, bail à A
+         C lit 5 (A n'a pas encore statué), la PREND           → 6, bail à C
+         A tente d'écrire son verdict sous le bail 5           → refusé
+                                                → `STALE_EXECUTOR`, PAS vainqueur
+         C écrit le sien sous le bail 6                        → vainqueur
+
+       Deux générations consommées, UN vainqueur. Le système se comporte
+       exactement comme annoncé — c'est `writeAuthoritative` qui refuse l'écriture
+       d'un exécutant périmé (ADR-035), et c'est précisément la protection qu'on
+       veut. La mesure disait donc la vérité ; l'assertion se figurait qu'une
+       prise de bail menait toujours à un verdict.
+
+       LA LOI EXACTE : une génération est consommée par chaque PRISE réussie, et
+       toute prise finit vainqueur ou périmée. Les refusés d'`OPERATION_IN_FLIGHT`,
+       eux, n'ont jamais pris le bail et n'en consomment aucune.
+
+       Cette forme est plus FORTE que l'ancienne, pas plus permissive : elle
+       compte les deux issues au lieu d'en ignorer une. Un second effet la
+       casserait toujours. */
     const winners = results.filter((r) => r.ok).length;
-    expect(Number(row['lease_generation'])).toBe(4 + winners);
+    const perimes = results.filter(
+      (r) => !r.ok && r.error.kind === 'STALE_EXECUTOR',
+    ).length;
+    expect(Number(row['lease_generation'])).toBe(4 + winners + perimes);
   }, 60_000);
 
   /* ================================================================== *

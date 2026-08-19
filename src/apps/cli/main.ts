@@ -20,6 +20,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { mint } from '../../core/tools/identity.js';
 import { openRuntime, type Runtime } from '../runtime.js';
+import { ecouter } from '../../core/voice/turn.js';
 import { auditReport, diagnosticReport, inboxReport } from '../reports.js';
 import type { AssistantReply } from '../../core/assistant.js';
 import {
@@ -393,8 +394,20 @@ async function main(): Promise<void> {
     for (;;) {
       const raw = await nextLine('\n> ');
       if (raw === null) break; // fin d'entrée
-      const line = raw.trim();
-      if (line.length === 0) continue;
+
+      /* LA PORTE UNIQUE PAR LAQUELLE UN ÉNONCÉ DEVIENT UNE ACTION — ADR-074.
+         Une ligne tapée est toujours FINALE : l'utilisateur a appuyé sur
+         Entrée, le texte ne changera plus. Une transcription vocale, elle, ne
+         l'est pas toujours — et c'est exactement pourquoi cette porte existe
+         AVANT l'audio plutôt qu'après : le jour où un moteur de reconnaissance
+         alimente cette boucle, il passe par le même verdict, sans qu'on ait à
+         se souvenir de l'écrire.
+
+         Elle remplace un `trim()` suivi d'un `if vide → continue`. Le
+         comportement est le même ; la décision est NOMMÉE et porte son motif. */
+      const verdict = ecouter({ text: raw, final: true });
+      if (verdict.kind === 'ATTENDRE') continue;
+      const line = verdict.texte;
 
       if (line === '/quitter' || line === '/quit') break;
       if (line === '/aide' || line === '/help') {

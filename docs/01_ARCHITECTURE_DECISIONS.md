@@ -5290,3 +5290,152 @@ Le jour où un `Tier 1` arrive, la tentation sera de lui confier la
 reconnaissance d'entités **et** la résolution. La seconde n'a pas besoin de lui :
 elle est exacte, locale et gratuite. Ne la remplacer que si un modèle fait
 mieux — mesuré, pas supposé.
+
+---
+
+## ADR-074 — L'oral fluide sans parler avant de savoir
+
+**Statut :** accepté (`docs/02` Phase 5, `docs/06 §Style des réponses`).
+**Référence :** ADR-008 (Whisper), ADR-009 (Piper/Kokoro), ADR-017,
+`src/core/voice/turn.ts`, `tests/voice/tour.test.ts`.
+
+### La question posée
+
+*« Que Jarvis soit aussi fluide à l'oral qu'un ChatGPT ou un Claude. »*
+
+Elle semble entrer en conflit frontal avec `docs/06`, qui tranche d'avance :
+
+> **« Et l'honnêteté prime sur la fluidité. »**
+
+Ce n'était pas un conflit. C'était une **intuition fausse sur l'origine de la
+latence**, et il a suffi de mesurer pour la faire tomber.
+
+### Ce que la mesure dit
+
+```text
+Intent Tier 0                    0,0046 ms   ← mesuré, 10 000 énoncés
+Policy Gate (Cedar, en mémoire)  < 1 ms
+Outil local + relecture          quelques ms (PostgreSQL local)
+────────────────────────────────────────────
+Transcription + synthèse         des CENTAINES de ms
+```
+
+**La chaîne vérifiée de Jarvis ne coûte rien.** « Vérifié, donc lent » est faux
+ici : le budget d'un tour de parole est consommé par le micro et le haut-parleur,
+pas par le Policy Gate. Il n'y a donc **rien à sacrifier** — la question était mal
+posée, pas insoluble.
+
+### Pourquoi un assistant généraliste *paraît* plus fluide
+
+Il **parle avant de savoir** : il génère une continuation plausible pendant que
+l'action est encore en vol. C'est exactement ce que `S15` interdit, et ce n'est
+pas une contrainte gratuite — c'est ce qui sépare « c'est envoyé » de « le
+fournisseur ne l'a pas confirmé ».
+
+### La décision : deux temps, comme un humain
+
+```text
+« ajoute du café à ma liste »
+  ↓ immédiat
+« je m'en occupe »        ← ne prétend RIEN sur l'action
+  ↓ quelques millisecondes
+« c'est dans ta liste »   ← le VERDICT, quand il est connu
+```
+
+L'accusé de réception porte sur **la réception**, jamais sur l'effet. Un humain
+dit « ok, je le fais » avant de l'avoir fait, et personne n'y voit un mensonge.
+Ce qui serait un mensonge, c'est « c'est fait » avant de le savoir.
+
+### Ce qui rend la propriété structurelle, et non déclarative
+
+`accuseReception` ne reçoit **que la proposition d'intention** : ni statut de
+vérification, ni sortie d'outil, ni verdict. Elle est donc **incapable** de dire
+« c'est fait » — pas par discipline de l'auteur, par type.
+
+C'est le geste de `confirmed()`, seule fabrique de succès du système : on ne
+demande pas à l'auteur de se retenir, **on lui retire le moyen**.
+
+### L'invariant que l'oral ajoute : une hypothèse n'est pas une phrase
+
+Un moteur de reconnaissance en flux émet des hypothèses qu'il **révise**.
+« Envoie un message à Paul » passe par « Envoie un message ».
+
+> **Un énoncé non final ne franchit jamais le Policy Gate.**
+
+Agir sur une transcription révisable, c'est agir sur une phrase que
+l'utilisateur **n'a jamais prononcée**. Et c'est précisément le raccourci par
+lequel un assistant vocal gagne de la fluidité : commencer plus tôt. Ici,
+commencer plus tôt fabriquerait l'ordre qu'on exécute.
+
+`ecouter()` est donc la porte unique par laquelle un énoncé devient une action.
+Le CLI l'appelle sur chaque ligne — une ligne tapée est toujours finale. La porte
+existe **avant** l'audio plutôt qu'après : le jour où une transcription alimente
+cette boucle, elle passe par le même verdict sans qu'on ait à s'en souvenir.
+
+### Ce qui est branché, et ce qui ne l'est pas
+
+```text
+ecouter          BRANCHÉ   src/apps/cli/main.ts, sur chaque énoncé
+accuseReception  ÉCRIT     aucun appelant de production
+```
+
+`accuseReception` n'a **pas d'appelant honnête aujourd'hui** : dans un terminal,
+le verdict arrive en quelques millisecondes, et intercaler « je m'en occupe »
+dégraderait la lecture pour faire tourner du code. Elle attend une surface où
+l'attente EXISTE — la synthèse vocale.
+
+`tests/redteam/wiring.test.ts` raisonne par FICHIER : il déclarera
+`voice/turn.ts` atteint dès que le CLI importe `ecouter`. **Cette granularité
+ferait passer une fonction morte pour une fonction branchée** — la confusion que
+`docs/26 §2` recense neuf fois. D'où un test dédié qui affirme l'ABSENCE
+d'appelant, et dont la fonction est de **tomber le jour où l'audio arrive**.
+
+### Sabotage
+
+```text
+`ecouter` ignore le champ `final`             → 2 rouges
+un accusé affirme un effet                    → 2 rouges
+`accuseReception` reçoit le résultat          → 1 rouge (structurel)
+le CLI contourne la porte                     → 2 rouges
+`accuseReception` gagne un appelant           → 1 rouge (la déclaration d'absence)
+```
+
+### Deux défauts trouvés par ces sabotages, dans les tests eux-mêmes
+
+**1. Un détecteur français cassé par `\b`.** Le garde-fou « aucun accusé ne
+contient de participe passé d'action » employait
+`/\b(fait|envoy[ée]|…)\b/`. En JavaScript, `\b` est défini sur l'ASCII : « é »
+n'en fait pas partie, donc *après* lui il n'y a aucune frontière de mot, et
+`envoyé\b` **ne peut pas matcher « envoyé » en fin de phrase**. Le détecteur
+laissait passer exactement les mots qu'il devait attraper. Remplacé par une
+recherche de sous-chaîne — grossière et sans trou, sur un ensemble clos.
+
+**2. Deux chaînes différentes, une seule phrase à l'oreille.** En remplaçant
+`ENGAGE` par « c'est fait », la disjonction avec la table des verdicts est restée
+**verte** : `headline` rend « C'est fait. », une majuscule et un point d'écart.
+À l'écrit deux chaînes, à l'oral **la même phrase** — et la propriété défendue
+est justement qu'un auditeur ne puisse pas les confondre. La comparaison se fait
+désormais sur ce qui s'entend.
+
+### Ce que cet ADR ne fait PAS
+
+Aucune dépendance n'est ajoutée, aucun modèle n'est requis, et **le pipeline
+audio n'existe pas**. `docs/02` Phase 5 (VAD, activation, STT local, TTS local,
+barge-in, Audio Gateway abstrait) reste entièrement à faire, avec sa porte de
+sortie propre : **interruption perçue < 300 ms**.
+
+Ce qui est acquis est le **contrat du tour de parole** — la partie qui décide de
+ce qu'on a le droit de dire et quand. Elle devait précéder le tuyau : écrite
+après, elle aurait été écrite sous la pression de la démo.
+
+### Condition de révision
+
+Le jour où un moteur de transcription alimente la boucle, deux gestes sont
+attendus, et un seul est évident :
+
+1. brancher `accuseReception` sur la synthèse — le test d'absence tombera, et
+   c'est sa fonction ;
+2. **ne pas** ajouter de troisième temps entre l'accusé et le verdict. La
+   tentation sera de meubler l'attente par une phrase de progression
+   (« je regarde… »). Tant qu'elle ne prétend rien, elle est licite ; le jour où
+   elle décrit un effet supposé, `S15` est franchi.

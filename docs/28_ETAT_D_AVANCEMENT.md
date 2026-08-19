@@ -255,7 +255,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **73 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **74 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
@@ -299,9 +299,25 @@ mesurer contre `docs/02` le fait donc disparaître.
 | **3. Câbler le Context Engine** | débloque **A2**, dernier blocage qui ne dépende d'aucun outil manquant. |
 | **2. Câbler le Context Engine** | débloque **A2**, et tient la promesse de levée d'ambiguïté du `QUICKSTART`. |
 | **3. Model Router** (Phase 4) | choisir le moins cher **parmi les éligibles** — l'ordre de `docs/14 §4` devra y être respecté, et c'est le point à ne pas manquer. |
+| ~~2. Câbler le Context Engine~~ | **FAIT** — ADR-071 à ADR-073. **A2 débloqué** (29/30), et **sans modèle** : trois causes sont tombées l'une après l'autre. |
+| ~~3. Contrat du tour de parole~~ | **FAIT** — ADR-074. `ecouter()` est branché ; `accuseReception` est écrit et **déclaré sans appelant**, en attente d'une surface où l'attente existe. Le pipeline audio, lui, reste entier. |
 
 La voix, l'iOS et l'Update Engine viennent après : chacun est un chantier
-entier, et aucun ne renforce ce qui existe.
+entier.
+
+> ⚠ **CETTE PHRASE DISAIT « et aucun ne renforce ce qui existe ». ADR-074 l'a
+> démentie**, et c'est mon propre commit qui l'a fait — raison de plus pour la
+> corriger plutôt que de la laisser.
+>
+> Le **contrat du tour de parole** a renforcé la boucle texte avant tout audio :
+> `ecouter()` est désormais la porte unique par laquelle un énoncé devient une
+> action, à la place d'un `trim()` suivi d'un test de vide. Et la mesure du
+> chantier voix a falsifié l'intuition qui le rendait effrayant — « vérifié,
+> donc lent » : la chaîne de Jarvis coûte **0,0046 ms** au Tier 0, contre des
+> centaines de millisecondes pour la transcription et la synthèse.
+>
+> Ce qui reste vrai : le **pipeline audio** (VAD, activation, STT, TTS,
+> barge-in, Audio Gateway) est un chantier entier et n'existe pas.
 
 ---
 
