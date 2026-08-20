@@ -99,3 +99,8 @@ jobs:
 
       - name: Porte de sortie Phase 2
         run: pnpm gate:phase2
+
+      # ADR-087 — la Phase 3 se déclarait franchie en comptant ses outils.
+      # Une porte absente de la CI est une porte qu'on oublie de franchir.
+      - name: Porte de sortie Phase 3
+        run: pnpm gate:phase3

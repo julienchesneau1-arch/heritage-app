@@ -255,8 +255,8 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **86 ADR**, chacune avec sa condition de révision |
-| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 COMPLÈTE (10/10)** avec `web_search` (ADR-055) ; 4→7 ouvertes |
+| 01 | ADR | **87 ADR**, chacune avec sa condition de révision |
+| 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 FRANCHIE — et désormais VÉRIFIABLE** par `pnpm gate:phase3` (ADR-087). Elle était déclarée « COMPLÈTE (10/10) » **sans porte de sortie** : le chiffre comptait des outils écrits, pas les trois conditions de `docs/02`. La porte existe, elle passe — l'affirmation était juste, mais sans preuve ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
 | 05 | Tests dorés | **29/30 référencés**, 1 bloqué déclaré — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |

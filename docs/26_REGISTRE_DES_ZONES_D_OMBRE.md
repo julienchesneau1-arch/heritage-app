@@ -402,6 +402,52 @@ zéro code émis. Vérifié, pas supposé.
 
 ---
 
+### 2.12 La Phase 3 était déclarée franchie sans porte de sortie
+
+**Trouvé en cherchant quoi faire « en suivant les docs ».**
+
+`docs/28` affirmait « Phase 3 COMPLÈTE (10/10) ». Le chiffre compte des outils
+**écrits**. Les trois conditions de la porte de sortie de `docs/02` — contrats
+tenus, `audit_query` répondant depuis le journal, réversibilité déclarée —
+**n'étaient vérifiées par aucun mécanisme**, alors que les phases 0, 1 et 2 ont
+chacune leur `pnpm gate:phaseN`.
+
+> Compter des outils écrits n'est pas franchir une porte. C'est mesurer
+> l'effort au lieu du résultat.
+
+**Corrigé** (ADR-087) : `ops/gates/phase3.ts`, cinq contrôles. **La porte
+passe** — l'affirmation était donc juste, mais elle l'était sans preuve.
+Deuxième fois en deux jours qu'un mécanisme manquant confirme au lieu de
+réfuter (§2.10).
+
+**Trois pièges évités en l'écrivant, et ils valent d'être lus :**
+
+| | |
+|---|---|
+| Deux cases, un seul mécanisme | `validateDefinition` couvre la 1ʳᵉ et la 3ᵉ. Les scinder aurait simulé une couverture plus large sans rien vérifier de plus |
+| La liste des 15 outils est **recopiée du document** | dérivée du code, elle dirait « les outils enregistrés sont enregistrés » — vrai de tout catalogue |
+| Le contrôle négatif d'origine **ne pouvait pas échouer** | il cherchait l'absence d'un identifiant qu'`audit_query` ne reçoit jamais. Un contrôle infalsifiable est décoratif — le défaut même que la porte corrige |
+
+**Et l'observateur s'est compté, pour la deuxième fois dans ce dépôt.** La
+comparaison de comptes était une égalité stricte ; mesuré : journal 80, audit
+79. L'appel d'audit **est lui-même journalisé pendant qu'il lit** — mot pour
+mot le piège de `system_status`, à deux mois d'intervalle. Corrigé par un
+encadrement.
+
+**Sabotages** : 4 rouges sur 4 directions distinctes — dont *« l'audit invente »*
+et *« l'audit n'invente plus rien »*.
+
+> ⚠ **Et un sabotage qui n'avait jamais été appliqué.** Le motif ne matchait
+> rien ; la porte restait verte ; j'aurais pu conclure qu'elle était aveugle.
+> Vérifié par `git diff` avant d'interpréter. Deuxième occurrence : **un
+> sabotage se vérifie appliqué avant d'être interprété.**
+
+**Ce que la porte ne dit pas, et qu'elle imprime elle-même** : aucun
+fournisseur externe n'est interrogé. Une limite qu'il faut aller chercher dans
+un ADR n'est pas une limite déclarée.
+
+---
+
 ### 2.11 Une justification de silence qui nommait un mécanisme inexistant
 
 **Trouvé en préparant l'installation d'un modèle chez l'utilisateur.**

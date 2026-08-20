@@ -37,6 +37,7 @@
     "gate:phase0": "tsx --env-file-if-exists=.env ops/gates/phase0.ts",
     "gate:phase1": "tsx --env-file-if-exists=.env ops/gates/phase1.ts",
     "gate:phase2": "tsx --env-file-if-exists=.env ops/gates/phase2.ts",
+    "gate:phase3": "tsx --env-file-if-exists=.env ops/gates/phase3.ts",
     "bench": "tsx --env-file-if-exists=.env ops/bench/run.ts"
   },
   "dependencies": {

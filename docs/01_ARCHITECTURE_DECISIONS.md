@@ -6984,3 +6984,108 @@ insuffisant. Le vrai motif :
 Trois occurrences en deux jours (ADR-083, 085, 086) partagent la même forme :
 un mécanisme nommé dans une justification, jamais éprouvé à l'endroit où il est
 invoqué.
+
+---
+
+## ADR-087 — La Phase 3 était déclarée franchie sans porte de sortie
+
+**Statut** : accepté · **Date** : 2026-08-20
+
+### Contexte
+
+`docs/28` affirmait : **« Phase 3 COMPLÈTE (10/10) »**.
+
+Le chiffre compte des outils **écrits**. La porte de sortie de `docs/02` pose
+trois conditions, et **aucune n'était vérifiée par un mécanisme** :
+
+```text
+[ ] Les 15 outils passent leurs tests de contrat.
+[ ] `audit_query` répond correctement à « Qu'as-tu fait aujourd'hui ? »
+    DEPUIS LE JOURNAL, pas depuis le modèle.
+[ ] Chaque outil déclare sa réversibilité, son niveau de risque et sa
+    méthode de vérification.
+```
+
+Les phases 0, 1 et 2 ont chacune leur `pnpm gate:phaseN`. La Phase 3 se
+déclarait franchie en comptant ses livrables.
+
+> **Compter des outils écrits n'est pas franchir une porte.** C'est mesurer
+> l'effort au lieu du résultat.
+
+### Décision, et le résultat
+
+`ops/gates/phase3.ts` — cinq contrôles, et `pnpm gate:phase3`.
+
+**Résultat : la porte passe.** L'affirmation de `docs/28` était donc **juste**
+— mais elle était juste sans preuve. Deuxième fois en deux jours qu'un
+mécanisme manquant confirme au lieu de réfuter (ADR-085), et c'est un résultat :
+on sait maintenant, au lieu de supposer.
+
+### Trois choix de conception qui ont failli être trois défauts
+
+**1. Deux cases, un seul mécanisme — et on le dit.** La première et la
+troisième condition se vérifient au même endroit : `validateDefinition` refuse
+déjà un outil réversible sans rollback. Les scinder aurait donné l'apparence
+d'une couverture plus large sans rien vérifier de plus.
+
+**2. La liste des quinze outils est RECOPIÉE du document, pas dérivée du code.**
+Une liste dérivée du catalogue dirait « les outils enregistrés sont
+enregistrés » — vrai de tout catalogue, et ne franchit aucune porte.
+
+**3. Le contrôle négatif d'origine ne pouvait pas échouer.** Je vérifiais
+qu'une opération jamais journalisée n'apparaissait pas. Or `audit_query` ne
+reçoit jamais cet identifiant : il ne risquait pas de le rendre.
+
+> Un contrôle infalsifiable est un contrôle décoratif — exactement le défaut
+> que cette porte existe pour corriger.
+
+Remplacé par une mesure **avant et après** l'écriture du même marqueur, plus un
+encadrement du compte.
+
+### L'observateur se comptait — pour la deuxième fois dans ce dépôt
+
+La comparaison de compte était d'abord une **égalité stricte**. Mesuré :
+
+```text
+journal : 80 · audit : 79
+```
+
+L'écart n'était pas un défaut d'`audit_query` : **l'appel d'audit est lui-même
+journalisé pendant qu'il lit.** C'est mot pour mot le piège déjà rencontré dans
+`system_status`, dont le commentaire dit : *« l'observateur se comptait dans ce
+qu'il observait »*.
+
+Le même piège, à deux endroits, à deux mois d'intervalle. Corrigé par un
+encadrement : l'audit voit **au moins** ce qui existait avant lui, **au plus**
+ce qui existe après.
+
+### Sabotages
+
+```text
+un outil promis disparaît du catalogue     → G3.1 rouge, et il le NOMME
+un contrat devient incohérent              → G3.2 rouge
+l'audit ne lit plus le journal             → G3.3 rouge
+l'audit élargit sa fenêtre (il invente)    → G3.3 rouge
+```
+
+**Et un sabotage qui n'avait jamais été appliqué.** Ma première tentative sur
+G3.2 remplaçait `reversible: false` par `true` dans `reminder_create` — qui
+était **déjà** `reversible: true`. Le motif ne matchait rien, la porte restait
+verte, et j'aurais pu conclure qu'elle ne voyait pas le défaut. Vérifié par
+`git diff` avant de conclure. C'est la deuxième fois que ce piège se présente,
+et la règle qui en découle n'a pas changé : **un sabotage se vérifie appliqué
+avant d'être interprété.**
+
+### Ce que cette porte NE dit PAS, et qu'elle imprime elle-même
+
+Aucun fournisseur externe n'est interrogé. `calendar_*` et `web_search` sont
+éprouvés **sans Google et sans réseau** : la porte vérifie que les quinze outils
+existent et que leur contrat tient, pas qu'un tiers répond.
+
+La réserve est écrite dans la sortie de la porte, pas seulement ici — une
+limite qu'il faut aller chercher dans un ADR n'est pas une limite déclarée.
+
+Limite supplémentaire, nommée : le sabotage « l'audit élargit sa fenêtre » n'est
+rattrapé que si le journal contient des événements hors fenêtre. Sur une base
+fraîchement créée, tout date d'aujourd'hui et cette direction ne serait pas
+éprouvée.
