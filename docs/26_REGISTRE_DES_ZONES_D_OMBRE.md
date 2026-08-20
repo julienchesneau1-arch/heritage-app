@@ -604,7 +604,7 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Trois modules de logique hors circuit
+### 4.1 Sept modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
@@ -616,6 +616,7 @@ jamais atteints par le produit**.
 | `context/packet.ts` | l'assemblage du paquet de contexte n'a aucun appelant — résoudre une référence et composer un contexte sont deux choses, et une seule est faite | un consommateur du paquet |
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
+| `update/candidat.ts` · `promotion.ts` · `surveillance.ts` · `lab.ts` | **ADR-088** — la couche qui DÉCIDE d'une mise à jour est écrite ; celle qui EXÉCUTE n'existe pas | un vérificateur TUF/Sigstore, **puis** un exécutant — dans cet ordre (§4.16) |
 | ~~`intent/tier1.ts`~~ | **LEVÉE (ADR-082)** — `createOllama` implémente `ModelProvider` sur la boucle locale ; le `Tier 1` se construit dès que la configuration l'active | — |
 | ~~`tools/outcome.ts`~~ | **LEVÉE (ADR-065)** — `memory_forget` projette son statut sur la ligne mémoire ET chaque dérivé hors cascade ; une mémoire vit à plusieurs endroits, donc l'oubli est multi-cibles | — |
 
@@ -631,15 +632,23 @@ jamais atteints par le produit**.
 3   − context/resolver.ts (ADR-073) — l'Assistant résout « ça » avant d'agir
 4   + intent/tier1.ts (ADR-081) — l'enveloppe de sûreté écrite AVANT le modèle
 3   − intent/tier1.ts (ADR-082) — createOllama existe, le Tier 1 se construit
+7   + les QUATRE modules de l'Update Engine (ADR-088), d'un coup
 ```
 
-> **La dernière ligne monte, et c'est assumé.** Ce compteur n'est pas une note
-> à minimiser : il mesure l'écart entre ce qui est écrit et ce qui sert. Le
-> `Tier 1` y entre pour la même raison délibérée que le CostGate — l'enveloppe
-> de sûreté s'écrit **à froid**, avant la capacité qu'elle encadre. Clouer
-> `userConfirms` à `false` et marquer chaque paramètre `MODEL_OUTPUT` est
-> beaucoup plus facile maintenant qu'après, quand un modèle tournera enfin et
-> qu'on aura hâte de le voir répondre.
+> **La dernière ligne monte de quatre d'un coup, et c'est assumé.** Ce compteur
+> n'est pas une note à minimiser : il mesure l'écart entre ce qui est écrit et
+> ce qui sert. L'Update Engine y entre pour la même raison délibérée que le
+> CostGate et le `Tier 1` — l'enveloppe de sûreté s'écrit **à froid**, avant la
+> capacité qu'elle encadre.
+>
+> Clouer *« une signature non vérifiée est refusée, sans exception »* est facile
+> aujourd'hui. Ça le sera beaucoup moins le jour où un correctif de sécurité
+> urgent attendra derrière ce refus — et c'est **ce jour-là** qu'on aurait
+> écrit la règle si on avait attendu d'avoir un exécutant.
+>
+> Le faire baisser en branchant un exécutant de mise à jour qui n'a aucun
+> vérificateur de signature serait le tricher, et produirait exactement le
+> système que `docs/07 §4` interdit.
 >
 > Le faire baisser en branchant un modèle qui n'existe pas serait le tricher.
 >
@@ -1629,6 +1638,46 @@ phrase, mais par ce qui a été dit avant.
 ⚠ **Le piège du chiffre** : on peut le faire monter en ajoutant des règles pour
 les phrases exactes du scénario. Il grimperait sans que rien ne s'améliore. Les
 trente tours sont un **échantillon**, pas une cible.
+
+---
+
+### 4.16 L'Update Engine DÉCIDE, il n'EXÉCUTE pas
+
+**Ouverte par ADR-088**, sciemment, en construisant la Phase 7.
+
+`docs/07` décrit douze étapes. Une seule est construite.
+
+| | État |
+|---|---|
+| décider si une version peut être promue | **construit**, éprouvé, gardé |
+| décider s'il faut revenir en arrière | **construit** |
+| garantir que le LAB n'a pas les secrets | **construit** |
+| vérifier une signature (TUF/Sigstore, §4) | **absent** |
+| installer, promouvoir, retirer (§1) | **absent** |
+| canary sur trafic réel (§8) | **absent** |
+| backups, reprise après sinistre (§11-12) | **absent** |
+
+C'est la distinction de §4.10, appliquée ailleurs : **vrai au sens de la
+DÉCISION, faux au sens de l'ACTION.**
+
+**Conséquence, et elle est saine** : aucun appelant ne peut produire
+`signature: 'VERIFIEE'` honnêtement, donc **toute mise à jour est refusée
+aujourd'hui**. Ce n'est pas un effet de bord du travail inachevé, c'est le bon
+état par défaut — et l'enveloppe de sûreté a été écrite **à froid**, avant la
+capacité qu'elle encadre, comme le CostGate et le `Tier 1`.
+
+**Ce qui la borne** : `pnpm gate:phase7` imprime la liste des absences à chaque
+passage. Une limite qu'il faut aller chercher dans un ADR n'est pas une limite
+déclarée (ADR-087).
+
+**Condition de levée** : un vérificateur TUF/Sigstore, puis un exécutant. Dans
+cet ordre — un exécutant sans vérificateur installerait n'importe quoi.
+
+> ⚠ **Un seuil de ce module est un CHOIX, et il est écrit comme tel.**
+> `APPELS_MINIMUM = 30` n'est dérivé d'aucun calcul de puissance : il écarte le
+> cas manifeste (« trois appels, un raté, donc rollback »). Ce qui est établi,
+> c'est qu'un seuil doit exister. Condition de révision : la première mise à
+> jour réellement surveillée.
 
 ---
 

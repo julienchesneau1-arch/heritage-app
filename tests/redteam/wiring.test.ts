@@ -149,6 +149,28 @@ describe('RED TEAM — code mort en production', () => {
            branché — et ce test le signalera si on oublie de l'y brancher. */
         'src/core/cost/gate.ts',
 
+        /* ⚠ QUATRE MODULES ENTRENT ICI D'UN COUP — ADR-088, Update Engine.
+
+           Et c'est la plus grosse hausse que ce compteur ait connue. Elle est
+           délibérée, pour la raison exacte qui a mis le CostGate dans cette
+           liste : **l'enveloppe de sûreté s'écrit à froid.**
+
+           Clouer « une signature non vérifiée est refusée, sans exception » est
+           facile aujourd'hui. Ça le sera beaucoup moins le jour où un correctif
+           de sécurité urgent attendra derrière ce refus — et c'est précisément
+           ce jour-là qu'on aurait écrit la règle si on avait attendu.
+
+           Ils sortiront de cette liste quand un vérificateur TUF/Sigstore puis
+           un exécutant existeront (`docs/26 §4.16`). Dans cet ordre : un
+           exécutant sans vérificateur installerait n'importe quoi.
+
+           ⚠ ET LE COMPTEUR MONTE, CE QUI EST LE POINT. Le faire baisser en
+           branchant un exécutant qui n'a rien à vérifier serait le tricher. */
+        'src/core/update/candidat.ts',
+        'src/core/update/promotion.ts',
+        'src/core/update/surveillance.ts',
+        'src/core/update/lab.ts',
+
 
         /* ⚠ `src/core/intent/tier1.ts` A QUITTÉ CETTE LISTE — ADR-082.
 
@@ -175,7 +197,7 @@ describe('RED TEAM — code mort en production', () => {
     );
   });
 
-  it('trois modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
+  it('SEPT modules de LOGIQUE testés ne sont traversés par aucun usage', () => {
     const deadLogic = orphans.filter((f) => !pureContracts.includes(f));
     /* Le chiffre est asserté, pas seulement la liste : c'est ce qui force à
        PASSER ICI quand un module cesse d'être atteint — ou le devient.
@@ -206,8 +228,24 @@ describe('RED TEAM — code mort en production', () => {
        dès que `createOllama` a existé.
 
        Un aller-retour d'une seule étape, annoncé à l'aller. C'est ce qu'on
-       attend d'une dette datée, par opposition à celle qu'on découvre. */
-    expect(deadLogic).toHaveLength(3);
+       attend d'une dette datée, par opposition à celle qu'on découvre.
+
+       **À SEPT avec ADR-088**, et c'est la plus forte hausse de l'histoire de
+       ce compteur : les quatre modules de l'Update Engine entrent d'un coup.
+
+       ⚠ IL FAUT LIRE CETTE HAUSSE COMME UNE DÉCISION, PAS COMME UN RECUL.
+
+       C'est le motif du CostGate à l'échelle d'une phase : l'enveloppe de
+       sûreté s'écrit À FROID. Clouer « une signature non vérifiée est refusée,
+       sans exception » est facile aujourd'hui ; ça le sera beaucoup moins le
+       jour où un correctif de sécurité urgent attendra derrière ce refus — et
+       c'est ce jour-là qu'on aurait écrit la règle si on avait attendu.
+
+       Ce compteur ne mesure pas une qualité : il mesure **l'écart entre ce qui
+       est écrit et ce qui sert**. Le faire baisser en branchant un exécutant
+       de mise à jour qui n'a aucun vérificateur de signature serait le
+       tricher — et produirait exactement le système que `docs/07 §4` interdit. */
+    expect(deadLogic).toHaveLength(7);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

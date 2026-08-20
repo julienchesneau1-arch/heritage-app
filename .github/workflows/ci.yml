@@ -104,3 +104,9 @@ jobs:
       # Une porte absente de la CI est une porte qu'on oublie de franchir.
       - name: Porte de sortie Phase 3
         run: pnpm gate:phase3
+
+      # ADR-088 — couche de DÉCISION de l'Update Engine. La Phase 7 n'est PAS
+      # franchie : l'exécution (signature, installation, canary, backups)
+      # n'existe pas, et la porte l'imprime à chaque passage.
+      - name: Update Engine — couche de décision (Phase 7 partielle)
+        run: pnpm gate:phase7

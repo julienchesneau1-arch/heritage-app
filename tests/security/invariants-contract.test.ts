@@ -174,13 +174,21 @@ const TRACES: Readonly<Record<string, Trace>> = {
  * un chemin qui doit rester introuvable. Le jour où quelqu'un l'écrit, ce test
  * rougit et l'exemption tombe — sans qu'on ait à s'en souvenir.
  */
-const NON_EXIGIBLES: Readonly<Record<string, { manque: string; phase: string; absent: string }>> = {
-  S11: {
-    manque: "Update Engine — `docs/07` est spécifié, aucun module canary/rollback/twin n'existe",
-    phase: 'docs/02 Phase 7',
-    absent: 'src/core/update',
-  },
-};
+/**
+ * ⚠ CETTE LISTE EST VIDE DEPUIS QUE S11 EN EST SORTI — Phase 7.
+ *
+ * Elle contenait une seule entrée : S11, exempté parce que
+ * `src/core/update` n'existait pas. La garde `absent` a rougi le jour où ce
+ * répertoire a été créé, **sans que personne ait eu à s'en souvenir**.
+ *
+ * C'est le comportement qu'on attendait d'elle, et il vaut d'être noté : une
+ * dette déclarée avec sa condition de fin se rembourse toute seule. Un
+ * commentaire disant « penser à retirer S11 quand… » ne l'aurait pas fait.
+ *
+ * Le vide n'est pas une invitation à remplir. Une exemption ne s'ajoute qu'avec
+ * un chemin `absent` qui la fera tomber — sans quoi elle est une échappatoire.
+ */
+const NON_EXIGIBLES: Readonly<Record<string, { manque: string; phase: string; absent: string }>> = {};
 
 describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
   const markdown = readFileSync('docs/03_SECURITY_AND_PRIVACY.md', 'utf8');
@@ -204,14 +212,21 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
    * LE CHIFFRE, ÉCRIT DANS UN TEST PLUTÔT QUE DANS UN RAPPORT
    * ================================================================== */
 
-  it('NEUF invariants sont nommés — et le chiffre est ici, pas dans un rapport', () => {
+  it('DIX invariants sont nommés — et le chiffre est ici, pas dans un rapport', () => {
     const nommes = ids.filter(estNomme);
 
     /* `docs/28` a dit « neuf » pendant plusieurs sprints parce qu'un rapport se
        recopie sans se revérifier. Un test, lui, échoue. Ce chiffre doit monter
-       — et le faire monter oblige à passer ici, ce qui est exactement le point. */
-    expect(nommes).toEqual(['S1', 'S2', 'S3', 'S6', 'S7', 'S12', 'S13', 'S14', 'S15']);
-    expect(nommes.length).toBe(9);
+       — et le faire monter oblige à passer ici, ce qui est exactement le point.
+
+       S11 entre ici en Phase 7, et par le bon chemin : son exemption portait sa
+       propre condition de fin (`absent: 'src/core/update'`), qui a rougi le jour
+       où ce répertoire a existé. Il est désormais éprouvé par
+       `tests/update/promotion.test.ts`. */
+    expect(nommes).toEqual([
+      'S1', 'S2', 'S3', 'S6', 'S7', 'S11', 'S12', 'S13', 'S14', 'S15',
+    ]);
+    expect(nommes.length).toBe(10);
   });
 
   it('AUCUN invariant n\'est sans trace : ni nommé, ni désigné, ni exempté', () => {
@@ -308,10 +323,20 @@ describe('docs/03 — les quinze invariants sont-ils traçables ?', () => {
 
     expect(nommes + traces + exemptes).toBe(ids.length);
     expect(traces).toBe(5);
-    expect(exemptes).toBe(1);
+
+    /* ⚠ ZÉRO EXEMPTION, ET C'EST UN CHIFFRE À DÉFENDRE.
+
+       Il valait 1 — S11, l'Update Engine. L'exemption s'est autodétruite en
+       Phase 7 comme sa garde `absent` le prévoyait, et S11 est passé du côté
+       NOMMÉ.
+
+       Le maintenir à zéro est le vrai contenu de cette assertion : chaque
+       exemption future devra passer ici, donc être argumentée. Une catégorie
+       « non exigible » qui se remplit sans bruit redevient une échappatoire. */
+    expect(exemptes).toBe(0);
 
     // Le taux publié par `docs/28`. Il est ici pour ne plus pouvoir dériver.
-    expect(Math.round((nommes / ids.length) * 100)).toBe(60);
+    expect(Math.round((nommes / ids.length) * 100)).toBe(67);
   });
 
   /* ================================================================== *

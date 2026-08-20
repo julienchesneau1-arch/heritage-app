@@ -7089,3 +7089,167 @@ Limite supplémentaire, nommée : le sabotage « l'audit élargit sa fenêtre »
 rattrapé que si le journal contient des événements hors fenêtre. Sur une base
 fraîchement créée, tout date d'aujourd'hui et cette direction ne serait pas
 éprouvée.
+
+---
+
+## ADR-088 — Update Engine : la couche qui DÉCIDE, et pas celle qui agit
+
+**Statut** : accepté · **Date** : 2026-08-20 · **Applique** : `docs/07`, Phase 7
+
+### Ce qui est construit, et ce qui ne l'est pas
+
+`docs/07` décrit un pipeline en douze étapes. Ce commit en implémente **une** :
+celle qui décide. Il faut le dire avant tout le reste, parce que la moitié
+absente est la plus visible.
+
+```text
+CONSTRUIT     décider si une version a le droit d'être promue
+              décider si une version en production doit être retirée
+              garantir que le LAB n'a pas les secrets de production
+
+NON CONSTRUIT vérifier une signature (TUF/Sigstore, §4)
+              installer, promouvoir, retirer réellement (§1)
+              le canary sur trafic réel (§8)
+              backups et reprise après sinistre (§11, §12)
+```
+
+C'est la distinction que `docs/26 §4.10` fait déjà pour l'annulation : **vrai
+au sens de la DÉCISION, faux au sens de l'ACTION.** Les confondre reviendrait à
+dire que Jarvis sait se mettre à jour, alors qu'il sait seulement dire non.
+
+**Et c'est la moitié qu'il fallait écrire d'abord**, pour la raison qui a
+présidé au CostGate (ADR-040) et au `Tier 1` (ADR-081) : l'enveloppe de sûreté
+s'écrit **à froid**. Clouer « une signature non vérifiée est refusée » est
+facile aujourd'hui ; ça le sera beaucoup moins le jour où un correctif de
+sécurité urgent attendra derrière ce refus.
+
+### Conséquence assumée : aujourd'hui, tout est refusé
+
+Aucun appelant ne peut produire `signature: 'VERIFIEE'` honnêtement — le
+vérificateur n'existe pas. **Le système refuse donc toute mise à jour.** C'est
+le bon état par défaut, et il est délibéré, pas un effet de bord du travail
+inachevé.
+
+### L'ordre des refus est la propriété
+
+```text
+1. signature   non VÉRIFIÉE → refus, sans exception (§4)
+2. canal       BETA / EXPERIMENTAL ne vont jamais en production (§10)
+3. mesures     pas de LAB = pas de promotion (§1)
+4. critères    un seuil manqué refuse (§6)
+5. portée      ce qui touche §3 exige un HUMAIN — même tout vert
+```
+
+**Le rang 5 vient en dernier, et c'est tout le raisonnement.** Un humain ne
+doit jamais être invité à approuver une version qui a échoué : lui poser la
+question reviendrait à lui faire couvrir un défaut que la machine a déjà vu. On
+ne demande une signature humaine que sur ce qui est, par ailleurs,
+irréprochable.
+
+`DECISION_HUMAINE_REQUISE` n'est donc ni un oui ni un non. La confondre avec
+`PROMOUVOIR` donnerait au système le droit de modifier ses propres politiques
+de sécurité ; la confondre avec `REFUSER` rendrait ces politiques
+**incorrigibles**.
+
+### Trois décisions de conception qui méritent d'être défendues
+
+**1. Le repli des portées est FERMÉ.** Une portée qui ne figure dans aucune des
+deux listes de `docs/07` exige un humain. Les listes sont **recopiées** du
+document, pas dérivées de l'énumération : dérivées, elles décideraient toutes
+seules du camp d'une portée ajoutée demain.
+
+**2. « Pas assez de données » n'est pas « tout va bien ».** Trente secondes
+après une promotion, le tableau de bord est vert parce qu'il est vide.
+`surveiller` rend donc `INSUFFISANT`, jamais `RIEN`, sous un minimum d'appels —
+`UNKNOWN` contre `FAILED` (`docs/19`) appliqué à la surveillance.
+
+Le seuil (30) est **un choix, pas un résultat**, et c'est écrit dans le code :
+il écarte le cas manifeste, il n'est dérivé d'aucun calcul de puissance. Ce qui
+est établi, c'est qu'un seuil doit exister — sans lui, la première seconde de
+trafic décide du sort d'une version.
+
+**3. Trois métriques surveillées ne déclenchent PAS de rollback**, et la plus
+discutable est la meilleure :
+
+> Une hausse du taux de **clarification** ressemble à une régression et peut
+> être exactement l'inverse. `docs/05 §A3` interdit de deviner quand deux
+> lectures diffèrent. En faire un déclencheur pousserait le système à
+> préférer, version après version, celles qui devinent.
+
+Le **coût** est écarté parce que le CostGate le borne déjà, et mieux : il
+bloque la dépense au lieu de retirer une version. Deux mécanismes sur le même
+fait finiraient par diverger (ADR-041).
+
+### Le LAB : une garde de construction, pas une consigne
+
+`createLabVault()` **n'accepte aucun paramètre**, et c'est la garde. Une
+fabrique acceptant un « coffre de repli » rouvrirait le trou qu'elle prétend
+fermer : il suffirait d'un appelant pressé pour lui passer celui de production.
+
+Ne rien accepter rend le mauvais usage **impossible à écrire**, pas seulement
+déconseillé.
+
+Il **refuse** au lieu de rendre de faux secrets, et le raisonnement est celui
+d'ADR-043 : un faux jeton ferait tenter l'appel réseau, échouer
+l'authentification, et le LAB rapporterait un échec de FOURNISSEUR là où il y a
+une absence de SECRET. Pire, un artefact malveillant y apprendrait la **forme**
+de nos secrets.
+
+### Ce que le dépôt m'a fait, et qui vaut mieux que tout ce qui précède
+
+Créer `src/core/update/` a fait rougir un test que je n'avais pas écrit :
+
+```text
+S11 est exempté parce que src/core/update n'existe pas — or il existe
+```
+
+`invariants-contract.test.ts` déclarait S11 « non exigible » **avec sa propre
+condition de fin** : `absent: 'src/core/update'`. L'exemption s'est
+autodétruite le jour même, sans que personne ait eu à s'en souvenir.
+
+> C'est toute la différence entre une dette déclarée et un commentaire disant
+> « penser à ». La première se rembourse toute seule.
+
+S11 — *« une mise à jour en production exige des tests de non-régression »* —
+est donc désormais **nommé** et éprouvé. Le compte passe de neuf à dix, et il
+ne reste **aucune exemption** : un chiffre à défendre, puisque chaque exemption
+future devra désormais passer par là.
+
+### Et une divergence trouvée dans `docs/28` — dont la cause est instructive
+
+En reportant le chiffre, deux lignes du même document se contredisaient :
+
+```text
+ligne  62   « 9 des 15 — 60 % »          ← concordait avec le test
+ligne 260   « 7/15 — chiffre corrigé »   ← ne concordait avec rien
+```
+
+**Ma première rédaction accusait la ligne 260 d'avoir menti. C'était injuste,
+et je l'ai corrigée.** Elle était VRAIE à la date de sa mesure : sept
+invariants étaient alors nommés. Le travail en a nommé deux de plus, et la
+ligne n'a pas suivi.
+
+La vraie leçon est ailleurs, et elle est plus utile :
+
+```text
+ligne  62   couverte par `coherence-des-chiffres.test.ts` → n'a jamais dérivé
+ligne 260   couverte par rien                             → a dérivé en silence
+```
+
+> Un chiffre mesuré une fois n'est pas un chiffre juste : c'est un chiffre
+> juste **à la date de la mesure**. Seul un test le maintient.
+
+Corrigée à 10/15 (67 %), et la moyenne de profondeur passe de 81 % à 83 % —
+elle, parce qu'un test l'a exigé dans la minute.
+
+### Sabotages
+
+```text
+la garde de signature saute              → 6 rouges
+la portée décide AVANT les refus         → 2 rouges
+le coffre du LAB devient celui de prod   → 3 rouges
+```
+
+Le deuxième est le plus important : il ne casse aucune fonctionnalité, il
+change seulement l'ORDRE — et produit un système qui demande à Julien
+d'approuver des versions défectueuses.

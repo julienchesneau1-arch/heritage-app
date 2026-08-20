@@ -53,23 +53,39 @@ elle n'est donc pas un dû.
 
 ---
 
-## 2. Profondeur de preuve — **≈ 81 %**
+## 2. Profondeur de preuve — **≈ 83 %**
 
 C'est l'axe où l'effort est allé, et il se mesure autrement.
 
 | Source | Mesure | Taux |
 |---|---|---|
-| **Invariants de sécurité S1–S15** (`docs/03`) | **9 des 15** nommément référencés dans les tests | **60 %** |
+| **Invariants de sécurité S1–S15** (`docs/03`) | **10 des 15** nommément référencés dans les tests | **67 %** |
 | **Tests dorés A·B·C** (`docs/05`) | **29 des 30** référencés, 1 déclaré bloqué | **97 %** |
 | **Couches du banc** (`docs/22 §6`) | 5 faites, 2 partielles, 1 couverte sur 8 | **≈ 72 %** |
 | **Invariants Foundation I1–I19** | 18 pleinement, I13 partiel | **≈ 95 %** |
-| **Moyenne** | | **≈ 81 %** |
+| **Moyenne** | | **≈ 83 %** |
 
-### Le chiffre des invariants était FAUX, et dans le sens qui flatte
+### Le chiffre des invariants a été faux, puis vrai, puis PÉRIMÉ — trois fois
 
-Ce document affirmait « **9 des 15** » sans l'avoir mesuré. La mesure —
-`grep -E "\bS[0-9]+\b"` sur `tests/`, frontières de mot comprises — en donnait
-alors **sept**, et le neuf avait été hérité d'un rapport antérieur.
+L'histoire vaut mieux que le chiffre, parce qu'elle montre ce qui garde un
+document honnête et ce qui ne le garde pas.
+
+```text
+« 9 des 15 »   hérité d'un rapport, jamais mesuré        → faux
+« 7 des 15 »   MESURÉ, et vrai à cet instant             → juste
+  9            le travail a nommé deux invariants de plus → la ligne 260 a
+                                                            dérivé sans bruit
+ 10            S11 entre en Phase 7 (ADR-088)
+```
+
+**Ce qui a fait la différence n'est pas la rigueur, c'est la couverture par un
+test.** Le taux du tableau ci-dessus est vérifié par
+`coherence-des-chiffres.test.ts` : il n'a jamais pu dériver. La ligne du §4,
+elle, n'était gardée par rien — et elle affichait « 7/15 » face à un tableau
+qui disait 9, dans le même document.
+
+> Un chiffre mesuré une fois n'est pas un chiffre juste : c'est un chiffre
+> juste **à la date de la mesure**. Seul un test le maintient.
 
 > ⚠ **ET CE PARAGRAPHE A LUI-MÊME DÉRIVÉ.** Il a continué d'annoncer « sept »
 > au-dessus d'un bloc qui en listait neuf, parce que j'ai mis à jour le chiffre
@@ -104,7 +120,7 @@ lequel des deux on lit.
 **Le lien est désormais mécanique là aussi** (ADR-054).
 `tests/security/invariants-contract.test.ts` lit `docs/03 §2`, en extrait les
 quinze identifiants, et échoue si l'un n'est ni nommé, ni rattaché à une preuve
-désignée, ni exempté par une absence **vérifiée**. Le taux de 60 % y est écrit
+désignée, ni exempté par une absence **vérifiée**. Le taux de 67 % y est écrit
 en dur : il ne peut plus dériver sans passer par ce fichier.
 
 Une réserve y est chiffrée plutôt que fondue dans « tracé » :
@@ -255,9 +271,9 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **87 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **88 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 FRANCHIE — et désormais VÉRIFIABLE** par `pnpm gate:phase3` (ADR-087). Elle était déclarée « COMPLÈTE (10/10) » **sans porte de sortie** : le chiffre comptait des outils écrits, pas les trois conditions de `docs/02`. La porte existe, elle passe — l'affirmation était juste, mais sans preuve ; 4→7 ouvertes |
-| 03 | Sécurité et confidentialité | invariants posés ; **7/15 nommés en test** — chiffre corrigé, l'ancien « 9/15 » n'avait jamais été mesuré |
+| 03 | Sécurité et confidentialité | invariants posés ; **10/15 nommés en test** (67 %) — S11 y entre en Phase 7, et par le bon chemin : son exemption portait sa condition de fin (`absent: 'src/core/update'`), qui a rougi le jour où ce répertoire a existé. **Zéro exemption restante.** ⚠ Cette ligne a affiché « 7/15 » face à un tableau qui disait 9, dans le même document. Elle n'avait pas menti : elle était vraie à la date de sa mesure, et le travail a nommé deux invariants de plus sans qu'elle bouge. La ligne 62 est gardée par `coherence-des-chiffres.test.ts` ; celle-ci ne l'était par rien — c'est toute la différence (§2) |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
 | 05 | Tests dorés | **29/30 référencés**, 1 bloqué déclaré — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |
 | 06 | Prompt maître | appliqué à chaque session |
@@ -331,7 +347,7 @@ entier.
 
 ```text
 ÉTENDUE FONCTIONNELLE   ≈ 65 %     ce que Jarvis sait faire
-PROFONDEUR DE PREUVE    ≈ 81 %     ce qu'on peut en démontrer
+PROFONDEUR DE PREUVE    ≈ 83 %     ce qu'on peut en démontrer
 ```
 
 > ⚠ **CETTE SECTION A CONTREDIT LE RESTE DU DOCUMENT.** Elle affichait encore
