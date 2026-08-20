@@ -82,6 +82,36 @@ export interface ModelProvider extends Provider {
 }
 
 /**
+ * L'ÉTAT D'UN MODÈLE LOCAL DANS CET ASSEMBLAGE — ADR-086.
+ *
+ * Trois états, et la distinction entre les deux premiers est tout l'objet de
+ * cette ADR :
+ *
+ * ```text
+ * DESACTIVE   personne n'a demandé de modèle      → normal, c'est le défaut
+ * REFUSE      on en a demandé un, il est refusé   → l'utilisateur doit le savoir
+ * CONFIGURE   il est construit — répond-il ?      → seule une SONDE le dit
+ * ```
+ *
+ * Avant ADR-086, `DESACTIVE` et `REFUSE` étaient **le même `null`**, et
+ * `CONFIGURE` ne se distinguait de rien : un Ollama éteint produisait
+ * exactement le comportement d'une absence de modèle, sans un mot.
+ *
+ * `REFUSE` porte sa raison. Elle était calculée par `createOllama` puis jetée
+ * par `if (!modele.ok) return null;` — le dépôt justifiait pourtant le silence
+ * du démarrage en écrivant que cette explication était disponible.
+ *
+ * ⚠ `CONFIGURE` NE VEUT PAS DIRE « DISPONIBLE ». Construire un client ne
+ * valide qu'une URL. Seul `provider.health()` observe, et une observation ne
+ * vaut qu'à l'instant où elle est faite — d'où une sonde, pas un booléen
+ * mémorisé au démarrage.
+ */
+export type EtatModeleLocal =
+  | { readonly kind: 'DESACTIVE' }
+  | { readonly kind: 'REFUSE'; readonly raison: string }
+  | { readonly kind: 'CONFIGURE'; readonly provider: ModelProvider };
+
+/**
  * Embeddings.
  *
  * Interface distincte de `ModelProvider` : le modèle d'embedding n'est pas

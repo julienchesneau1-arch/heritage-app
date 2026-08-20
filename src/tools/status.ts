@@ -14,7 +14,7 @@
  *
  * CE QU'IL RAPPORTE, ET POURQUOI CE SONT CEUX-LÀ
  * -----------------------------------------------
- * Trois choses seulement, chacune parce qu'elle peut mal aller sans bruit :
+ * Quatre choses, chacune parce qu'elle peut mal aller sans bruit :
  *
  *   1. **La chaîne du journal** — si elle est rompue, tout audit passé devient
  *      une supposition. C'est la seule vérification qui invalide
@@ -29,9 +29,24 @@
  *      instantané n'est pas un archivage, il vit sept jours. Passé ce délai
  *      l'action devient définitivement non annulable, en silence.
  *
+ *   4. **Le modèle local** — ADR-086. Ajouté parce que `runtime.ts` justifiait
+ *      son silence au démarrage en affirmant *« `system_status` interroge la
+ *      santé des fournisseurs »*. **C'était faux** : trois contrôles, aucun sur
+ *      un fournisseur. La phrase décrivait ce fichier sans que ce fichier le
+ *      fasse.
+ *
+ *      Le défaut qu'elle couvrait est le plus coûteux de tous pour un
+ *      utilisateur : un Ollama éteint, un nom de modèle mal tapé, une URL
+ *      erronée produisent **exactement** le comportement d'une absence de
+ *      modèle. Jarvis comprend moins bien, ne dit rien, et l'utilisateur en
+ *      conclut que le modèle n'apporte rien — alors qu'il n'a jamais répondu.
+ *
  * Pas de « mémoire OK », pas de « base OK » : si la base ne répondait pas, cet
  * outil ne répondrait pas non plus. Un contrôle qui ne peut pas échouer
  * séparément de son appelant ne mesure rien.
+ *
+ * Le modèle local, lui, échoue parfaitement séparément — c'est même sa
+ * propriété la plus désagréable, et la raison d'être du contrôle 4.
  */
 import { z } from 'zod';
 import {
@@ -41,6 +56,7 @@ import {
 } from '../core/tools/contract.js';
 import { ok, type Result } from '../core/types/result.js';
 import type { Ledger } from '../core/ledger/ledger.js';
+import type { EtatModeleLocal } from '../providers/contract.js';
 
 const SystemStatusInput = z.object({});
 
@@ -56,12 +72,62 @@ interface CompteRow {
   n: string;
 }
 
-export function systemStatusTool(ledger: Ledger): RegisteredTool {
+/**
+ * Sonde le modèle local — ADR-086.
+ *
+ * ⚠ ON SONDE, ON NE MÉMORISE PAS. Un booléen calculé au démarrage dirait
+ * « disponible » d'un Ollama arrêté depuis. `docs/21` l'a établi une fois pour
+ * toutes : une réponse est une OBSERVATION, jamais une preuve durable.
+ *
+ * Et l'échec de la sonde ne devient jamais `INCONNU` par commodité : ne pas
+ * avoir pu joindre un modèle qu'on a demandé EST le problème à signaler.
+ */
+async function controleModeleLocal(etat: EtatModeleLocal): Promise<Controle> {
+  if (etat.kind === 'DESACTIVE') {
+    /* `OK` et non `ATTENTION` : personne n'a rien demandé. Jarvis fonctionne
+       entièrement sans modèle (I1, I2), et le dire « attention » ferait passer
+       le défaut du produit pour une anomalie. */
+    return { verdict: 'OK', detail: 'aucun modèle local configuré — Tier 0 seul, c\'est le défaut' };
+  }
+
+  if (etat.kind === 'REFUSE') {
+    /* Un modèle a été DEMANDÉ et n'a pas été construit. C'est le cas que
+       `null` rendait indiscernable du précédent. */
+    return {
+      verdict: 'ATTENTION',
+      detail: `modèle local demandé mais refusé — ${etat.raison}`,
+    };
+  }
+
+  const id = etat.provider.capabilities.id;
+  const sante = await etat.provider.health();
+  if (!sante.ok) {
+    return {
+      verdict: 'ATTENTION',
+      detail: `modèle « ${id} » configuré mais injoignable — ${sante.error.message}`,
+    };
+  }
+  if (!sante.value.available) {
+    return {
+      verdict: 'ATTENTION',
+      detail: `modèle « ${id} » configuré mais indisponible — ${sante.value.detail ?? 'sans détail'}`,
+    };
+  }
+  return { verdict: 'OK', detail: `modèle « ${id} » répond` };
+}
+
+export function systemStatusTool(
+  ledger: Ledger,
+  /* REQUIS, pas optionnel. Un paramètre optionnel ici retomberait sur
+     « désactivé » quand on oublie de le passer — c'est-à-dire qu'un appelant
+     distrait reproduirait exactement le silence qu'ADR-086 vient de supprimer. */
+  modeleLocal: EtatModeleLocal,
+): RegisteredTool {
   return defineTool<z.infer<typeof SystemStatusInput>>({
     definition: {
       id: 'system_status',
       version: '1.0.0',
-      description: "État du système : intégrité du journal, opérations sans issue, instantanés qui expirent.",
+      description: "État du système : intégrité du journal, opérations sans issue, instantanés qui expirent, modèle local.",
       autonomy: 'L1',
       /* ORANGE et non GREEN, pour la même raison qu'`audit_query` : les
          COMPTES disent quelque chose de l'activité de l'utilisateur, même sans
@@ -178,7 +244,10 @@ export function systemStatusTool(ledger: Ledger): RegisteredTool {
                 + 'les actions correspondantes deviendront non annulables',
             };
 
-      const controles = { journal, operations, annulations };
+      /* --- 4. LE MODÈLE LOCAL — ADR-086 --------------------------------- */
+      const modele = await controleModeleLocal(modeleLocal);
+
+      const controles = { journal, operations, annulations, modele };
       const verdicts = Object.values(controles).map((c) => c.verdict);
 
       return ok({
@@ -195,7 +264,7 @@ export function systemStatusTool(ledger: Ledger): RegisteredTool {
               ? 'INCONNU'
               : 'OK',
           /* Rendu pour qu'un lecteur puisse constater qu'aucun contrôle n'a
-             été silencieusement retiré : trois annoncés, trois rendus. */
+             été silencieusement retiré : quatre annoncés, quatre rendus. */
           controlesEffectues: verdicts.length,
         },
       });

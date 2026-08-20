@@ -108,6 +108,33 @@ export interface DiagnosticReport {
   readonly pending: number;
   readonly embeddings: boolean;
   readonly cloud: boolean;
+  /**
+   * LE MODÈLE LOCAL, EN UNE PHRASE — ADR-086.
+   *
+   * `/diagnostic` ne disait rien du modèle. Un Ollama éteint donnait donc
+   * exactement le même diagnostic qu'une absence de modèle : « tout va bien »,
+   * alors que la capacité que l'utilisateur venait d'installer ne répondait
+   * pas. C'est la question qu'il se pose à ce moment précis.
+   */
+  readonly modeleLocal: string;
+}
+
+/** Rend l'état du modèle local en une phrase lisible — ADR-086. */
+async function modeleLocalLisible(runtime: Runtime): Promise<string> {
+  const etat = runtime.modeleLocal;
+  if (etat.kind === 'DESACTIVE') return 'aucun (Tier 0 seul — c\'est le défaut)';
+  if (etat.kind === 'REFUSE') return `REFUSÉ — ${etat.raison}`;
+
+  /* On SONDE. Un booléen retenu au démarrage affirmerait « disponible » d'un
+     serveur arrêté depuis : une réponse est une observation, pas une preuve
+     durable (`docs/21`). */
+  const id = etat.provider.capabilities.id;
+  const sante = await etat.provider.health();
+  if (!sante.ok) return `${id} — INJOIGNABLE : ${sante.error.message}`;
+  if (!sante.value.available) {
+    return `${id} — INDISPONIBLE : ${sante.value.detail ?? 'sans détail'}`;
+  }
+  return `${id} — répond`;
 }
 
 export async function diagnosticReport(
@@ -129,5 +156,6 @@ export async function diagnosticReport(
     pending: pending.value,
     embeddings: runtime.embeddingsAvailable,
     cloud: runtime.cloudEnabled,
+    modeleLocal: await modeleLocalLisible(runtime),
   });
 }

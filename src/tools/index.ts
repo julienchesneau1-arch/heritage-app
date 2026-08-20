@@ -12,7 +12,11 @@ import type { Ledger } from '../core/ledger/ledger.js';
 import type { MemoryGuard } from '../core/memory/guard.js';
 import type { MemoryStore } from '../core/memory/store.js';
 import type { HybridSearch } from '../core/memory/search.js';
-import type { CalendarProvider, SearchProvider } from '../providers/contract.js';
+import type {
+  CalendarProvider,
+  EtatModeleLocal,
+  SearchProvider,
+} from '../providers/contract.js';
 import { ok, type Result } from '../core/types/result.js';
 import { memoryAddTool, memoryForgetTool, memorySearchTool } from './memory.js';
 import { taskCancelTool, taskCreateTool, taskListTool, taskCompleteTool } from './tasks.js';
@@ -34,6 +38,14 @@ import {
 export interface ToolDeps {
   /** Le journal, pour que `system_status` puisse en vérifier la chaîne. */
   readonly ledger: Ledger;
+  /**
+   * L'état du modèle local, pour que `system_status` puisse le SONDER — ADR-086.
+   *
+   * Requis. Un champ optionnel retomberait sur « désactivé » quand on oublie de
+   * le passer, c'est-à-dire qu'un appelant distrait recréerait exactement le
+   * silence que cette ADR supprime.
+   */
+  readonly modeleLocal: EtatModeleLocal;
   readonly guard: MemoryGuard;
   readonly store: MemoryStore;
   readonly search: HybridSearch;
@@ -127,7 +139,7 @@ export function registerCoreTools(
     reminderCancelTool(),
     /* Phase 3, point 9 — le dernier des dix accessibles. Un état qui ne peut
        pas dire « ça ne va pas » ne dit rien quand ça va (ADR-049). */
-    systemStatusTool(deps.ledger),
+    systemStatusTool(deps.ledger, deps.modeleLocal),
     /* Phase 4, étape F3 — scénario doré C4. « Montre-moi ce qui est parti sur
        Internet » : où, quelle classe, pourquoi (ADR-052). */
     egressReviewTool(),

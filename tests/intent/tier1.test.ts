@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createTier1 } from '../../src/core/intent/tier1.js';
+import { modeleLocalConfigure } from '../../src/apps/runtime.js';
 import { ok, err, jarvisError, type Result } from '../../src/core/types/result.js';
 import type { ModelProvider } from '../../src/providers/contract.js';
 import type { RegisteredTool } from '../../src/core/tools/contract.js';
@@ -340,9 +341,22 @@ describe('l’ordre des tiers, et l’état réel du câblage', () => {
        mémorise, retrouve et exécute sans Internet et sans fournisseur IA.
        Livrer `enabled: true` ferait dépendre le premier démarrage d'une
        installation qui n'a pas eu lieu. */
-    const runtime = readFileSync('src/apps/runtime.ts', 'utf8');
-    expect(runtime).toContain('tier1Configure(options.localModel, gateway)');
-    expect(runtime).not.toContain('tier1: null,');
+    /* ⚠ CE TEST LISAIT LA SOURCE DE `runtime.ts` — corrigé ADR-086.
+
+       Il cherchait la chaîne `tier1Configure(options.localModel, gateway)`.
+       Un simple RENOMMAGE l'a cassé alors que la propriété tenait toujours :
+       il gardait un nom de fonction, pas un comportement.
+
+       C'est la leçon d'ADR-082 appliquée à un test qui grepe le fichier d'un
+       AUTRE : la preuve passe par la VALEUR. ADR-086 la rend disponible en
+       exposant l'état au lieu d'un `null` opaque. */
+    expect(modeleLocalConfigure(undefined).kind).toBe('DESACTIVE');
+    expect(
+      modeleLocalConfigure({ enabled: false, url: 'http://127.0.0.1:11434', model: 'm' }).kind,
+    ).toBe('DESACTIVE');
+    expect(
+      modeleLocalConfigure({ enabled: true, url: 'http://127.0.0.1:11434', model: 'm' }).kind,
+    ).toBe('CONFIGURE');
 
     const defaut: unknown = JSON.parse(readFileSync('config/default.json', 'utf8'));
     expect((defaut as { localModel: { enabled: boolean } }).localModel.enabled).toBe(false);

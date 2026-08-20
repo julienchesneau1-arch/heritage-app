@@ -6864,3 +6864,123 @@ fausse — **elle était juste pour une raison qui avait cessé d'exister**.
 Le motif de recherche qui en découle : **tout banc de mesure doit prouver qu'il
 mesure la configuration du produit** — et cette preuve doit être un test, pas
 une lecture.
+
+---
+
+## ADR-086 — Un modèle configuré qui ne répond pas doit se voir
+
+**Statut** : accepté · **Date** : 2026-08-20 · **Corrige** : ADR-082
+
+### Ce qui a été trouvé, et c'est une phrase que j'ai écrite
+
+`runtime.ts` justifiait le silence du démarrage ainsi :
+
+> *« Le refus est SILENCIEUX côté démarrage mais pas invisible : `system_status`
+> interroge la santé des fournisseurs, et `createOllama` explique pourquoi il a
+> refusé. »*
+
+**Les deux moitiés sont fausses.**
+
+```text
+system_status    trois contrôles — journal, opérations, instantanés
+                 AUCUN ne regarde un fournisseur
+createOllama     calcule bien la raison du refus…
+                 …et `if (!modele.ok) return null;` la jette
+```
+
+Écrite dans ADR-082, la veille. Treizième occurrence du motif du dépôt — *une
+affirmation que le mécanisme censé l'établir n'établit pas* — et cette fois
+dans une **justification de silence**, ce qui est la pire place : le
+commentaire décrivait si bien le mécanisme que personne, moi le premier, n'est
+allé vérifier qu'il existait.
+
+### La conséquence, qui est concrète et imminente
+
+Julien installe Ollama et active `localModel`. Si le serveur n'est pas lancé,
+si le nom du modèle est mal tapé, si l'URL est erronée :
+
+```text
+Jarvis        se comporte EXACTEMENT comme avant
+/diagnostic   ne dit rien
+system_status « tout va bien »
+```
+
+Il en conclut que le modèle n'apporte rien. **Alors qu'il n'a jamais répondu.**
+
+Et pire : `pnpm test:redteam` afficherait `13/30`, chiffre que nous aurions
+tous les deux pris pour une mesure du modèle.
+
+### Décision
+
+**1. Trois états au lieu d'un `null`.**
+
+```text
+DESACTIVE   personne n'a demandé de modèle       → OK, c'est le défaut
+REFUSE      on en a demandé un, il est refusé    → ATTENTION, avec la RAISON
+CONFIGURE   construit — répond-il ?              → seule une SONDE le dit
+```
+
+`DESACTIVE` et `REFUSE` valaient le même `null`. Ce sont pourtant des
+situations opposées : l'une est le fonctionnement nominal, l'autre une demande
+non satisfaite.
+
+**2. `system_status` gagne un quatrième contrôle.** Il **sonde**, il ne
+mémorise pas : un booléen calculé au démarrage affirmerait « disponible » d'un
+serveur arrêté depuis. Une réponse est une observation, jamais une preuve
+durable (`docs/21`).
+
+**3. `/diagnostic` affiche la ligne** que l'utilisateur regarde juste après
+avoir installé un modèle.
+
+**4. Le banc lisait la configuration… sans jamais la passer.**
+`buildRuntime(appDb())` laisse `localModel` indéfini : **le banc mesurait Tier 0
+seul, quoi qu'il y ait dans `config/default.json`.** C'est ADR-085 une seconde
+fois, sur l'autre moitié de la configuration.
+
+Il lit désormais la vraie configuration, **imprime ce avec quoi il a mesuré**,
+et **refuse de produire un chiffre** quand un modèle est demandé sans répondre :
+
+```text
+Le modèle « ollama:mistral:7b » est configuré mais ne répond pas
+(Ollama est injoignable : fetch failed. Est-il lancé ?).
+Lance-le, ou désactive `localModel` — mesurer maintenant produirait un
+chiffre faux.
+```
+
+> Un banc rouge vaut mieux qu'une mesure fausse. Un chiffre sans sa
+> configuration est un chiffre qui ment.
+
+### Un défaut de licence corrigé au passage
+
+Le modèle par défaut valait `llama3.1:8b`, dont la licence porte des
+restrictions d'usage commercial. `docs/04` exige une fiche de licence pour
+toute dépendance, et `docs/28` signale la question — le dépôt ne peut pas
+poser le problème et proposer par défaut le seul modèle qui le crée.
+
+Défaut : **`mistral:7b`**, Apache 2.0. Ce n'est pas un jugement de qualité,
+c'est le refus d'imposer une contrainte juridique **par omission** — un défaut
+est ce que prend celui qui ne choisit pas.
+
+### Sabotages
+
+```text
+le quatrième contrôle disparaît             → 6 rouges
+REFUSE cesse d'alerter                      → 1 rouge
+modèle activé, rien qui écoute (cas réel)   → le banc REFUSE de mesurer
+```
+
+Le dernier n'est pas un sabotage de test : c'est la reproduction exacte du
+scénario utilisateur, et la garde a produit le message qui dit quoi faire.
+
+### La leçon, qui n'est pas celle que je croyais
+
+Le premier réflexe serait « vérifier ses commentaires ». C'est vrai et
+insuffisant. Le vrai motif :
+
+> **Une justification de silence est une dette de preuve.** Chaque fois qu'on
+> écrit « c'est silencieux ici parce que c'est visible ailleurs », *ailleurs*
+> doit être un test, jamais une phrase.
+
+Trois occurrences en deux jours (ADR-083, 085, 086) partagent la même forme :
+un mécanisme nommé dans une justification, jamais éprouvé à l'endroit où il est
+invoqué.

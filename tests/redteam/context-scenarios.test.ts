@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { appDb, databaseAvailable } from '../helpers/db.js';
 import { createSessionStore } from '../../src/core/session/session.js';
+import { loadConfig } from '../../src/core/config/load.js';
 import { buildRuntime, type Runtime } from '../../src/apps/runtime.js';
 import type { AssistantReply } from '../../src/core/assistant.js';
 
@@ -100,7 +101,22 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
   const results: { turn: Turn; reply: AssistantReply }[] = [];
 
   beforeAll(async () => {
-    const built = buildRuntime(appDb());
+    /* ⚠ LE BANC N'A JAMAIS PASSÉ `localModel` — ADR-086.
+
+       `buildRuntime(appDb())` laisse `options.localModel` indéfini, donc
+       `tier1` à `null`. **Le banc mesure Tier 0 SEUL, quoi qu'il y ait dans
+       `config/default.json`.** Quelqu'un qui installe un modèle, l'active, et
+       lance ce banc obtiendrait 13/30 et en conclurait que le modèle n'apporte
+       rien — alors qu'il n'aurait jamais été interrogé.
+
+       C'est le défaut d'ADR-085 une seconde fois, sur l'autre moitié de la
+       configuration. On lit donc la vraie configuration, comme `openRuntime`. */
+    const config = loadConfig();
+    if (!config.ok) throw new Error(config.error.message);
+
+    const built = buildRuntime(appDb(), {
+      localModel: config.value.public.localModel,
+    });
     if (!built.ok) throw new Error(built.error.message);
     runtime = built.value;
 
@@ -170,6 +186,47 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     // Et la boucle du produit : chaque tour retenu vient d'une action aboutie.
     const aboutis = results.filter((r) => r.reply.kind === 'DONE').length;
     expect(tours.value.length).toBe(aboutis);
+  });
+
+  it('LE BANC DÉCLARE SA CONFIGURATION DE MODÈLE — ADR-086', async () => {
+    /* ⚠ UN CHIFFRE SANS SA CONFIGURATION EST UN CHIFFRE QUI MENT.
+
+       Le banc n'a jamais passé `localModel` : il mesurait Tier 0 seul, quelle
+       que soit la configuration. Quelqu'un qui installe un modèle et lance ce
+       banc obtiendrait le même 13/30 et en conclurait que le modèle n'apporte
+       rien.
+
+       On IMPRIME donc l'état, et on refuse le silence dans le seul cas
+       dangereux : un modèle demandé qui ne répond pas. Les 43 % ne veulent
+       alors rien dire, et il vaut mieux un banc rouge qu'une mesure fausse. */
+    const etat = runtime.modeleLocal;
+
+    if (etat.kind === 'DESACTIVE') {
+      process.stdout.write('\n  MESURÉ AVEC : Tier 0 seul (aucun modèle local)\n\n');
+      expect(etat.kind).toBe('DESACTIVE');
+      return;
+    }
+
+    if (etat.kind === 'REFUSE') {
+      throw new Error(
+        `Un modèle local est demandé dans la configuration mais a été REFUSÉ — ${etat.raison}. `
+          + 'La mesure qui suit ne vaudrait rien : corrige la configuration, ou désactive `localModel`.',
+      );
+    }
+
+    const sante = await etat.provider.health();
+    if (!sante.ok || !sante.value.available) {
+      throw new Error(
+        `Le modèle « ${etat.provider.capabilities.id} » est configuré mais ne répond pas `
+          + `(${sante.ok ? (sante.value.detail ?? 'indisponible') : sante.error.message}). `
+          + 'Lance-le, ou désactive `localModel` — mesurer maintenant produirait un chiffre faux.',
+      );
+    }
+
+    process.stdout.write(
+      `\n  MESURÉ AVEC : Tier 0 + ${etat.provider.capabilities.id} (répond)\n\n`,
+    );
+    expect(sante.value.available).toBe(true);
   });
 
   it('imprime le déroulé', () => {

@@ -268,6 +268,9 @@ async function showDiagnostic(runtime: Runtime): Promise<void> {
     }\n`,
   );
   stdout.write(`  Cloud          ${d.cloud ? 'activé' : 'désactivé'}\n`);
+  /* ADR-086 : la ligne qui manquait, et la seule que l'utilisateur regarde
+     juste après avoir installé un modèle. */
+  stdout.write(`  Modèle local   ${d.modeleLocal}\n`);
 }
 
 function show(reply: AssistantReply): void {

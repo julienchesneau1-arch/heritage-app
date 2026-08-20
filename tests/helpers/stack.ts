@@ -26,6 +26,7 @@ import type { Db } from '../../src/core/db/client.js';
 import type {
   CalendarProvider,
   EmbeddingProvider,
+  EtatModeleLocal,
   SearchProvider,
 } from '../../src/providers/contract.js';
 import type { Ledger } from '../../src/core/ledger/ledger.js';
@@ -53,6 +54,8 @@ export function buildStack(
     fileRoots?: readonly string[];
     /** `undefined` reproduit le dépôt : aucun fournisseur de recherche. */
     websearch?: SearchProvider | null;
+    /** `undefined` reproduit le dépôt : aucun modèle local (ADR-086). */
+    modeleLocal?: EtatModeleLocal;
   } = {},
 ): Stack {
   const source = loadPolicySource(join(process.cwd(), 'policies'));
@@ -81,6 +84,10 @@ export function buildStack(
     search,
     ledger,
     isUserConfirmed: () => userConfirmed,
+    /* ADR-086 : `DESACTIVE` par défaut — c'est l'état du produit sans modèle.
+       Surchargeable pour que les tests d'état puissent éprouver les branches
+       `REFUSE` et `CONFIGURE`, qui sont celles qui portent le défaut. */
+    modeleLocal: options.modeleLocal ?? { kind: 'DESACTIVE' },
     calendar: options.calendar ?? null,
     fileRoots: options.fileRoots ?? [],
     websearch: options.websearch ?? null,

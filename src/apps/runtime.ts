@@ -28,6 +28,7 @@ import { createResolveurTemporel } from '../core/temps/resolution.js';
 import { createIntentEngine, type IntentEngine } from '../core/intent/engine.js';
 import { createEnvSecretVault } from '../core/secrets/vault.js';
 import { createOllama } from '../providers/ollama/model.js';
+import type { EtatModeleLocal } from '../providers/contract.js';
 import { createTier1, type Tier1 } from '../core/intent/tier1.js';
 import {
   createGoogleAgenda,
@@ -63,6 +64,15 @@ export interface Runtime {
   /** Aucun fournisseur d'embeddings n'est câblé aujourd'hui — dit, pas masqué. */
   readonly embeddingsAvailable: boolean;
   readonly cloudEnabled: boolean;
+  /**
+   * L'ÉTAT DU MODÈLE LOCAL — ADR-086.
+   *
+   * Exposé pour que `/diagnostic` et le banc de mesure puissent DÉCLARER la
+   * configuration dans laquelle ils tournent. Le banc de scénarios a mesuré
+   * pendant des mois sans session (ADR-085) ; il allait mesurer sans modèle
+   * pour exactement la même raison — il ne pouvait pas savoir.
+   */
+  readonly modeleLocal: EtatModeleLocal;
   setUserConfirmed(value: boolean): void;
   close(): Promise<void>;
 }
@@ -112,7 +122,13 @@ export function buildRuntime(
     userConfirmed = value;
   };
 
+  /* Déterminé AVANT l'enregistrement des outils : `system_status` doit pouvoir
+     le sonder, et l'Assistant doit pouvoir en tirer son `Tier 1`. Un seul
+     calcul, deux lecteurs — pas deux constructions qui divergeraient. */
+  const modeleLocal = modeleLocalConfigure(options.localModel);
+
   const registered = registerCoreTools(gateway, {
+    modeleLocal,
     guard: createMemoryGuard(store, inbox),
     store,
     // Aucun fournisseur d'embeddings : la voie sémantique est indisponible, les
@@ -165,11 +181,12 @@ export function buildRuntime(
          retombe alors sur `null` : Jarvis démarre en `Tier 0`. Le contraire —
          un refus de démarrer — punirait l'utilisateur d'une option qu'il peut
          corriger, et le laisserait sans assistant du tout. */
-      tier1: tier1Configure(options.localModel, gateway),
+      tier1: tier1Depuis(modeleLocal, gateway),
     }),
     undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
     embeddingsAvailable: false,
     cloudEnabled: options.cloudEnabled ?? false,
+    modeleLocal,
     setUserConfirmed,
     close: () => db.close(),
   });
@@ -237,22 +254,44 @@ export function openRuntime(
 }
 
 /**
- * Construit le `Tier 1` si la configuration le demande, `null` sinon.
+ * Détermine l'état du modèle local — ADR-086.
  *
- * Le refus est SILENCIEUX côté démarrage mais pas invisible : `system_status`
- * interroge la santé des fournisseurs, et `createOllama` explique pourquoi il
- * a refusé. Un démarrage qui échoue sur une option de compréhension serait
- * disproportionné ; un refus muet serait malhonnête. On prend la troisième
- * voie : démarrer sans, et pouvoir le dire.
+ * ⚠ CETTE FONCTION RENDAIT `Tier1 | null`, ET C'ÉTAIT LE DÉFAUT.
+ *
+ * `null` confondait deux situations opposées :
+ *
+ * ```text
+ * personne n'a demandé de modèle        → normal, c'est le défaut
+ * on en a demandé un, il est refusé     → l'utilisateur DOIT le savoir
+ * ```
+ *
+ * La raison du refus était calculée par `createOllama`, puis **jetée** par
+ * `if (!modele.ok) return null;`. Et le commentaire qui justifiait ce silence
+ * affirmait : *« pas invisible : `system_status` interroge la santé des
+ * fournisseurs, et `createOllama` explique pourquoi il a refusé »*.
+ *
+ * **Les deux moitiés étaient fausses.** `system_status` faisait trois contrôles,
+ * aucun sur un fournisseur ; et l'explication n'était conservée nulle part. Le
+ * commentaire décrivait un mécanisme qui n'existait pas — il le décrivait si
+ * bien que personne, moi compris, n'est allé vérifier.
+ *
+ * Le principe de départ reste juste et ne change pas : **un démarrage ne doit
+ * pas échouer sur une option de compréhension.** Ce qui change, c'est que le
+ * refus soit désormais DIT — nommé, transporté jusqu'à la surface, et affiché.
  */
-function tier1Configure(
+export function modeleLocalConfigure(
   localModel: { enabled: boolean; url: string; model: string } | undefined,
-  gateway: ToolGateway,
-): Tier1 | null {
-  if (localModel === undefined || !localModel.enabled) return null;
+): EtatModeleLocal {
+  if (localModel === undefined || !localModel.enabled) return { kind: 'DESACTIVE' };
   const modele = createOllama({ url: localModel.url, model: localModel.model });
-  if (!modele.ok) return null;
+  if (!modele.ok) return { kind: 'REFUSE', raison: modele.error.message };
+  return { kind: 'CONFIGURE', provider: modele.value };
+}
+
+/** Le `Tier 1` n'existe que si un modèle est réellement construit. */
+function tier1Depuis(etat: EtatModeleLocal, gateway: ToolGateway): Tier1 | null {
+  if (etat.kind !== 'CONFIGURE') return null;
   /* Le catalogue est passé en FONCTION, relu à chaque appel : un outil retiré
      pour perte de confiance (I12) cesse aussitôt d'être proposable. */
-  return createTier1({ model: modele.value, outils: () => gateway.list() });
+  return createTier1({ model: etat.provider, outils: () => gateway.list() });
 }

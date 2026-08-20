@@ -402,6 +402,44 @@ zéro code émis. Vérifié, pas supposé.
 
 ---
 
+### 2.11 Une justification de silence qui nommait un mécanisme inexistant
+
+**Trouvé en préparant l'installation d'un modèle chez l'utilisateur.**
+
+`runtime.ts` justifiait le silence du démarrage : *« pas invisible :
+`system_status` interroge la santé des fournisseurs, et `createOllama` explique
+pourquoi il a refusé »*. **Les deux moitiés étaient fausses** — trois contrôles,
+aucun sur un fournisseur ; et la raison du refus jetée par `return null`.
+
+Écrite dans ADR-082, la veille. **Treizième occurrence du motif**, et la pire
+place possible : le commentaire décrivait si bien le mécanisme que personne
+n'est allé vérifier qu'il existait.
+
+**Conséquence, imminente et concrète** : un Ollama éteint, un nom de modèle mal
+tapé, une URL erronée produisaient exactement le comportement d'une absence de
+modèle. Jarvis comprend moins bien, `/diagnostic` dit « tout va bien », et
+l'utilisateur conclut que le modèle n'apporte rien.
+
+**Corrigé** (ADR-086) : trois états déclarés au lieu d'un `null`
+(`DESACTIVE` / `REFUSE` avec sa raison / `CONFIGURE`), un quatrième contrôle
+dans `system_status` qui **sonde** au lieu de mémoriser, et la ligne manquante
+dans `/diagnostic`.
+
+**Et le banc mesurait sans modèle** — `buildRuntime(appDb())` laisse
+`localModel` indéfini. §2.10 une seconde fois, sur l'autre moitié de la
+configuration. Il déclare désormais ce avec quoi il a mesuré, et **refuse de
+produire un chiffre** si un modèle demandé ne répond pas.
+
+**Sabotages** : 6 rouges / 1 rouge / et la reproduction exacte du scénario
+utilisateur, où la garde a produit le message qui dit quoi faire.
+
+> **La leçon n'est pas « relire ses commentaires ».** C'est :
+> **une justification de silence est une dette de preuve.** Écrire « c'est
+> silencieux ici parce que c'est visible ailleurs » oblige à ce qu'*ailleurs*
+> soit un test, jamais une phrase.
+
+---
+
 ### 2.10 Le banc mesurait `REFERENCE 0/8` sans jamais ouvrir de session
 
 **Trouvé en cherchant pourquoi ADR-084 ne pouvait pas faire bouger le chiffre.**

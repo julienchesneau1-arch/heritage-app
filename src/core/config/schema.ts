@@ -51,7 +51,18 @@ export const PublicConfig = z.object({
      * la machine sans qu'aucune ligne de code ne change.
      */
     url: z.string().min(1),
-    /** Nom du modèle tel que le runtime le connaît (`llama3.1:8b`…). */
+    /**
+     * Nom du modèle tel que le runtime le connaît (`mistral:7b`, `qwen2.5:14b`…).
+     *
+     * ⚠ LE DÉFAUT A CHANGÉ — ADR-086. Il valait `llama3.1:8b`, dont la licence
+     * porte des restrictions d'usage commercial. Un défaut est ce que prend
+     * quelqu'un qui ne choisit pas : le dépôt ne peut pas signaler la question
+     * de licence dans `docs/04` et proposer par défaut le seul modèle qui la
+     * pose. `mistral:7b` est Apache 2.0.
+     *
+     * Ce n'est pas un jugement de qualité — c'est le refus d'imposer une
+     * contrainte juridique par omission.
+     */
     model: z.string().min(1),
   }),
 

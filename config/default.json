@@ -13,7 +13,7 @@
   "localModel": {
     "enabled": false,
     "url": "http://127.0.0.1:11434",
-    "model": "llama3.1:8b"
+    "model": "mistral:7b"
   },
   "privacy": {
     "startInPrivateMode": false,

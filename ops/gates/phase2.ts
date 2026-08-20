@@ -76,6 +76,8 @@ function stack(connection: Db) {
     search: createHybridSearch(connection, null),
     ledger,
     isUserConfirmed: () => true,
+    // ADR-086 : la porte n'éprouve aucun modèle. L'état est DÉCLARÉ, pas omis.
+    modeleLocal: { kind: 'DESACTIVE' },
   });
   if (!registered.ok) throw new Error(registered.error.message);
 

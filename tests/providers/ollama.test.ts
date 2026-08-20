@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createOllama, estLocale } from '../../src/providers/ollama/model.js';
+import { modeleLocalConfigure } from '../../src/apps/runtime.js';
 import { ok, type Result } from '../../src/core/types/result.js';
 import type { ReponseHttp, Transport } from '../../src/providers/google/calendar.js';
 
@@ -256,10 +257,19 @@ describe('la forme de la demande', () => {
 
 describe('le câblage réel', () => {
   it('le `Tier 1` n’est construit QUE si la configuration l’active', () => {
-    const runtime = readFileSync('src/apps/runtime.ts', 'utf8');
-    expect(runtime).toContain('tier1Configure(options.localModel, gateway)');
-    expect(runtime).toContain('!localModel.enabled) return null');
+    /* Éprouvé par la VALEUR depuis ADR-086 : ce test cherchait un nom de
+       fonction dans la source, et un renommage l'a cassé sans que la propriété
+       ait bougé. */
+    expect(modeleLocalConfigure(undefined).kind).toBe('DESACTIVE');
+    expect(
+      modeleLocalConfigure({ enabled: false, url: 'http://127.0.0.1:11434', model: 'm' }).kind,
+    ).toBe('DESACTIVE');
+    expect(
+      modeleLocalConfigure({ enabled: true, url: 'http://127.0.0.1:11434', model: 'm' }).kind,
+    ).toBe('CONFIGURE');
+
     // Et la clé de configuration est LUE, pas décorative.
+    const runtime = readFileSync('src/apps/runtime.ts', 'utf8');
     expect(runtime).toContain('localModel: config.value.public.localModel');
   });
 
@@ -267,8 +277,21 @@ describe('le câblage réel', () => {
     /* Un refus de démarrer punirait l'utilisateur d'une option qu'il peut
        corriger, et le laisserait sans assistant du tout. On retombe sur
        `Tier 0` : Jarvis comprend moins, et le dit. */
-    const runtime = readFileSync('src/apps/runtime.ts', 'utf8');
-    expect(runtime).toContain('if (!modele.ok) return null;');
+    /* ⚠ ET LE REFUS PORTE DÉSORMAIS SA RAISON — ADR-086.
+
+       Il retombait sur `null`, indiscernable de « aucun modèle demandé ». La
+       raison calculée par `createOllama` était jetée, alors même que le dépôt
+       justifiait le silence du démarrage en affirmant qu'elle restait
+       disponible. */
+    const refus = modeleLocalConfigure({
+      enabled: true,
+      url: 'http://ailleurs.example:11434',
+      model: 'm',
+    });
+    expect(refus.kind).toBe('REFUSE');
+    if (refus.kind !== 'REFUSE') return;
+    expect(refus.raison.length).toBeGreaterThan(5);
+    expect(refus.raison).toContain('ailleurs.example');
   });
 
   it('le défaut livré est DÉSACTIVÉ — Jarvis marche sans modèle', () => {

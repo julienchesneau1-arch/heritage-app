@@ -12,6 +12,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { appDb, databaseAvailable, withLedgerExclusive } from '../helpers/db.js';
 import { buildStack, callContext, operationId, type Stack } from '../helpers/stack.js';
 import type { Db } from '../../src/core/db/client.js';
+import { err, ok, jarvisError, type Result } from '../../src/core/types/result.js';
+import type { EtatModeleLocal, ModelProvider } from '../../src/providers/contract.js';
 
 const enabled = databaseAvailable();
 
@@ -24,7 +26,12 @@ interface Controle {
   detail: string;
 }
 interface Sortie {
-  controles: { journal: Controle; operations: Controle; annulations: Controle };
+  controles: {
+    journal: Controle;
+    operations: Controle;
+    annulations: Controle;
+    modele: Controle;
+  };
   verdict: string;
   controlesEffectues: number;
 }
@@ -167,15 +174,16 @@ describe.runIf(enabled)('system_status — Phase 3 point 9', () => {
     }
   }, 30_000);
 
-  it('rend les TROIS contrôles annoncés — aucun ne disparaît en silence', async () => {
+  it('rend les QUATRE contrôles annoncés — aucun ne disparaît en silence', async () => {
     /* Le mode de panne d'un outil d'état : un contrôle retiré « parce qu'il
        était bruyant » ne laisse aucune trace, et le « tout va bien » qui suit
        est plus faux qu'avant. Le compte est rendu explicitement. */
     const sortie = await etat();
-    expect(sortie.controlesEffectues).toBe(3);
+    expect(sortie.controlesEffectues).toBe(4);
     expect(Object.keys(sortie.controles).sort()).toEqual([
       'annulations',
       'journal',
+      'modele',
       'operations',
     ]);
     for (const controle of Object.values(sortie.controles)) {
@@ -271,4 +279,117 @@ describe.runIf(enabled)('system_status — Phase 3 point 9', () => {
       await db.query('DELETE FROM tool_operations WHERE operation_id = $1', [opId]);
     }
   }, 30_000);
+});
+
+/* ====================================================================== *
+ * LE MODÈLE LOCAL — ADR-086
+ *
+ * Ce contrôle existe parce que `runtime.ts` justifiait son silence en
+ * affirmant *« system_status interroge la santé des fournisseurs »*. Il ne le
+ * faisait pas. Un Ollama éteint produisait donc exactement le comportement
+ * d'une absence de modèle, sans un mot.
+ *
+ * Les trois branches sont éprouvées, et la distinction entre les deux
+ * premières EST le défaut corrigé : elles valaient toutes deux `null`.
+ * ====================================================================== */
+
+describe.runIf(enabled)('system_status — le modèle local', () => {
+  let db: Db;
+
+  beforeAll(() => {
+    db = appDb();
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
+  async function etatAvec(modeleLocal: EtatModeleLocal): Promise<Sortie> {
+    const stack = buildStack(db, { modeleLocal });
+    const result = await stack.gateway.invoke({
+      toolId: 'system_status',
+      input: {},
+      parameterProvenance: {},
+      operationId: op('mod'),
+      actor: 'USER',
+      context: callContext(),
+    });
+    if (!result.ok) throw new Error(`refusé : ${result.error.message}`);
+    return result.value.output as Sortie;
+  }
+
+  /** Un fournisseur dont on dicte la santé. Rien d'autre n'est exercé ici. */
+  function fournisseur(sante: Result<{ available: boolean; detail?: string }>): ModelProvider {
+    return {
+      capabilities: {
+        id: 'faux-modele',
+        local: true,
+        requiresNetwork: false,
+        maxPrivacyClass: 'ORANGE',
+        costPerMillionTokensEur: 0,
+      },
+      health: () => Promise.resolve(sante),
+      chat: () => Promise.resolve(err(jarvisError('INTERNAL', 'non utilisé'))),
+      structuredOutput: () => Promise.resolve(err(jarvisError('INTERNAL', 'non utilisé'))),
+      embeddings: () => Promise.resolve(err(jarvisError('INTERNAL', 'non utilisé'))),
+    } as unknown as ModelProvider;
+  }
+
+  it('DÉSACTIVÉ est OK — personne n\'a rien demandé', async () => {
+    /* Contrôle négatif indispensable : si l'absence de modèle valait
+       ATTENTION, l'alerte serait allumée en permanence sur la configuration
+       par DÉFAUT du produit — donc éteinte pour de bon. */
+    const sortie = await etatAvec({ kind: 'DESACTIVE' });
+    expect(sortie.controles.modele.verdict).toBe('OK');
+    expect(sortie.controles.modele.detail).toContain('Tier 0');
+    expect(sortie.verdict).not.toBe('ATTENTION');
+  });
+
+  it('REFUSÉ alerte, ET PORTE SA RAISON — le défaut central d\'ADR-086', async () => {
+    /* `DESACTIVE` et `REFUSE` valaient le même `null`, et la raison calculée
+       par `createOllama` était jetée. C'est le cas d'une adresse non locale :
+       l'utilisateur a demandé un modèle, la garde l'a refusé, et il n'en
+       saurait rien. */
+    const sortie = await etatAvec({
+      kind: 'REFUSE',
+      raison: 'adresse non locale : http://ailleurs.example',
+    });
+    expect(sortie.controles.modele.verdict).toBe('ATTENTION');
+    expect(sortie.controles.modele.detail).toContain('ailleurs.example');
+    // Le verdict global est le PIRE, jamais une moyenne.
+    expect(sortie.verdict).toBe('ATTENTION');
+  });
+
+  it('CONFIGURÉ mais injoignable alerte — le cas qui piège l\'utilisateur', async () => {
+    /* Ollama installé, configuré, PAS lancé. Sans ce contrôle, Jarvis répond
+       comme avant, `/diagnostic` dit « tout va bien », et l'utilisateur conclut
+       que le modèle n'apporte rien — alors qu'il n'a jamais répondu. */
+    const sortie = await etatAvec({
+      kind: 'CONFIGURE',
+      provider: fournisseur(err(jarvisError('PROVIDER_UNAVAILABLE', 'connexion refusée'))),
+    });
+    expect(sortie.controles.modele.verdict).toBe('ATTENTION');
+    expect(sortie.controles.modele.detail).toContain('connexion refusée');
+    expect(sortie.controles.modele.detail).toContain('faux-modele');
+  });
+
+  it('CONFIGURÉ mais indisponible alerte aussi — répondre n\'est pas être prêt', async () => {
+    /* Le serveur répond, et dit qu'il n'est pas disponible. Traiter ça comme
+       un succès reviendrait à croire le canal plutôt que le message. */
+    const sortie = await etatAvec({
+      kind: 'CONFIGURE',
+      provider: fournisseur(ok({ available: false, detail: 'modèle non téléchargé' })),
+    });
+    expect(sortie.controles.modele.verdict).toBe('ATTENTION');
+    expect(sortie.controles.modele.detail).toContain('modèle non téléchargé');
+  });
+
+  it('CONFIGURÉ et répondant est OK — contrôle négatif', async () => {
+    const sortie = await etatAvec({
+      kind: 'CONFIGURE',
+      provider: fournisseur(ok({ available: true })),
+    });
+    expect(sortie.controles.modele.verdict).toBe('OK');
+    expect(sortie.controles.modele.detail).toContain('faux-modele');
+  });
 });
