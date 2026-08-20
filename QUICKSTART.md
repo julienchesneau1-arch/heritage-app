@@ -63,6 +63,92 @@ apt install postgresql-16-pgvector   # Debian/Ubuntu
 
 ---
 
+## Le modèle local — optionnel, et il faut choisir en connaissance de cause
+
+Jarvis fonctionne **sans aucun modèle** : c'est le défaut livré, et un invariant
+produit (I1, I2). Un modèle local n'ajoute qu'une chose — la compréhension de
+formulations qu'aucune règle ne couvre (`Tier 1`, ADR-081).
+
+```bash
+brew install ollama && brew services start ollama
+ollama pull <modèle>
+```
+
+Puis dans `config/default.json` : `"localModel": { "enabled": true, … }`.
+
+### Ce qui décide vraiment : le processeur, pas la RAM
+
+| Machine | Ce qu'il faut savoir |
+|---|---|
+| **Apple Silicon** (M1…M4) | Ollama accélère par Metal. Un 7B est confortable ; un 14B passe à partir de 16 Go |
+| **Mac Intel** | **aucune accélération** — les graphiques Intel intégrés ne sont pas utilisés. L'inférence tourne sur le CPU seul, et c'est LE facteur limitant |
+| **8 Go de RAM** | un 7B quantifié (~4 Go) tient à peine à côté de macOS, PostgreSQL et Node. Viser 2–3 Go de modèle |
+
+### Choisir la taille — la tâche est plus étroite qu'on ne croit
+
+Le `Tier 1` ne discute pas : il choisit **un outil dans un catalogue fermé** et
+remplit des paramètres, en JSON strict, à `temperature: 0`. Ce n'est pas du
+raisonnement ouvert, et un petit modèle peut suffire.
+
+| Modèle | Poids | Licence |
+|---|---|---|
+| `qwen2.5:3b` | ~2 Go | Apache 2.0 |
+| `mistral:7b` | ~4 Go | Apache 2.0 |
+| `qwen2.5:14b` | ~9 Go | Apache 2.0 |
+| `llama3.x` | — | ⚠ restrictions d'usage commercial (`docs/04 §3`) |
+
+### Mesurer AVANT de brancher
+
+```bash
+time ollama run qwen2.5:3b "Réponds uniquement par OK"
+```
+
+Aucun chiffre n'est donné ici volontairement : la vitesse dépend de la machine,
+et ce dépôt ne publie pas d'estimation déguisée en mesure. Si la réponse prend
+dix secondes, le local ne tiendra pas une conversation sur cette machine — et
+**c'est une information, pas un échec**.
+
+### Vérifier que le modèle répond VRAIMENT
+
+```
+/diagnostic
+```
+
+```text
+Modèle local   ollama:qwen2.5:3b — répond
+```
+
+⚠ **Cette ligne n'existait pas avant ADR-086, et son absence était un piège.**
+Un Ollama non lancé, un nom de modèle mal tapé ou une URL erronée produisaient
+**exactement** le comportement d'une absence de modèle : Jarvis comprenait
+moins bien, ne disait rien, et on en concluait que le modèle n'apportait rien —
+alors qu'il n'avait jamais répondu.
+
+Pour la même raison, `pnpm test:redteam` **refuse désormais de produire un
+chiffre** quand un modèle est demandé sans répondre, et imprime toujours la
+configuration avec laquelle il a mesuré. Un chiffre sans sa configuration est
+un chiffre qui ment.
+
+### Et si la machine ne suffit pas
+
+Trois issues, dans l'ordre de préférence :
+
+1. **Un modèle plus petit** — `qwen2.5:1.5b`. La tâche est étroite.
+2. **Rester en `Tier 0`.** 43 % des tours d'une conversation réelle aboutissent
+   sans aucun modèle (ADR-080), et les refus sont formulés, jamais des
+   plantages. C'est un état de fonctionnement, pas une panne.
+3. **Un fournisseur cloud** — possible, mais ce n'est pas une simple option de
+   configuration : les énoncés quittent alors la machine, et rien ne les classe
+   aujourd'hui (`docs/26 §4.14`). C'est une décision d'architecture, pas un
+   réglage.
+
+> Faire tourner le modèle sur une **autre machine du réseau local** est refusé
+> par construction : `createOllama` n'accepte que la boucle locale. « Local »
+> est une adresse, pas une intention (ADR-082). Lever ce refus serait une ADR à
+> part entière.
+
+---
+
 ## Ce que Jarvis sait faire aujourd'hui
 
 ```text
