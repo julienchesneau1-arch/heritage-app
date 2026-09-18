@@ -151,16 +151,31 @@ Trois issues, dans l'ordre de préférence :
 
 ## Ce que Jarvis sait faire aujourd'hui
 
+**La liste qui fait foi est `/aide`**, et elle est *dérivée des règles du
+moteur* (ADR-075) : une capacité ne peut pas exister sans être annoncée, ni être
+annoncée sans exister. Celle-ci en est une copie — vérifiée par
+`tests/architecture/quickstart-promesses.test.ts`, qui échoue si elle dérive.
+
 ```text
-note <texte>                    créer une note
-ajoute <chose> à ma liste       créer une tâche
-rappelle-moi de <chose>         créer une tâche
-mes tâches                      lister les tâches ouvertes
-retiens que <fait>              mémoriser
-que sais-tu sur <sujet>         chercher en mémoire
+retiens que …                      mémoriser un fait
+que sais-tu sur …                  chercher en mémoire
+enregistre <nom> comme personne    créer une entité
+ajoute … à ma liste                créer une tâche
+rappelle-moi jeudi de …            créer un rappel DATÉ
+mes tâches                         lister les tâches ouvertes
+note …                             prendre une note
+cherche sur le web …               rechercher en ligne
+cherche dans mes documents …       rechercher dans les fichiers
+fais-moi un point                  briefing
+comment vas-tu                     état du système
 ```
 
-Commandes : `/audit` · `/inbox` · `/diagnostic` · `/aide` · `/quitter`
+Commandes : `/audit` · `/annule` · `/inbox` · `/diagnostic` · `/aide` · `/quitter`
+
+> ⚠ **« cherche … » tout court n'est volontairement pas accepté.** Il y a trois
+> portées — mémoire, web, documents — et deviner laquelle reviendrait à chercher
+> ailleurs que là où vous croyiez, puis à annoncer un succès. Jarvis pose la
+> question et propose les trois.
 
 ---
 
@@ -269,17 +284,27 @@ de trou inexpliqué dans `/audit`.
 « zzz flurb » → il n'a pas compris la formulation. Deux réponses différentes.
 
 **Il ne devine pas — et il ne substitue rien.**
-Demandez « Retrouve le devis du carreleur » : il répond qu'il ne sait pas
-chercher dans vos documents. Il ne fait **pas** une recherche dans votre mémoire
-personnelle en répondant « c'est fait ». De même, « Rappelle-moi jeudi
-d'appeler le médecin » est refusé plutôt que transformé en tâche sans date.
+Demandez « Retrouve le devis du carreleur » : il **demande où chercher**, en
+proposant les trois portées. Il ne fait pas une recherche dans votre mémoire
+personnelle en répondant « c'est fait ».
 
 Une recherche mémoire annonce toujours **où** elle a cherché — donc aussi ce
 qu'elle n'a pas consulté.
 
-> ⚠ La désambiguïsation entre deux homonymes (« quel Jean ? ») n'existe **pas
-> encore** : le Context Engine est écrit et testé, mais pas branché. C'est le
-> chantier de la prochaine étape. Voir `docs/11`.
+**Il résout « ça », et il demande quand c'est ambigu.**
+Enregistrez deux personnes nommées Jean, puis parlez de « Jean » : il demande
+lequel plutôt que d'en choisir un. Dites « ajoute ça à ma liste » juste après
+avoir parlé d'une chose : il résout le référent depuis le tour précédent, et
+refuse s'il n'y a rien à quoi se rattacher.
+
+> ⚠ **Cette page a affirmé le contraire pendant trois ADR.** Elle disait que la
+> désambiguïsation « n'existe pas encore » et qu'un rappel daté « est refusé ».
+> Les deux étaient vrais à la date d'écriture, et faux depuis ADR-073 et
+> ADR-077 — une documentation qui décourage d'essayer ce qui marche coûte
+> exactement autant qu'une qui promet ce qui ne marche pas.
+>
+> C'est pour ça que `tests/architecture/quickstart-promesses.test.ts` existe
+> désormais : chaque promesse de cette page est rejouée sur le moteur réel.
 
 **Le journal fait foi.**
 `/audit` répond depuis la chaîne d'événements, pas depuis une reconstruction.
@@ -302,7 +327,15 @@ pnpm test            # la suite entière
 pnpm gate:phase0     # journal inaltérable, isolation fournisseurs, secrets
 pnpm gate:phase1     # mémoire, contexte, ambiguïté, hors ligne
 pnpm gate:phase2     # outils, idempotence, vérification, injection
+pnpm gate:phase3     # enchaîne 0-1-2 et clôt la Phase 3 (ADR-087)
+pnpm gate:phase7     # Update Engine : imprime aussi ce qui MANQUE
+pnpm secrets:scan    # arbre de travail ET historique git
 ```
+
+> `gate:phase7` est le seul qui imprime une liste d'**absences** à chaque
+> passage — vérificateur de signature, exécutant, canary, sauvegardes. Une
+> limite qu'il faut aller chercher dans un ADR n'est pas une limite déclarée
+> (ADR-087).
 
 Les tests tournent sur une base **séparée** (`jarvis_test`). Un garde-fou refuse
 de les lancer si la base visée ne contient pas « test » dans son nom — la suite

@@ -7900,3 +7900,76 @@ une chaise : si le plafond `PROACTIF` rend les rappels inutilisables, si le
 témoin de veille est vécu comme une gêne au point d'être désactivé, et si
 « résumer plutôt que réciter » est perçu comme de la rétention d'information.
 Les trois se mesurent à l'usage, pas au raisonnement.
+
+---
+
+## ADR-094 — Le QUICKSTART sous-promettait, et rien ne le voyait
+
+**Statut :** accepté · 18/09/2026
+**Contexte :** ADR-075, ADR-073, ADR-077, `docs/26 §4.1`
+
+### Le défaut
+
+`QUICKSTART.md` est la seule page lue avant d'essayer. Elle affirmait :
+
+```text
+« La désambiguïsation entre deux homonymes n'existe PAS ENCORE »   ADR-073 l'a livrée
+« Rappelle-moi jeudi d'appeler le médecin EST REFUSÉ »             ADR-077 l'a livré
+« il répond qu'il ne sait pas chercher dans vos documents »        il demande OÙ chercher
+```
+
+Les trois étaient vraies à la date d'écriture. Aucune ne l'était encore. La
+liste « ce que Jarvis sait faire » y comptait **six entrées sur onze**.
+
+### Pourquoi personne ne l'avait vu — et c'est le point
+
+**C'est l'inverse exact du défaut que ce dépôt surveille.** Tout l'appareil de
+tests traque les affirmations **trop généreuses** : « c'est fait » sans
+vérification, `CONFIRMED` sans preuve, une capacité annoncée qui n'existe pas.
+
+Celles-ci sont trop **modestes**. Une page qui sous-promet ne déclenche aucune
+alarme, ne casse aucun test, ne produit aucun `UNKNOWN`. Elle est invisible par
+construction — et le coût est celui qu'ADR-075 avait déjà chiffré :
+
+> **Une capacité niée est aussi absente qu'une capacité manquante.**
+> L'utilisateur renonce à demander ce que Jarvis sait faire.
+
+ADR-075 avait recensé **six registres** de la liste des capacités et dérivé les
+cinq premiers du sixième. Tous étaient en TypeScript. **Le Markdown était hors
+de portée du test**, et il a divergé exactement comme les cinq autres — c'était
+le septième, et il ne figurait pas dans le compte.
+
+### Ce qui est fait
+
+`tests/architecture/quickstart-promesses.test.ts` :
+
+1. la liste de la page est **exactement** `capacitesParlees()` — dans les deux
+   sens. Oublier une capacité fait renoncer ; en inventer une fait essayer et
+   échouer, ce qui est pire ;
+2. chaque phrase citée par la page est **rejouée sur le moteur réel**, et le
+   comportement obtenu est celui que la page annonce.
+
+Chaque assertion vérifie deux choses : que la page dit bien ce qu'on croit
+(`toContain`) et que le moteur fait ce qu'elle dit. Sans la première moitié,
+supprimer la phrase rendrait le test vert en n'ayant plus rien à garder.
+
+### Le contrôle qui tient l'autre bord
+
+Tout ce raisonnement pousse dans un seul sens — *« la page sous-promet, il faut
+promettre plus »*. Appliqué sans frein, il rouvrirait HIGH-4 : accepter
+« cherche X » en devinant la portée.
+
+Un test vérifie donc aussi que **« cherche … » tout court reste refusé**, et que
+la page le dit. **La modestie n'est un défaut que lorsqu'elle est fausse.**
+
+### Une erreur de fabrication, gardée en commentaire
+
+La première version du test recopiait le normaliseur d'apostrophes du fichier
+voisin : `/[’‘`]/gu`. Correct sur du TypeScript, où le backtick s'emploie comme
+apostrophe dans les commentaires. Sur du Markdown, il transforme les clôtures de
+bloc en `'''text`, et la recherche du bloc de capacités ne trouve plus rien.
+
+Le test échouait en disant « bloc introuvable » — exact, et pointant au mauvais
+endroit.
+
+> **Un helper recopié d'un fichier voisin hérite de ses hypothèses avec lui.**
