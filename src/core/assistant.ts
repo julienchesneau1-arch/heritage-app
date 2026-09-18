@@ -29,7 +29,7 @@ import type { Tier1 } from './intent/tier1.js';
 import type { EntityResolver } from './context/resolver.js';
 import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
-import type { Mode, VerificationStatus } from './types/domain.js';
+import type { Mode, Surface, VerificationStatus } from './types/domain.js';
 
 export type AssistantReply =
   | {
@@ -82,10 +82,29 @@ export interface SayOptions {
    * une question, jamais une supposition.
    */
   readonly sessionId?: string;
+  /**
+   * D'OÙ LA DEMANDE ARRIVE — ADR-090. **REQUIS.**
+   *
+   * Tous les autres champs de ce type sont optionnels. Celui-ci ne l'est pas,
+   * et la différence est délibérée : un défaut serait forcément `LOCALE`,
+   * c'est-à-dire le régime le PLUS PERMISSIF, accordé précisément aux
+   * appelants qui auraient oublié de se déclarer — dont les surfaces à venir.
+   *
+   * Le rendre requis force chaque appelant à répondre à la question, à la
+   * compilation. C'est le seul endroit où l'on peut encore l'exiger.
+   */
+  readonly surface: Surface;
 }
 
 export interface Assistant {
-  say(text: string, options?: SayOptions): Promise<AssistantReply>;
+  /**
+   * ⚠ `options` N'A PLUS DE DÉFAUT, ET C'EST LA GARDE — ADR-090.
+   *
+   * La signature était `options?: SayOptions`, avec `= {}` à l'implémentation.
+   * Tout appel sans options obtenait donc le régime local. Désormais il faut
+   * au moins déclarer sa surface.
+   */
+  say(text: string, options: SayOptions): Promise<AssistantReply>;
 }
 
 export interface AssistantDeps {
@@ -148,7 +167,7 @@ export interface AssistantDeps {
 
 export function createAssistant(deps: AssistantDeps): Assistant {
   return {
-    async say(text: string, options: SayOptions = {}): Promise<AssistantReply> {
+    async say(text: string, options: SayOptions): Promise<AssistantReply> {
       /* L'ORDRE EST UNE PROPRIÉTÉ — ADR-081.
 
          `Tier 0` d'abord, toujours. Ses règles sont déterministes, gratuites,
@@ -298,6 +317,10 @@ export function createAssistant(deps: AssistantDeps): Assistant {
             cloudEnabled: deps.cloudEnabled,
             proactive: false,
             userConfirmed: confirm,
+            /* ADR-090 — transmis tel quel jusqu'au Policy Gate. L'Assistant
+               ne réinterprète pas : un intermédiaire qui pourrait requalifier
+               la surface contournerait la règle en se déclarant local. */
+            surface: options.surface,
           },
         });
 

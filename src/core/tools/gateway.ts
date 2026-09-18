@@ -21,7 +21,13 @@ import { digestPayload } from '../ledger/event.js';
 import type { PolicyGate } from '../policy/gate.js';
 import type { PolicyOutcome } from '../policy/types.js';
 import type { SecretVault } from '../secrets/vault.js';
-import type { Actor, Mode, Provenance, VerificationStatus } from '../types/domain.js';
+import type {
+  Actor,
+  Mode,
+  Provenance,
+  Surface,
+  VerificationStatus,
+} from '../types/domain.js';
 import { isExternalEffect, mayReplayAfterUnknown } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { createSnapshotStore } from '../undo/snapshots.js';
@@ -67,6 +73,14 @@ export interface ToolCall {
     readonly cloudEnabled: boolean;
     readonly proactive: boolean;
     readonly userConfirmed: boolean;
+    /**
+     * D'où l'appel arrive — ADR-090. REQUIS.
+     *
+     * Le Gate refuse toute action à confirmation venue d'une surface
+     * `DISTANTE` : une confirmation donnée par le même canal que la demande ne
+     * prouve rien.
+     */
+    readonly surface: Surface;
   };
 }
 
@@ -870,6 +884,10 @@ export function createToolGateway(deps: {
         cloudEnabled: call.context.cloudEnabled,
         proactive: call.context.proactive,
         userConfirmed: call.context.userConfirmed,
+        /* ADR-090 — transmis tel quel. Le Gate décide, la passerelle ne
+           réinterprète pas : un appelant qui pourrait requalifier sa propre
+           surface contournerait la règle en se déclarant local. */
+        surface: call.context.surface,
       },
       parameters,
     });

@@ -237,6 +237,7 @@ async function annulerDerniere(
     proactive: false,
     // L'humain vient de dire oui, ici, sur cette cible précise.
     userConfirmed: true,
+    surface: 'LOCALE',
   });
   if (!fait.ok) {
     stdout.write(`  ${mark('FAILED')} ${fait.error.message}\n`);
@@ -328,7 +329,13 @@ async function handleText(
   /* LA SESSION EST TRANSMISE — ADR-073. Sans elle, un référent (« ajoute ça à
      ma liste ») produit une QUESTION plutôt qu'une supposition : `docs/05 §A2`
      interdit de deviner quand deux lectures diffèrent. */
-  let reply = await runtime.assistant.say(line, { operationId, sessionId });
+  /* LOCALE — ADR-090. L'utilisateur est au clavier de la machine : sa
+     confirmation vaut ce qu'une confirmation doit valoir. */
+  let reply = await runtime.assistant.say(line, {
+    operationId,
+    sessionId,
+    surface: 'LOCALE',
+  });
 
   if (reply.kind === 'CONFIRM') {
     const answer = await ask(confirmationPrompt(reply.reason, reply.values));
@@ -351,6 +358,7 @@ async function handleText(
       operationId: reply.operationId,
       confirm: true,
       sessionId,
+      surface: 'LOCALE',
     });
   }
 

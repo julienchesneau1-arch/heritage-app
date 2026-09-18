@@ -69,7 +69,7 @@ describe.runIf(enabled)('05/A2 — « ajoute ça à ma liste »', () => {
     // 1. L'utilisateur NOMME une entité. Aucune extraction : il le déclare.
     const enregistre = await runtime.assistant.say(
       `enregistre ${nom} comme document`,
-      { sessionId },
+      { sessionId, surface: 'LOCALE' },
     );
     expect(enregistre.kind).toBe('DONE');
     if (enregistre.kind !== 'DONE') return;
@@ -84,7 +84,7 @@ describe.runIf(enabled)('05/A2 — « ajoute ça à ma liste »', () => {
     });
 
     // 3. « ça » — et Jarvis sait de quoi il s'agit.
-    const ajoute = await runtime.assistant.say('ajoute ça à ma liste', { sessionId });
+    const ajoute = await runtime.assistant.say('ajoute ça à ma liste', { sessionId, surface: 'LOCALE' });
     expect(ajoute.kind).toBe('DONE');
     if (ajoute.kind !== 'DONE') return;
     expect(ajoute.toolId).toBe('task_create');
@@ -107,7 +107,7 @@ describe.runIf(enabled)('05/A2 — « ajoute ça à ma liste »', () => {
        moteur passait le référent comme s'il était le texte voulu. */
     const sessionId = await conversation();
 
-    const ajoute = await runtime.assistant.say('ajoute ça à ma liste', { sessionId });
+    const ajoute = await runtime.assistant.say('ajoute ça à ma liste', { sessionId, surface: 'LOCALE' });
     expect(ajoute.kind).toBe('CLARIFY');
     if (ajoute.kind !== 'CLARIFY') return;
     expect(ajoute.question).toMatch(/à quoi fais-tu référence/i);
@@ -122,7 +122,7 @@ describe.runIf(enabled)('05/A2 — « ajoute ça à ma liste »', () => {
   it('05/A2 — SANS SESSION, Jarvis demande aussi : pas de contexte inventé', async () => {
     /* Un appelant sans conversation n'a pas de « contexte récent ». Répondre
        quand même reviendrait à inventer le passé de l'échange. */
-    const ajoute = await runtime.assistant.say('ajoute ça à ma liste');
+    const ajoute = await runtime.assistant.say('ajoute ça à ma liste', { surface: 'LOCALE' });
     expect(ajoute.kind).toBe('CLARIFY');
   });
 

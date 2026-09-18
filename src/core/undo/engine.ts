@@ -57,7 +57,7 @@
  * est perdue », on prend le réessayable.
  */
 import { hasAnyEffect } from '../types/domain.js';
-import type { Mode, Provenance, VerificationStatus } from '../types/domain.js';
+import type { Mode, Surface, Provenance, VerificationStatus } from '../types/domain.js';
 import { err, ok, jarvisError, type Result } from '../types/result.js';
 import { forUndo } from '../tools/identity.js';
 import type { ToolGateway } from '../tools/gateway.js';
@@ -75,6 +75,15 @@ export interface UndoContext {
   readonly cloudEnabled: boolean;
   readonly proactive: boolean;
   readonly userConfirmed: boolean;
+  /**
+   * D'où l'annulation est demandée — ADR-090.
+   *
+   * Annuler passe par le Policy Gate comme toute action, et l'inverse d'un
+   * outil est souvent PLUS strict que lui (`memory_add` est L2, son inverse
+   * L4). Une annulation demandée à distance est donc exactement le cas que la
+   * règle vise : irréversible, et confirmée par le canal qui l'a demandée.
+   */
+  readonly surface: Surface;
 }
 
 export interface UndoOutcome {

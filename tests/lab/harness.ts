@@ -89,6 +89,7 @@ export function labCall(
       cloudEnabled: true,
       proactive: false,
       userConfirmed: true,
+        surface: 'LOCALE',
     },
     ...overrides,
   };

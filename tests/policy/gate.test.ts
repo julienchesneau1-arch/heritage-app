@@ -41,6 +41,7 @@ function request(overrides: Partial<PolicyRequest> = {}): PolicyRequest {
       cloudEnabled: false,
       proactive: false,
       userConfirmed: false,
+        surface: 'LOCALE',
     },
     parameters: [],
     ...overrides,

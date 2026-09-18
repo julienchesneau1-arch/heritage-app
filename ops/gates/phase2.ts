@@ -113,6 +113,7 @@ const checks: readonly Check[] = [
             cloudEnabled: false,
             proactive: false,
             userConfirmed: false,
+            surface: 'LOCALE' as const,
           },
         };
 
@@ -150,6 +151,7 @@ const checks: readonly Check[] = [
             cloudEnabled: false,
             proactive: false,
             userConfirmed: false,
+            surface: 'LOCALE' as const,
           },
         });
         return (
@@ -184,6 +186,7 @@ const checks: readonly Check[] = [
             cloudEnabled: false,
             proactive: false,
             userConfirmed: false,
+            surface: 'LOCALE' as const,
           },
         });
         if (!created.ok) return false;
@@ -202,6 +205,7 @@ const checks: readonly Check[] = [
             cloudEnabled: false,
             proactive: false,
             userConfirmed: false,
+            surface: 'LOCALE' as const,
           },
         });
         // Jamais un succès que le monde ne confirme plus.
@@ -249,6 +253,7 @@ const checks: readonly Check[] = [
             cloudEnabled: false,
             proactive: false,
             userConfirmed: false,
+            surface: 'LOCALE' as const,
           },
         });
         if (result.ok || result.error.kind !== 'CONFIRMATION_REQUIRED') return false;
@@ -286,6 +291,7 @@ const checks: readonly Check[] = [
             cloudEnabled: false,
             proactive: false,
             userConfirmed: false,
+            surface: 'LOCALE' as const,
           },
         });
         if (!created.ok) return false;

@@ -115,7 +115,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    const reply = await assistant.say('Note que');
+    const reply = await assistant.say('Note que', { surface: 'LOCALE' });
     expect(reply.kind).toBe('CLARIFY');
     expect(calls).toHaveLength(0);
   });
@@ -142,7 +142,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    const reply = await assistant.say('Envoie un mail à Paul');
+    const reply = await assistant.say('Envoie un mail à Paul', { surface: 'LOCALE' });
     expect(reply.kind).toBe('UNSUPPORTED');
     if (reply.kind !== 'UNSUPPORTED') return;
     expect(reply.missing).toContain('emails');
@@ -168,7 +168,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    const reply = await assistant.say('Vire 50 € à Paul');
+    const reply = await assistant.say('Vire 50 € à Paul', { surface: 'LOCALE' });
     expect(reply.kind).toBe('CONFIRM');
     if (reply.kind !== 'CONFIRM') return;
     expect(reply.values).toEqual({ montant: '50', destinataire: 'Paul' });
@@ -199,12 +199,13 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    const asked = await assistant.say('Vire 50 € à Paul');
+    const asked = await assistant.say('Vire 50 € à Paul', { surface: 'LOCALE' });
     if (asked.kind !== 'CONFIRM') throw new Error('confirmation attendue');
 
     const done = await assistant.say('Vire 50 € à Paul', {
       operationId: asked.operationId,
       confirm: true,
+      surface: 'LOCALE',
     });
 
     expect(done.kind).toBe('DONE');
@@ -233,7 +234,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    await assistant.say('Vire 50 € à Paul');
+    await assistant.say('Vire 50 € à Paul', { surface: 'LOCALE' });
     expect(calls).toHaveLength(1); // aucune exécution avant l'accord
   });
 
@@ -265,7 +266,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    await assistant.say('Vire 50 € à Paul', { confirm: true });
+    await assistant.say('Vire 50 € à Paul', { confirm: true, surface: 'LOCALE' });
     expect(states).toEqual([true, false]);
   });
 
@@ -295,7 +296,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    await expect(assistant.say('Vire 50 € à Paul', { confirm: true })).rejects.toThrow();
+    await expect(assistant.say('Vire 50 € à Paul', { confirm: true, surface: 'LOCALE' })).rejects.toThrow();
     expect(states).toEqual([true, false]);
   });
 
@@ -325,7 +326,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    const reply = await assistant.say('Vire 50 € à Paul');
+    const reply = await assistant.say('Vire 50 € à Paul', { surface: 'LOCALE' });
     expect(reply.kind).toBe('DENIED');
   });
 
@@ -357,7 +358,7 @@ describe('Assistant', () => {
       tier1: null,
     });
 
-    await assistant.say('Retiens que Jean travaille chez Orano');
+    await assistant.say('Retiens que Jean travaille chez Orano', { surface: 'LOCALE' });
     expect(states[0]).toBe(true);
   });
 });

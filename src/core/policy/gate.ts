@@ -94,6 +94,45 @@ export function createPolicyGate(evaluator: PolicyEvaluator): PolicyGate {
         );
       }
 
+      /* 2b-bis. UNE SURFACE DISTANTE NE CONFIRME PAS — ADR-090.
+
+         La confirmation de ce dépôt est SANS ÉTAT (ADR-023) : le client renvoie
+         le texte, la clé d'opération et `confirm: true`. Le raisonnement était
+         *« aucune session à stocker, donc aucune session à détourner »* — juste,
+         mais il supposait un utilisateur LOCAL.
+
+         Sur une passerelle réseau il produit l'inverse :
+
+             qui détient le jeton peut se confirmer À LUI-MÊME
+
+         La confirmation cesse alors d'être un second facteur pour devenir un
+         second appel HTTP. Toute la protection L3/L4 — celle qui garde les
+         actions irréversibles — reposerait sur une preuve que le canal distant
+         ne fournit pas.
+
+         ⚠ ON REFUSE, ON NE DURCIT PAS. Monter le niveau serait absurde : le
+         niveau supérieur exige lui aussi une confirmation, et c'est la
+         confirmation qui n'a pas de valeur ici. Le seul durcissement qui
+         signifie quelque chose est le refus.
+
+         CE QUE ÇA COÛTE, ET QUI EST ASSUMÉ : la passerelle web ne peut plus
+         exécuter que ce qui ne demande aucune confirmation. Envoyer un mail,
+         supprimer un événement, annuler une action se font depuis la machine.
+         C'est exactement le contrat du pont iPhone de
+         `sosoj92/jarvis-assistant-vocal`, dont cette règle est empruntée. */
+      if (req.context.surface === 'DISTANTE' && requiresConfirmation(level)) {
+        return ok({
+          decision: 'DENY',
+          effectiveAutonomy: level,
+          reasons: [
+            ...reasons,
+            `Action de niveau ${level} demandée depuis une surface distante : `
+              + 'une confirmation donnée par le même canal que la demande ne '
+              + 'prouve rien. À faire depuis la machine.',
+          ],
+        });
+      }
+
       // 2c. Sortie réseau d'une donnée RED (03 §6). Le Data Firewall bloquera
       // aussi en aval ; le Gate refuse ici pour que l'action ne soit même pas
       // préparée.

@@ -7378,3 +7378,125 @@ Quatorzième occurrence du motif — *une affirmation que le mécanisme censé
 l'établir n'établit pas* — et la plus coûteuse, parce qu'elle invalidait
 rétroactivement **toutes** les autres : chaque porte verte de ce dépôt avait
 été franchie sur un arbre de travail qui n'était pas le dépôt.
+
+---
+
+## ADR-090 — Une surface distante n'hérite de rien, et ne confirme pas
+
+**Statut** : accepté · **Date** : 2026-09-18 · **Emprunté à** : `sosoj92/jarvis-assistant-vocal` (MIT)
+
+### D'où vient cette décision
+
+Julien a demandé si un autre projet — un assistant vocal Python de ~18 000
+lignes, en état de marche — pouvait améliorer celui-ci. `CLAUDE.md` règle 4 :
+*« assembler avant de développer »*. La comparaison a donc été faite, et elle a
+produit **deux candidats à l'emprunt**.
+
+**Le premier n'était pas nécessaire — et le vérifier était le travail.**
+
+Leur modèle range les actions critiques dans un `frozenset` que la
+configuration ne peut pas élargir. Bonne idée. Vérifié ici : `strictest()` est
+appliqué partout, et Cedar est interrogé sur le niveau **durci**, jamais sur le
+déclaré :
+
+```ts
+evaluator.evaluate({ ...req, declaredAutonomy: level });
+```
+
+Le Policy Gate **ne peut donc que restreindre**. La propriété était déjà tenue,
+et plus fortement : aucune politique ne peut abaisser un niveau, là où leur
+`frozenset` protège seulement une liste nommée.
+
+> Emprunter ce qu'on a déjà, c'est créer un second registre du même fait
+> (ADR-041). Le refus d'emprunter est ici le résultat, pas l'absence de
+> résultat.
+
+**Le second manquait vraiment.**
+
+### Le défaut
+
+Leur pont iPhone refuse **tout** outil à confirmation, quel que soit le
+registre local des autorisations. Une surface distante n'hérite de rien.
+
+Ici, `assistant.ts` clouait `actor: 'USER'` — et **le CLI comme la passerelle
+web** passent par le même Assistant. Une requête HTTP se déclarait donc
+utilisateur local.
+
+Ce qui rend la chose sérieuse est le croisement avec ADR-023 : la confirmation
+de ce dépôt est **sans état**. Le client renvoie le texte, la clé d'opération
+et `confirm: true`. Le raisonnement d'origine — *« aucune session à stocker,
+donc aucune session à détourner »* — est juste, mais il supposait un
+utilisateur **local**.
+
+Sur une passerelle réseau, il produit l'inverse de ce qu'on croit :
+
+```text
+qui détient le jeton peut se confirmer À LUI-MÊME
+```
+
+La confirmation cesse d'être un second facteur pour devenir un second appel
+HTTP. Et `JARVIS_WEB_HOST` permet d'exposer la passerelle hors loopback.
+
+### Décision
+
+`Surface` — `LOCALE` ou `DISTANTE` — devient une propriété du contexte de
+politique, **requise** à chaque niveau de la chaîne. Le Gate ajoute une règle,
+juste après la garde de proactivité :
+
+```text
+surface DISTANTE && niveau exige confirmation  →  DENY
+```
+
+**On refuse, on ne durcit pas.** Monter le niveau serait absurde : le niveau
+supérieur exige lui aussi une confirmation, et c'est la confirmation qui n'a
+pas de valeur ici. Le seul durcissement qui signifie quelque chose est le refus.
+
+**La règle lit le niveau EFFECTIF, pas le déclaré.** Un `L2` durci en `L3` par
+la proactivité est refusé à distance — sinon un durcissement aurait *ouvert*
+une porte au lieu d'en fermer une. C'est la même leçon que
+`declaredAutonomy: level` passé à Cedar.
+
+### Ce que ça coûte, et qui est assumé
+
+La passerelle web ne peut plus exécuter que ce qui ne demande **aucune**
+confirmation : lire ses tâches, prendre une note, chercher en mémoire. Envoyer
+un mail, supprimer un événement, annuler une action se font depuis la machine.
+
+C'est exactement le contrat de leur pont iPhone, et le coût est proportionné —
+l'irréversible, et rien d'autre.
+
+### Le champ est REQUIS, et c'est la moitié de la protection
+
+`SayOptions` n'avait que des champs optionnels, et `say()` un défaut `= {}`.
+Tout appel sans options obtenait donc le régime local.
+
+`surface` est requis, et `options` n'a plus de défaut. **169 erreurs de
+compilation** ont suivi — c'est-à-dire 169 endroits qui devaient répondre à la
+question « d'où vient cette demande ? ». Un champ optionnel n'en aurait posé
+aucune, et aurait accordé le régime le plus permissif aux appelants distraits,
+dont les surfaces à venir.
+
+Le harnais de test garde un défaut `LOCALE` — mais **dans le harnais**, pas
+dans le produit. La poignée de tests qui éprouve vraiment la surface distante
+écrit `{ surface: 'DISTANTE' }`, ce qui la rend visible d'un coup d'œil.
+
+### Sabotages
+
+```text
+la garde de surface saute                        → 5 rouges
+elle lit le niveau DÉCLARÉ au lieu de l'EFFECTIF → 1 rouge
+```
+
+Le second est le plus important : il ne casse aucune fonctionnalité visible et
+laisse treize tests verts. Un seul le voit — celui qui fait passer un `L2`
+proactif par la surface distante.
+
+### Ce que la comparaison a aussi donné, et qui n'est pas ici
+
+`sosoj92/jarvis-assistant-vocal` porte une pile vocale complète et locale —
+openWakeWord, faster-whisper, Piper. C'est **exactement** la Phase 5 de
+`docs/02` (ADR-008, ADR-009), en état de marche.
+
+Elle n'est pas empruntée dans cette ADR : trois dépendances exigent trois
+fiches `docs/04`, et `CLAUDE.md` l'interdit sans elles. C'est le prochain pas,
+et il est nommé.

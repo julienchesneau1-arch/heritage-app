@@ -173,7 +173,7 @@ describe('un renvoi TEMPORAL devient une vraie date', () => {
       calls,
     );
 
-    const reply = await assistant.say('faudrait que je pense au café jeudi');
+    const reply = await assistant.say('faudrait que je pense au café jeudi', { surface: 'LOCALE' });
 
     expect(reply.kind).toBe('DONE');
     expect(calls).toHaveLength(1);
@@ -204,7 +204,7 @@ describe('un renvoi TEMPORAL devient une vraie date', () => {
       calls,
     );
 
-    const reply = await assistant.say('annule-la', { sessionId: 's1' });
+    const reply = await assistant.say('annule-la', { sessionId: 's1', surface: 'LOCALE' });
 
     expect(reply.kind).toBe('DONE');
     // Le paramètre porte le nom RÉSOLU, pas le pronom.
@@ -240,7 +240,7 @@ describe('le marquage ne donne aucune autorité', () => {
       calls,
     );
 
-    await assistant.say('annule-la', { sessionId: 's1' });
+    await assistant.say('annule-la', { sessionId: 's1', surface: 'LOCALE' });
 
     expect(calls[0]?.parameterProvenance['title']).toBe('MODEL_OUTPUT');
     // Et le modèle ne peut jamais affirmer que l'énoncé vaut confirmation.
@@ -260,7 +260,7 @@ describe('le marquage ne donne aucune autorité', () => {
       calls,
     );
 
-    const reply = await assistant.say('annule-la', { sessionId: 's1' });
+    const reply = await assistant.say('annule-la', { sessionId: 's1', surface: 'LOCALE' });
 
     expect(reply.kind).toBe('CLARIFY');
     expect(calls).toHaveLength(0);
@@ -283,7 +283,7 @@ describe('le marquage ne donne aucune autorité', () => {
       calls,
     );
 
-    const reply = await assistant.say('annule celui-là', { sessionId: 's1' });
+    const reply = await assistant.say('annule celui-là', { sessionId: 's1', surface: 'LOCALE' });
 
     expect(reply.kind).toBe('CLARIFY');
     if (reply.kind !== 'CLARIFY') return;
@@ -305,7 +305,7 @@ describe('le marquage ne donne aucune autorité', () => {
     );
 
     // Pas de `sessionId` : il n'y a pas de « contexte récent » à interroger.
-    const reply = await assistant.say('annule-la');
+    const reply = await assistant.say('annule-la', { surface: 'LOCALE' });
 
     expect(reply.kind).toBe('CLARIFY');
     expect(calls).toHaveLength(0);
@@ -327,7 +327,7 @@ describe('le marquage ne donne aucune autorité', () => {
       calls,
     );
 
-    const reply = await assistant.say('faut que je rappelle Paul bientôt');
+    const reply = await assistant.say('faut que je rappelle Paul bientôt', { surface: 'LOCALE' });
 
     expect(reply.kind).toBe('CLARIFY');
     expect(calls).toHaveLength(0);
@@ -354,7 +354,7 @@ describe('marquages hostiles ou incohérents', () => {
       calls,
     );
 
-    const reply = await assistant.say('penser au pain');
+    const reply = await assistant.say('penser au pain', { surface: 'LOCALE' });
 
     expect(reply.kind).toBe('DONE');
     expect(calls[0]?.input).toEqual({ title: 'acheter du pain' });
@@ -376,7 +376,7 @@ describe('marquages hostiles ou incohérents', () => {
       calls,
     );
 
-    const reply = await assistant.say('annule-la', { sessionId: 's1' });
+    const reply = await assistant.say('annule-la', { sessionId: 's1', surface: 'LOCALE' });
 
     /* Le `Tier 1` échoue → l'Assistant garde la réponse honnête du `Tier 0`.
        Une dégradation se subit, elle ne se propage pas (ADR-081). */
@@ -399,7 +399,7 @@ describe('marquages hostiles ou incohérents', () => {
       calls,
     );
 
-    const reply = await assistant.say('faudrait que je pense au café');
+    const reply = await assistant.say('faudrait que je pense au café', { surface: 'LOCALE' });
 
     expect(reply.kind).toBe('DONE');
     expect(calls[0]?.input).toEqual({ title: 'acheter du café' });

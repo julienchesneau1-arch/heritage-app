@@ -89,7 +89,7 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
     runtime = built.value;
 
     for (const action of ACTIONS) {
-      const reply = await runtime.assistant.say(action.phrase);
+      const reply = await runtime.assistant.say(action.phrase, { surface: 'LOCALE' });
       observed.set(action.label, { reply, rendered: classify(reply) });
     }
   }, 60_000);

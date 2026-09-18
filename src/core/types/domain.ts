@@ -489,6 +489,46 @@ export const Actor = z.enum([
 export type Actor = z.infer<typeof Actor>;
 
 /* -------------------------------------------------------------------------- */
+/* Surface d'origine — ADR-090                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * D'OÙ LA DEMANDE ARRIVE. Distinct de `Actor`, qui dit QUI la formule.
+ *
+ * Julien depuis son téléphone reste `USER` : ce n'est pas l'auteur qui change,
+ * c'est le CANAL. Et le canal décide de ce qu'une confirmation vaut.
+ *
+ * ```text
+ * LOCALE     clavier de la machine — l'utilisateur est physiquement là
+ * DISTANTE   passerelle web, pont, satellite — quelqu'un qui détient un jeton
+ * ```
+ *
+ * ⚠ POURQUOI CE TYPE EXISTE, ET CE QU'IL RÉPARE
+ * ---------------------------------------------------------------------------
+ * La confirmation de ce dépôt est **sans état** (ADR-023) : le client renvoie
+ * le texte d'origine, la clé d'opération et `confirm: true`. Le raisonnement
+ * était *« aucune session à stocker, donc aucune session à détourner »* — et il
+ * est juste, mais il supposait un utilisateur LOCAL.
+ *
+ * Sur une passerelle réseau, il produit l'inverse de ce qu'on croit :
+ *
+ * ```text
+ * qui détient le jeton peut se confirmer À LUI-MÊME
+ * ```
+ *
+ * La confirmation n'est alors pas un second facteur, c'est un second appel
+ * HTTP. Toute la protection L3/L4 — celle qui garde les actions
+ * irréversibles — repose sur une preuve que le canal distant ne fournit pas.
+ *
+ * Emprunté à `sosoj92/jarvis-assistant-vocal`, dont le pont iPhone refuse
+ * **tout** outil à confirmation quel que soit le registre local des
+ * autorisations. Leur formule vaut d'être citée : une surface distante
+ * n'hérite de rien.
+ */
+export const Surface = z.enum(['LOCALE', 'DISTANTE']);
+export type Surface = z.infer<typeof Surface>;
+
+/* -------------------------------------------------------------------------- */
 /* Origine épistémique — 09 §2.1                                              */
 /* -------------------------------------------------------------------------- */
 

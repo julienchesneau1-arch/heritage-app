@@ -184,7 +184,7 @@ async function main(): Promise<void> {
     parameterProvenance: { marker: 'USER' },
     operationId: fromStorage(operationId),
     actor: 'USER',
-    context: { mode: 'NORMAL', cloudEnabled: false, proactive: false, userConfirmed: false },
+    context: { mode: 'NORMAL', cloudEnabled: false, proactive: false, userConfirmed: false, surface: 'LOCALE' },
   });
 
   const row = await real.query<{ state: string; attempts: number }>(

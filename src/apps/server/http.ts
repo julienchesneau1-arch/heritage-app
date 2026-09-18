@@ -146,6 +146,22 @@ export function createHandler(deps: HandlerDeps) {
       const reply = await runtime.assistant.say(checked.data.text, {
         // ADR-073 : sans session, un référent devient une question, pas un pari.
         sessionId,
+        /* ⚠ DISTANTE — ADR-090, ET C'EST LA LIGNE QUI COMPTE DANS CE FICHIER.
+
+           La confirmation de ce dépôt est SANS ÉTAT (ADR-023) : le client
+           renvoie le texte, la clé d'opération et `confirm: true`. Sur une
+           passerelle réseau, cela signifie que **qui détient le jeton peut se
+           confirmer à lui-même** — la confirmation cesse d'être un second
+           facteur pour devenir un second appel HTTP.
+
+           Le Policy Gate refuse donc ici toute action de niveau L3 ou L4. La
+           passerelle reste pleinement utile pour lire, noter, lister ; ce qui
+           est irréversible se fait depuis la machine.
+
+           Emprunté à `sosoj92/jarvis-assistant-vocal`, dont le pont iPhone
+           refuse tout outil à confirmation quel que soit le registre local des
+           autorisations. */
+        surface: 'DISTANTE',
         ...(checked.data.operationId === undefined
           ? {}
           : // Identité proposée par le client : frontière explicite (ADR-030).

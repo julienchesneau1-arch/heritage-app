@@ -60,6 +60,8 @@ function demande(cloudEnabled: boolean): unknown {
       cloudEnabled,
       proactive: false,
       userConfirmed: false,
+      // ADR-090 : LOCALE, pour que la seule variable du fichier reste le cloud.
+      surface: 'LOCALE',
     },
     parameters: [],
   };

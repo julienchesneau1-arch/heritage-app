@@ -18,6 +18,7 @@ import {
   Mode,
   PrivacyClass,
   Provenance,
+  Surface,
 } from '../types/domain.js';
 
 /** Un paramètre d'appel d'outil, avec sa provenance. */
@@ -68,6 +69,14 @@ export const PolicyRequest = z.object({
     proactive: z.boolean(),
     /** L'utilisateur a-t-il confirmé cette action précise, sur sa valeur concrète ? */
     userConfirmed: z.boolean(),
+    /**
+     * D'OÙ LA DEMANDE ARRIVE — ADR-090.
+     *
+     * REQUIS. Un champ optionnel retomberait sur `LOCALE`, c'est-à-dire sur le
+     * régime le plus permissif, exactement pour les appelants qui auraient
+     * oublié de se déclarer — dont les nouveaux.
+     */
+    surface: Surface,
   }),
 
   parameters: z.array(PolicyParameter).default([]),

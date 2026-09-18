@@ -259,6 +259,7 @@ const checks: readonly Check[] = [
               cloudEnabled: false,
               proactive: false,
               userConfirmed: true,
+        surface: 'LOCALE',
             },
           });
           return lu.ok ? JSON.stringify(lu.value.output) : null;

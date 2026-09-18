@@ -23,6 +23,7 @@ import {
 } from '../../src/providers/policy/cedar.js';
 import { registerCoreTools } from '../../src/tools/index.js';
 import type { Db } from '../../src/core/db/client.js';
+import type { Surface } from '../../src/core/types/domain.js';
 import type {
   CalendarProvider,
   EmbeddingProvider,
@@ -121,12 +122,22 @@ export function callContext(overrides: Partial<{
   cloudEnabled: boolean;
   proactive: boolean;
   userConfirmed: boolean;
+  surface: Surface;
 }> = {}) {
   return {
     mode: 'NORMAL' as const,
     cloudEnabled: false,
     proactive: false,
     userConfirmed: false,
+    /* ADR-090 — `LOCALE` par défaut, et c'est le bon défaut ICI seulement.
+       La quasi-totalité des tests éprouve le comportement de la machine ; les
+       forcer tous à se déclarer noierait la poignée qui éprouve VRAIMENT la
+       surface distante. Celle-ci passe `{ surface: 'DISTANTE' }`, ce qui la
+       rend visible d'un coup d'œil.
+
+       Le défaut vit dans le HARNAIS DE TEST, pas dans le produit : là-bas le
+       champ est requis, et aucun appelant ne peut l'omettre. */
+    surface: 'LOCALE' as Surface,
     ...overrides,
   };
 }

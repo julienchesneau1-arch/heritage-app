@@ -144,7 +144,7 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     sessionId = session.value.id;
 
     for (const turn of TURNS) {
-      const reply = await runtime.assistant.say(turn.phrase, { sessionId });
+      const reply = await runtime.assistant.say(turn.phrase, { sessionId, surface: 'LOCALE' });
       results.push({ turn, reply });
 
       /* La boucle du CLI, à l'identique (`main.ts:356`). La recopier plutôt

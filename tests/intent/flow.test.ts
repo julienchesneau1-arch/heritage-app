@@ -68,6 +68,7 @@ describe.skipIf(skip)('phrase française → action vérifiée', () => {
         cloudEnabled: false,
         proactive: false,
         userConfirmed: false,
+        surface: 'LOCALE',
       },
     });
     stack.setUserConfirmed(false);

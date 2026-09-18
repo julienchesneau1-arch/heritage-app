@@ -155,11 +155,11 @@ describe.skipIf(skip)('RED TEAM — rien ne sort de la machine', () => {
   it('une session complète n\'ouvre aucune connexion hors boucle locale', async () => {
     const tag = `offline-${String(Date.now())}`;
 
-    await runtime.assistant.say(`Retiens que ${tag} est un test hors ligne`);
-    await runtime.assistant.say(`Que sais-tu sur ${tag}`);
-    await runtime.assistant.say(`Ajoute ${tag} à ma liste`);
-    await runtime.assistant.say('mes tâches');
-    await runtime.assistant.say(`note ${tag}`);
+    await runtime.assistant.say(`Retiens que ${tag} est un test hors ligne`, { surface: 'LOCALE' });
+    await runtime.assistant.say(`Que sais-tu sur ${tag}`, { surface: 'LOCALE' });
+    await runtime.assistant.say(`Ajoute ${tag} à ma liste`, { surface: 'LOCALE' });
+    await runtime.assistant.say('mes tâches', { surface: 'LOCALE' });
+    await runtime.assistant.say(`note ${tag}`, { surface: 'LOCALE' });
 
     expect(offenders()).toEqual([]);
   });
