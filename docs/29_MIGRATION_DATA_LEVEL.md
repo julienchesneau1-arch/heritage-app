@@ -57,6 +57,12 @@ vérifie qu'il refuse. Avec son contrôle négatif : une base propre passe.
 
 ## ⚠ REVUE LIGNE PAR LIGNE — faite le 19/08/2026, deux défauts BLOQUANTS
 
+> **↻ MISE À JOUR — les trois points sont corrigés (ADR-092).** Cette section
+> décrit l'état du **19/08/2026**. Elle est gardée telle quelle : effacer un
+> constat parce qu'il a été traité, c'est perdre la trace de ce qui avait été
+> manqué et par quel angle mort. Ce qui a changé est en **§ Ce qui a été
+> corrigé**, plus bas. Le reste de la page — la marche à suivre — reste vrai.
+
 Julien a demandé que cette revue soit conduite à sa place. Elle l'a été, sur la
 base de test, en transaction annulée. **Résultat : ne pas appliquer cette
 migration en l'état.**
@@ -126,6 +132,102 @@ Un plancher tenu par la seule application **est** un second mécanisme.
 Les trois constats sont **figés en tests** dans
 `tests/privacy/migration-data-level.test.ts` : ils tomberont dès qu'un correctif
 sera posé, ce qui est leur fonction.
+
+---
+
+## ✅ CE QUI A ÉTÉ CORRIGÉ — 18/09/2026, ADR-092
+
+Les trois points ci-dessus sont traités. La façon dont ils le sont tient en une
+phrase, et elle vaut d'être lue avant le détail :
+
+> **La base ne calcule pas le niveau. Elle refuse ceux qui sont trop bas, et
+> elle pose le plancher quand personne n'a rien dit.**
+
+### 1. Le `DEFAULT` n'aurait pas suffi — et c'est un trigger
+
+Cette page proposait `DEFAULT 'PERSONAL'`. C'était **faux**, et l'erreur est
+instructive : le plancher dépend de la **catégorie de la ligne**, et un `DEFAULT`
+de colonne ne peut pas lire une autre colonne.
+
+Avec la contrainte de plancher du point 2, `DEFAULT 'PERSONAL'` aurait fait
+passer `memory_add(dataCategory: 'HEALTH')` d'« impossible » à « refusé par la
+contrainte ». Un progrès — et toujours une fonctionnalité perdue.
+
+Un trigger `BEFORE INSERT`, lui, lit la ligne entière :
+
+```sql
+IF NEW.data_level IS NULL THEN
+    NEW.data_level := jarvis_plancher(NEW.data_category, NEW.privacy_class);
+END IF;
+```
+
+**Il ne corrige jamais une valeur fournie.** Une valeur trop basse est
+*refusée*, pas remontée en douce — remonter silencieusement cacherait un défaut
+applicatif, et la donnée mal classée suivante passerait elle aussi.
+
+> Absent ≠ trop bas. L'un est un appelant qui n'a pas d'opinion, l'autre est un
+> appelant qui en a une, et qui a tort.
+
+### 2. Le plancher, pour les 14 catégories
+
+```sql
+CHECK (jarvis_rang_niveau(data_level)
+         >= jarvis_rang_niveau(jarvis_plancher(data_category, privacy_class)))
+```
+
+`memories_credential_restricted` **reste**, bien que redondante. C'est la seule
+règle du système dont on accepte de payer une double écriture : elle est écrite
+en clair, sans passer par aucune fonction, donc elle survit à une erreur dans
+`jarvis_plancher_categorie`. Un secret envoyé ne se répare pas.
+
+Le test qui l'éprouve **retire d'abord le plancher général** — sinon il serait
+vert même si cette contrainte avait disparu, et n'aurait mesuré que la
+redondance.
+
+### 3. `privacy_class` — tranché : elles cohabitent sous contrainte
+
+Retirer `privacy_class` toucherait **chaque outil du dépôt**. Ce qui est interdit
+est plus étroit, et c'est le seul interdit qui compte : **la divergence dans la
+direction qui expose.**
+
+| Classe | Niveau minimum imposé |
+|---|---|
+| `RED` | `HIGHLY_SENSITIVE` |
+| `ORANGE` | `PERSONAL` |
+| `GREEN` | *(aucun — `PUBLIC` est le rang zéro)* |
+
+Dans l'autre sens, rien n'est contraint : une ligne peut toujours être **plus**
+protégée que sa vieille classe ne le dit. C'est exactement `strictest()`.
+
+### ⚠ Le deuxième registre que ça crée, et qu'on ne cache pas
+
+La table des planchers de `docs/14 §3` existait en TypeScript. Elle existe
+maintenant aussi en SQL. ADR-041 : *« deux registres du même fait finissent par
+diverger »*.
+
+C'est assumé, pour une raison qu'on peut dire à voix haute : **une contrainte de
+base ne peut pas appeler du TypeScript.** Le choix n'était pas entre un registre
+et deux — il était entre deux registres et *aucune barrière*, c'est-à-dire un
+plancher tenu par la seule application, ce que `docs/14` refuse explicitement.
+
+Puisque la duplication est inévitable, on la **mesure** :
+`tests/privacy/plancher-sql-vs-ts.test.ts` interroge les deux registres sur les
+**14 catégories × 3 classes** et exige la même réponse. Le jour où l'un dérive,
+un test rougit — pas une donnée qui fuit.
+
+Ce fichier documente aussi la **seule divergence volontaire** : sur `GREEN`,
+`fromLegacy` (TypeScript) *refuse* et `jarvis_plancher` (SQL) *protège vers le
+haut*. Elles ne font pas le même métier — l'une convertit des lignes anciennes
+où `GREEN` peut vouloir dire « public par inattention », l'autre pose un minimum
+sur une écriture neuve. Aucune des deux ne rend jamais un niveau inférieur au
+plancher de la catégorie.
+
+### Ce que ça change pour la marche à suivre ci-dessous
+
+**Rien.** La vérification ligne par ligne reste entièrement à faire : les
+correctifs portent sur l'état *après* la migration, pas sur le garde-fou. Une
+mémoire `GREEN` non confirmée bloque toujours, et c'est toujours toi qui
+tranches.
 
 ### ⚠ Un piège que ce document t'aurait fait rencontrer
 

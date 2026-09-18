@@ -7604,3 +7604,131 @@ Deux entrées s'ajoutent à la liste des écartés :
   jusqu'au jour où le projet devient autre chose.
 - **La transcription permanente** — elle éviterait `openWakeWord` et coûterait
   bien pire : tout ce qui se dit dans la pièce deviendrait du texte.
+
+---
+
+## ADR-092 — La base pose le plancher, et refuse ce qui est trop bas
+
+**Statut :** accepté · 18/09/2026
+**Contexte :** `docs/29`, ADR-076, ADR-041, ADR-050, `docs/14 §3` et `§5`
+
+### La décision
+
+La revue ligne par ligne de la migration 0013 (ADR-076) avait trouvé deux
+défauts bloquants et laissé une question ouverte. Les trois sont tranchés ici,
+et une seule phrase les gouverne :
+
+> **La base ne calcule pas le niveau de confidentialité. Elle refuse ceux qui
+> sont trop bas, et elle pose le plancher quand personne n'a rien dit.**
+
+### 1. `DEFAULT 'PERSONAL'` était la mauvaise réponse — et c'est instructif
+
+`docs/29` proposait un `DEFAULT`. La proposition venait de moi, et elle était
+fausse : **le plancher dépend de la catégorie de la ligne, et un `DEFAULT` de
+colonne ne peut pas lire une autre colonne.**
+
+Avec la contrainte de plancher du point 2, `DEFAULT 'PERSONAL'` aurait fait
+passer `memory_add(dataCategory: 'HEALTH')` d'« impossible » à « refusé ». Un
+progrès — et toujours une fonctionnalité perdue, pour un correctif censé en
+restaurer une.
+
+> Le correctif qu'on écrit dans un rapport de revue n'a pas été éprouvé ; il a
+> seulement été **formulé**. C'est la quinzième occurrence dans ce dépôt du
+> même motif : *une affirmation que le mécanisme censé l'établir n'établit pas.*
+> Ici, le mécanisme était une phrase.
+
+Un trigger `BEFORE INSERT` lit la ligne entière. Il pose
+`jarvis_plancher(data_category, privacy_class)` — **uniquement** quand
+`data_level` est absent.
+
+### 2. Il ne corrige JAMAIS une valeur fournie
+
+La tentation était forte : le trigger sait calculer le plancher, il pourrait
+donc remonter une valeur trop basse au lieu de laisser la contrainte refuser.
+*« On ne va tout de même pas refuser une écriture qu'on sait réparer. »*
+
+On refuse quand même, et c'est le raisonnement d'`UNKNOWN` appliqué ailleurs :
+
+```text
+data_level absent    → un appelant qui n'a pas d'opinion   → on pose le plancher
+data_level trop bas  → un appelant qui en a une, et a tort → on REFUSE
+```
+
+Remonter silencieusement rendrait le second cas indétectable, et la donnée mal
+classée suivante passerait elle aussi. **Une barrière qui répare en silence
+cesse d'être une barrière : elle devient une excuse pour ne pas regarder.**
+
+### 3. `privacy_class` et `data_level` cohabitent sous contrainte
+
+ADR-041 : *« deux registres du même fait finissent par diverger »*. Le choix
+était entre lier les deux par une contrainte et retirer l'ancien plus tard.
+
+**On lie.** Retirer `privacy_class` toucherait chaque outil du dépôt, pour un
+gain qui n'est pas de sécurité. Ce qu'on interdit est plus étroit, et c'est le
+seul interdit qui compte : la divergence **dans la direction qui expose**.
+`RED` ne peut pas porter moins que `HIGHLY_SENSITIVE`, `ORANGE` pas moins que
+`PERSONAL`. Dans l'autre sens, rien n'est contraint — une ligne peut toujours
+être *plus* protégée que sa vieille classe ne le dit. C'est `strictest()`.
+
+### Le second registre qu'on accepte, et ce qu'on paye pour ça
+
+La table des planchers de `docs/14 §3` existait en TypeScript. Elle existe
+maintenant aussi en SQL. C'est précisément ce qu'ADR-041 met en garde.
+
+C'est assumé, pour une raison qu'on peut dire à voix haute : **une contrainte de
+base ne peut pas appeler du TypeScript.** Le choix n'était pas entre un registre
+et deux — il était entre deux registres et *aucune barrière*, c'est-à-dire un
+plancher tenu par la seule application, ce que `docs/14` refuse en toutes
+lettres : *« ce doit être le même code, pas un second mécanisme qui lui
+ressemble »*.
+
+On ne peut pas obéir à cette phrase ici. On fait donc la seule chose honnête
+quand on désobéit à une règle : **on le dit, et on mesure l'écart.**
+`tests/privacy/plancher-sql-vs-ts.test.ts` interroge les deux registres sur les
+14 catégories × 3 classes et exige la même réponse — 59 cas. Le jour où l'un
+dérive, un test rougit ; sans lui, c'est une donnée qui fuit.
+
+Et `memories_credential_restricted` **reste**, bien que redondante avec le
+plancher général. Elle est écrite en clair, sans appeler aucune fonction : elle
+survit à une erreur dans `jarvis_plancher_categorie` que le test d'accord
+n'aurait pas attrapée. C'est la seule règle du système dont on accepte de payer
+une double écriture, et c'est celle dont l'échec serait irréparable.
+
+### La divergence volontaire, nommée
+
+Sur `GREEN`, les deux registres ne répondent pas pareil, et c'est voulu :
+
+| | `fromLegacy` (TS) | `jarvis_plancher` (SQL) |
+|---|---|---|
+| métier | convertir des lignes **déjà stockées** | poser un minimum sur une écriture **neuve** |
+| `GREEN` + `PERSONAL_MEMORY` | **refuse** | `PERSONAL` |
+| `GREEN` + `WEATHER` | `PUBLIC` | `PUBLIC` |
+
+L'une refuse de deviner sur des données anciennes où `GREEN` peut vouloir dire
+« public par inattention » ; l'autre protège par défaut des données nouvelles,
+où refuser casserait `note_create`. **Aucune des deux ne rend jamais un niveau
+inférieur au plancher de la catégorie** — c'est la propriété qui compte, et
+c'est elle qui est testée.
+
+Une divergence qu'on n'écrit pas devient un bug qu'on découvre.
+
+### Ce que ça ne change pas
+
+**La migration reste non appliquée.** Les correctifs portent sur l'état *après*,
+pas sur le garde-fou. La vérification ligne par ligne de `docs/29` est toujours
+entièrement à faire, et elle revient toujours à Julien.
+
+### Le test qui a failli passer pour une bonne raison
+
+La première rédaction du test de plancher écrivait `HEALTH` + `privacy_class =
+'ORANGE'`. Il était vert. Il l'était parce que `sensitive_categories_are_red`
+(migration 0005) interdit toute classe autre que `RED` à `CREDENTIAL`,
+`FINANCIAL` et `HEALTH` — **le refus venait d'une contrainte écrite deux ans
+plus tôt, et n'avait rien à voir avec ce que le test croyait mesurer.**
+
+Il a fallu le sabotage pour le voir : en retirant le plancher, le test restait
+vert. C'est la raison pour laquelle chaque assertion de refus vérifie désormais
+*quelle* contrainte a refusé, et pas seulement qu'il y a eu refus.
+
+> Un test qui passe pour la mauvaise raison est plus dangereux qu'un test qui
+> échoue : il occupe la place où l'on aurait mis un vrai.
