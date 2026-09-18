@@ -7253,3 +7253,128 @@ le coffre du LAB devient celui de prod   → 3 rouges
 Le deuxième est le plus important : il ne casse aucune fonctionnalité, il
 change seulement l'ORDRE — et produit un système qui demande à Julien
 d'approuver des versions défectueuses.
+
+---
+
+## ADR-089 — Le dépôt poussé ne compilait pas : `.gitignore` excluait le coffre
+
+**Statut** : accepté · **Date** : 2026-09-18 · **Sévérité** : la plus haute du dépôt
+
+### Ce qui a été trouvé
+
+Le conteneur de travail a été réapprovisionné entre deux sessions. Le dépôt a
+donc été **cloné à neuf** — pour la première fois. Résultat :
+
+```text
+error TS2307: Cannot find module '../core/secrets/vault.js'
+```
+
+`src/core/secrets/` **n'a jamais été commité**. `git log --all -- 'src/core/secrets/*'`
+est vide ; `git ls-tree origin/<branche> src/core/` ne le liste pas.
+
+**Le dépôt public ne compile pas, et ne l'a jamais fait.**
+
+### La cause, et elle est exemplaire
+
+`.gitignore`, ligne 11 :
+
+```gitignore
+# Secrets — jamais dans le dépôt (03 §9)
+secrets/
+```
+
+En git, **un motif sans barre oblique initiale matche à n'importe quelle
+profondeur**. Écrit pour tenir un dossier de secrets hors du dépôt, il a aussi
+exclu `src/core/secrets/` — c'est-à-dire **l'implémentation de l'invariant S3**.
+
+> Une mesure de sécurité a silencieusement supprimé le mécanisme de sécurité
+> qu'elle était censée protéger.
+
+Corrigé en ancrant le motif : `/secrets/`. C'est la correction minimale, et
+elle laisse la protection d'origine intacte.
+
+### Pourquoi personne ne l'a vu pendant des mois
+
+Parce que **personne n'a jamais cloné à neuf**. La machine de travail portait
+le fichier, non suivi. Tout y passait : `pnpm typecheck`, `pnpm test`, les
+quatre portes, la CI locale.
+
+```text
+sur la machine de travail   le fichier est là, non suivi  → tout est vert
+sur un clone neuf           le fichier n'existe pas       → rien ne compile
+```
+
+**Et j'ai donné deux fois à Julien la marche à suivre `git clone && pnpm
+install && pnpm jarvis:setup`.** Elle échouait à la première commande.
+
+### Le fichier a été reconstitué depuis ses tests
+
+Le contenu était perdu. `tests/security/secrets.test.ts` et
+`tests/security/refus-eprouves.test.ts` en portaient le contrat **complet** :
+l'enveloppe `Secret`, ses trois chemins de rendu, le champ privé `#value`, le
+comportement du coffre sur une variable vide, la clé `secretName` du détail
+d'erreur.
+
+Reconstitué, puis vérifié : **26 tests verts**, dont la garde `[inspect.custom]`
+et le contrôle négatif qui exige qu'`expose()` rende encore la valeur.
+
+> C'est la seule raison pour laquelle la reconstitution est fidèle plutôt
+> qu'approximative. Des tests qui décrivent un contrat le **remplacent** quand
+> le code disparaît.
+
+### Et le scanner de secrets était aveugle une troisième fois
+
+En rendant le fichier suivable, `pnpm secrets:scan` a signalé deux fichiers
+écrits pendant ADR-088 — `ops/gates/phase7.ts` et `tests/update/lab.test.ts`.
+
+**Le scan les avait déclarés propres au moment de leur commit.** Cause,
+ligne 197 :
+
+```ts
+const tracked = git(['ls-files'])   // ← fichiers DÉJÀ SUIVIS
+```
+
+Un secret entre dans un dépôt par un fichier **neuf**. Un fichier neuf n'est
+pas encore suivi. Le scan était donc aveugle exactement là où on s'en sert :
+avant de commiter du code nouveau.
+
+Troisième angle mort du même outil :
+
+```text
+1. il lisait HEAD au lieu de l'arbre de travail     (corrigé précédemment)
+2. .gitignore excluait le code du coffre            (ici)
+3. il ne voyait pas les fichiers neufs              (ici)
+```
+
+Corrigé par `git ls-files --others --exclude-standard`. Les deux fichiers
+d'ADR-088 reçoivent une entrée `PATTERN_EXCEPTIONS` **argumentée** — ils ont
+besoin de valeurs qui ressemblent à des secrets pour prouver que le LAB les
+refuse, exactement comme `google-calendar.test.ts`.
+
+**Le défaut est mesuré sur du réel, pas sur un sabotage** : ces deux fichiers
+sont passés au commit et échouent aujourd'hui. Et le sabotage confirme la
+correction — un jeton déposé dans un fichier neuf est désormais vu.
+
+### Vérification
+
+Le parcours documenté a été rejoué **depuis un conteneur vierge** :
+
+```text
+pnpm install · pnpm jarvis:setup   → ✓ Prêt.
+pnpm test                          → 96 fichiers / 1056 tests verts
+gate:phase0/1/2/3                  → OK
+```
+
+### La leçon
+
+Elle n'est pas « relire son `.gitignore` ». C'est :
+
+> **Un dépôt n'est pas vérifié tant qu'il n'a pas été cloné à neuf.**
+>
+> Tout ce qui est vert sur la machine où le code a été écrit peut l'être grâce
+> à un fichier que le dépôt ne contient pas.
+
+Quatorzième occurrence du motif — *une affirmation que le mécanisme censé
+l'établir n'établit pas* — et la plus coûteuse, parce qu'elle invalidait
+rétroactivement **toutes** les autres : chaque porte verte de ce dépôt avait
+été franchie sur un arbre de travail qui n'était pas le dépôt.

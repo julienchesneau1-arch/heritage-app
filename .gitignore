@@ -8,7 +8,20 @@ dist/
 !.env.example
 *.pem
 *.key
-secrets/
+
+# ⚠ CE MOTIF S'ÉCRIVAIT `secrets/`, ET IL A EXCLU LE CODE DU COFFRE — ADR-089.
+#
+# En git, un motif sans barre oblique initiale matche à N'IMPORTE QUELLE
+# profondeur. `secrets/` visait un dossier de secrets à la racine ; il a aussi
+# exclu `src/core/secrets/`, c'est-à-dire l'implémentation de l'invariant S3.
+#
+# Conséquence, restée invisible des mois : le dépôt poussé NE COMPILAIT PAS.
+# Personne ne l'a su tant que personne n'a cloné à neuf — les machines de
+# travail portaient le fichier, non suivi.
+#
+# La barre oblique initiale ancre le motif à la racine. C'est la correction
+# minimale, et elle laisse la protection d'origine intacte.
+/secrets/
 
 # Artefacts locaux
 coverage/

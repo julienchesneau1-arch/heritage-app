@@ -119,6 +119,24 @@ const PATTERN_EXCEPTIONS: readonly PatternException[] = [
       'une garde sur le fichier qui manipule les jetons.',
   },
   {
+    file: /^tests\/update\/lab\.test\.ts$/,
+    pattern: 'Mot de passe en dur',
+    why:
+      "Même cas que `google-calendar.test.ts` : le fichier PROUVE que le coffre " +
+      'du LAB ne rend aucun secret de production (`docs/07 §5`). Il lui faut donc ' +
+      'un environnement qui en CONTIENT réellement — sans quoi le refus du LAB ' +
+      "passerait pour une propriété alors qu'il n'y aurait rien à trouver. " +
+      'Valeurs factices, jamais utilisées ailleurs.',
+  },
+  {
+    file: /^ops\/gates\/phase7\.ts$/,
+    pattern: 'Mot de passe en dur',
+    why:
+      'Le contrôle négatif de G7.6 exige un coffre qui DÉTIENT des secrets, pour ' +
+      'vérifier que `coffreEstPrive` le refuse. Sans lui, la porte accepterait ' +
+      'le mauvais câblage exactement comme le bon (ADR-088). Valeurs factices.',
+  },
+  {
     file: /^tests\/unit\/config\.test\.ts$/,
     pattern: 'Mot de passe en dur',
     why:
@@ -195,6 +213,32 @@ function main(): void {
 
   // 1. Un fichier .env ne doit jamais être suivi.
   const tracked = git(['ls-files']).split('\n').filter((f) => f !== '');
+
+  /* ⚠ LES FICHIERS NON SUIVIS SONT SCANNÉS AUSSI — ET LEUR ABSENCE ÉTAIT LE
+     TROISIÈME ANGLE MORT DE CET OUTIL.
+
+     L'énumération se limitait à `git ls-files`, c'est-à-dire aux fichiers DÉJÀ
+     SUIVIS. Or un secret entre dans un dépôt par un fichier NEUF — et un
+     fichier neuf n'est pas encore suivi.
+
+     Le scan était donc aveugle exactement là où on s'en sert : avant de
+     commiter du code nouveau. Mesuré : deux fichiers créés pendant ADR-088
+     portaient des valeurs que le motif « mot de passe en dur » reconnaît ; le
+     scan a dit « aucun secret détecté », et ils ont été commités. Ils ne sont
+     apparus qu'au scan SUIVANT, une fois devenus suivis.
+
+     C'est la troisième fois que cet outil est aveugle là où il sert :
+       — il lisait HEAD au lieu de l'arbre de travail (corrigé) ;
+       — `.gitignore` excluait le code du coffre lui-même (ADR-089) ;
+       — il ne voyait pas les fichiers neufs (ici).
+
+     `--exclude-standard` respecte `.gitignore` : un `.env` local reste hors
+     du scan, ce qui est le comportement voulu — il n'ira jamais dans le dépôt. */
+  const untracked = git(['ls-files', '--others', '--exclude-standard'])
+    .split('\n')
+    .filter((f) => f !== '');
+
+  const surDisque = [...tracked, ...untracked];
   for (const file of tracked) {
     if (/^\.env$|^\.env\.(?!example)/.test(file)) {
       findings.push({
@@ -223,7 +267,7 @@ function main(): void {
 
      Neuvième occurrence du motif de `docs/26 §2` : une affirmation que le
      mécanisme censé l'établir n'établit pas. Ici sur un outil de SÉCURITÉ. */
-  for (const file of tracked) {
+  for (const file of surDisque) {
     if (ALLOWLIST.some((r) => r.test(file))) continue;
     let content: string;
     try {

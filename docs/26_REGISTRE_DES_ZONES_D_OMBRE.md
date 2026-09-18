@@ -402,6 +402,42 @@ zéro code émis. Vérifié, pas supposé.
 
 ---
 
+### 2.13 Le dépôt poussé ne compilait pas — `.gitignore` excluait le coffre
+
+**Trouvé parce que le conteneur a été réapprovisionné**, donc le dépôt cloné à
+neuf — pour la première fois.
+
+`src/core/secrets/` n'a **jamais été commité**. `.gitignore` portait le motif
+nu `secrets/`, qui en git matche **tout dossier de ce nom, à n'importe quelle
+profondeur** — dont l'implémentation de l'invariant S3.
+
+> Une mesure de sécurité a silencieusement supprimé le mécanisme de sécurité
+> qu'elle protégeait.
+
+**Invisible pendant des mois parce que personne n'avait cloné à neuf.** La
+machine de travail portait le fichier, non suivi : typecheck, tests, quatre
+portes, tout y passait.
+
+**Corrigé** (ADR-089) : motif ancré en `/secrets/`, fichier reconstitué depuis
+ses tests — qui en portaient le contrat complet — et vérifié à 26 tests verts.
+
+**Et le scanner de secrets était aveugle une troisième fois** : il énumérait
+`git ls-files`, donc les fichiers DÉJÀ SUIVIS. Or un secret entre par un
+fichier NEUF. Deux fichiers d'ADR-088 sont passés au commit et échouent
+aujourd'hui — le défaut est mesuré sur du réel.
+
+**Vérifié depuis un conteneur vierge** : `pnpm install` · `pnpm jarvis:setup`
+→ `✓ Prêt`, 1056 tests verts, portes 0-3 OK.
+
+> **Quatorzième occurrence du motif, et la plus coûteuse** : elle invalidait
+> rétroactivement toutes les autres. Chaque porte verte de ce dépôt avait été
+> franchie sur un arbre de travail qui n'était pas le dépôt.
+>
+> La leçon n'est pas « relire son `.gitignore` » : **un dépôt n'est pas vérifié
+> tant qu'il n'a pas été cloné à neuf.**
+
+---
+
 ### 2.12 La Phase 3 était déclarée franchie sans porte de sortie
 
 **Trouvé en cherchant quoi faire « en suivant les docs ».**
