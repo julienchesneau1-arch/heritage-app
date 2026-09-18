@@ -667,7 +667,7 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Sept modules de logique hors circuit
+### 4.1 Neuf modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
@@ -680,6 +680,7 @@ jamais atteints par le produit**.
 | `observability/logger.ts` | aucun appelant | exigences de log de `03 §9` non satisfaites |
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
 | `update/candidat.ts` · `promotion.ts` · `surveillance.ts` · `lab.ts` | **ADR-088** — la couche qui DÉCIDE d'une mise à jour est écrite ; celle qui EXÉCUTE n'existe pas | un vérificateur TUF/Sigstore, **puis** un exécutant — dans cet ordre (§4.16) |
+| `voice/micro.ts` · `voice/plafond.ts` | **ADR-093** — les deux arbitrages de la voix, écrits en fonctions pures. Aucune ligne de code audio n'existe, donc rien ne peut les appeler | `micro.ts` : le module audio · `plafond.ts` : `assistant.say()` consultant un déclencheur (§4.17) |
 | ~~`intent/tier1.ts`~~ | **LEVÉE (ADR-082)** — `createOllama` implémente `ModelProvider` sur la boucle locale ; le `Tier 1` se construit dès que la configuration l'active | — |
 | ~~`tools/outcome.ts`~~ | **LEVÉE (ADR-065)** — `memory_forget` projette son statut sur la ligne mémoire ET chaque dérivé hors cascade ; une mémoire vit à plusieurs endroits, donc l'oubli est multi-cibles | — |
 
@@ -696,6 +697,7 @@ jamais atteints par le produit**.
 4   + intent/tier1.ts (ADR-081) — l'enveloppe de sûreté écrite AVANT le modèle
 3   − intent/tier1.ts (ADR-082) — createOllama existe, le Tier 1 se construit
 7   + les QUATRE modules de l'Update Engine (ADR-088), d'un coup
+9   + voice/micro.ts et voice/plafond.ts (ADR-093) — la DÉCISION avant le son
 ```
 
 > **La dernière ligne monte de quatre d'un coup, et c'est assumé.** Ce compteur
@@ -1704,29 +1706,68 @@ trente tours sont un **échantillon**, pas une cible.
 
 ---
 
-### 4.17 Deux questions que la voix pose et auxquelles le dépôt n'a pas de réponse
+### 4.17 Deux questions que la voix pose — TRANCHÉES, mécanisme partiel
 
 **Ouvertes par ADR-091**, en écrivant les fiches de Phase 5 — donc AVANT
-d'installer quoi que ce soit.
+d'installer quoi que ce soit. **Tranchées par ADR-093**, sur délégation
+explicite de Julien.
 
 Les trois briques (openWakeWord, Whisper, Piper) sont permissives, locales et
-sans réseau. Rien ne s'y oppose au sens de `docs/04`. Ce qui s'y oppose est
-ailleurs, et n'a pas de mécanisme :
+sans réseau. Rien ne s'y oppose au sens de `docs/04`. Ce qui s'y opposait était
+ailleurs :
 
-| Question | Ce que le dépôt en dit aujourd'hui |
+| Question | État |
 |---|---|
-| **Qui d'autre est dans la pièce ?** Un micro ouvert entend des tiers qui n'ont rien demandé et ignorent qu'un ordinateur écoute | **rien** |
-| **Qui d'autre entend la réponse ?** Prononcer, c'est DIFFUSER. `docs/03 §6` classe la donnée, jamais l'auditoire | **rien** |
+| **Qui d'autre est dans la pièce ?** Un micro ouvert entend des tiers qui n'ont rien demandé et ignorent qu'un ordinateur écoute | **décidée** · R2 en code, R1 en attente d'audio |
+| **Qui d'autre entend la réponse ?** Prononcer, c'est DIFFUSER. `docs/03 §6` classe la donnée, jamais l'auditoire | **décidée et en code** |
 
 Le mot d'activation borne ce qui est **transcrit**, jamais ce qui est
 **capté** : la détection travaille par construction sur un flux continu.
 
-**Ce n'est pas un défaut du code** — il n'y a pas de code. C'est un trou dans
-le modèle de menace (`docs/13`), nommé avant d'être rencontré.
+#### Ce qui est décidé et éprouvé aujourd'hui
 
-**Condition de levée** : une décision de Julien sur ces deux points, puis un
-mécanisme. Pas l'inverse — écrire le mécanisme d'abord reviendrait à choisir à
-sa place.
+```text
+src/core/voice/micro.ts     le témoin est DÉRIVÉ de l'état du micro.
+                            Aucun mutateur exporté : il ne peut pas mentir.
+                            ⚠ VEILLE n'est pas ÉTEINT.
+
+src/core/voice/plafond.ts   le plafond vocal dépend du DÉCLENCHEUR :
+                            demande explicite  → HIGHLY_SENSITIVE
+                            suite de conversation → SENSITIVE
+                            proactif           → PERSONAL
+                            RESTRICTED         → jamais, sous aucun déclencheur
+                            contenu non fiable → résumé encadré, pas récité
+```
+
+Les deux modules sont **branchés à rien**, comme `classify.ts` l'était à l'étape
+F1 : des fonctions pures qui n'accordent ni ne retirent aucune permission.
+41 tests les éprouvent.
+
+#### ⚠ CE QUI RESTE OUVERT, ET QUI EST LE PLUS DUR
+
+**R1 — « rien de ce qui précède le mot d'activation n'existe » n'est pas du
+code.** C'est une contrainte sur un module audio qui n'existe pas : tampon
+circulaire en RAM, jamais de disque, jamais de journal. Aujourd'hui elle est une
+phrase. `sortDuTampon()` est l'endroit prévu pour qu'elle devienne une garde,
+mais rien ne l'appelle.
+
+**Le tiers n'est pas protégé par le témoin.** Un témoin logiciel s'adresse à qui
+regarde l'écran, et **un invité ne regarde pas l'écran de Julien**. Ce qui le
+protège est R1 (ce qu'il dit n'existe nulle part) et le plafond proactif (Jarvis
+ne lance pas de phrase révélatrice devant lui). C'est une réponse **partielle**,
+et elle est écrite ici comme telle plutôt que comptée comme une levée.
+
+**Le plafond n'est branché à aucun appelant.** `assistant.say()` ne le consulte
+pas — il n'a pas de canal vocal à consulter. Le jour du branchement,
+`Declencheur` devra être **dérivé** de `context.proactive` du Policy Gate, jamais
+transporté à côté : deux registres du même fait finissent par diverger
+(ADR-041), et le jour où ils divergent, une phrase proactive se croira
+sollicitée.
+
+**Condition de levée complète** : le premier code audio, et l'usage réel. Trois
+choses ne se décident pas depuis une chaise — si le plafond proactif rend les
+rappels inutilisables, si le témoin de veille finit désactivé parce qu'il agace,
+et si « résumer plutôt que réciter » est vécu comme de la rétention.
 
 ---
 

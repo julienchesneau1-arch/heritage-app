@@ -228,7 +228,7 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
        six, alors que `wiring.test.ts` disait déjà `toHaveLength(6)`. Le test
        avait raison contre le registre, et rien ne le signalait. */
     const enLettres: Readonly<Record<string, number>> = {
-      Trois: 3, Quatre: 4, Cinq: 5, Six: 6, Sept: 7, Huit: 8,
+      Trois: 3, Quatre: 4, Cinq: 5, Six: 6, Sept: 7, Huit: 8, Neuf: 9, Dix: 10,
     };
     const m = /### 4\.1 (\w+) modules de logique hors circuit/.exec(ZONES);
     const mot = m?.[1];

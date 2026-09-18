@@ -171,6 +171,31 @@ describe('RED TEAM — code mort en production', () => {
         'src/core/update/surveillance.ts',
         'src/core/update/lab.ts',
 
+        /* ⚠ DEUX MODULES DE PLUS — ADR-093, les deux arbitrages de la voix.
+
+           Même geste que `privacy/classify.ts` à l'étape F1 : des fonctions
+           PURES, sans appelant, qui n'accordent ni ne retirent aucune
+           permission. Il n'y a pas une ligne de code audio dans ce dépôt, donc
+           rien ne peut les appeler.
+
+           Mais l'ordre compte, et il est inhabituel ici : `docs/26 §4.17`
+           demandait une DÉCISION puis un MÉCANISME. Ces deux fichiers SONT la
+           décision — écrite en fonction éprouvée plutôt qu'en paragraphe,
+           parce qu'un paragraphe se relit et qu'une fonction se casse quand on
+           la contredit.
+
+           Ils sortiront de cette liste quand un canal vocal existera :
+           `micro.ts` quand le module audio lira son état, `plafond.ts` quand
+           `assistant.say()` consultera un déclencheur. Et ce jour-là,
+           `Declencheur` devra être DÉRIVÉ de `context.proactive`, jamais
+           transporté à côté (ADR-041).
+
+           ⚠ ET LE COMPTEUR MONTE ENCORE. Le faire baisser en branchant un
+           micro sur un plafond qu'on n'a pas décidé serait exactement
+           l'inversion que `docs/26 §4.17` refusait. */
+        'src/core/voice/micro.ts',
+        'src/core/voice/plafond.ts',
+
 
         /* ⚠ `src/core/intent/tier1.ts` A QUITTÉ CETTE LISTE — ADR-082.
 
@@ -244,8 +269,23 @@ describe('RED TEAM — code mort en production', () => {
        Ce compteur ne mesure pas une qualité : il mesure **l'écart entre ce qui
        est écrit et ce qui sert**. Le faire baisser en branchant un exécutant
        de mise à jour qui n'a aucun vérificateur de signature serait le
-       tricher — et produirait exactement le système que `docs/07 §4` interdit. */
-    expect(deadLogic).toHaveLength(7);
+       tricher — et produirait exactement le système que `docs/07 §4` interdit.
+
+       **À NEUF avec ADR-093** : `voice/micro.ts` et `voice/plafond.ts`
+       entrent ensemble, et pour une raison qui n'est PAS celle de l'Update
+       Engine. Là il s'agissait d'écrire une enveloppe de sûreté à froid ; ici
+       il s'agit d'écrire une DÉCISION.
+
+       `docs/26 §4.17` posait deux questions — qui est dans la pièce, qui
+       entend la réponse — et refusait d'écrire le mécanisme avant la réponse,
+       « écrire le mécanisme d'abord reviendrait à choisir à sa place ». La
+       réponse est venue. Elle est écrite en fonction plutôt qu'en paragraphe,
+       et c'est la seule forme qui se casse quand on la contredit.
+
+       Un compteur qui monte de deux pour cette raison-là est un bon compteur.
+       Le faire baisser en branchant un micro sur un plafond non décidé serait
+       l'inversion exacte que la zone d'ombre refusait. */
+    expect(deadLogic).toHaveLength(9);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

@@ -7732,3 +7732,171 @@ vert. C'est la raison pour laquelle chaque assertion de refus vérifie désormai
 
 > Un test qui passe pour la mauvaise raison est plus dangereux qu'un test qui
 > échoue : il occupe la place où l'on aurait mis un vrai.
+
+---
+
+## ADR-093 — La voix : qui est dans la pièce, et qui entend la réponse
+
+**Statut :** accepté · 18/09/2026
+**Contexte :** `docs/26 §4.17` (ouverte par ADR-091), `docs/13`, `docs/14`, `CLAUDE.md` règle 2
+
+ADR-091 avait ouvert deux questions et refusé d'y répondre : *« écrire le
+mécanisme d'abord reviendrait à choisir à sa place »*. Julien a tranché en
+déléguant — **« tranche comme si c'était ton app »**. Voici les deux décisions,
+et ce qui les rend vérifiables aujourd'hui plutôt que déclaratives.
+
+---
+
+### Question 1 — « Qui d'autre est dans la pièce ? »
+
+Le mot d'activation borne ce qui est **transcrit**, jamais ce qui est **capté**.
+Un micro ouvert entend des tiers qui n'ont rien demandé.
+
+**Décision : le micro n'est pas un capteur, c'est une porte.** Trois règles.
+
+**R1 — Rien de ce qui précède le mot d'activation n'existe.** Tampon circulaire
+en RAM, dimensionné à la fenêtre de détection. Jamais sur disque, jamais dans le
+journal, jamais dans un contexte de modèle. Ce qui franchit la frontière est un
+booléen et un instant.
+
+**R2 — L'écoute est visible sans avoir à demander, et le témoin ne peut pas
+mentir.** C'est la seule des trois qui soit du code aujourd'hui, et c'est parce
+qu'elle n'est pas un problème d'audio mais un problème de **type**.
+
+Le réflexe naturel est deux variables — `capteurActif` et `temoinAllume`. Elles
+sont synchronisées le premier jour. Puis un chemin d'erreur rend la main sans
+éteindre le témoin, ou l'éteint sans fermer le flux. **Le seul observateur de
+cet écart est une personne qui croit que le micro est fermé.**
+
+ADR-041 dit la même chose pour les données. Ici le fait dupliqué est *« est-ce
+que ça écoute »*, et la divergence a un nom : **un micro ouvert avec la lumière
+éteinte.**
+
+`src/core/voice/micro.ts` rend cet état impossible : un seul état, deux lectures
+totales, et **aucune fonction capable d'allumer ou d'éteindre le témoin**. Un
+test liste les exports du module et exige qu'aucun ne soit un mutateur — la
+garantie vient de ce qui n'existe pas, comme pour `Secret`.
+
+> Le point le plus facile à rater : **`VEILLE` n'est pas `ÉTEINT`.** Le langage
+> courant appelle « éteint » un micro qui guette un mot d'activation, puisque
+> rien n'est enregistré. Le matériel, lui, capte. L'afficher éteint serait un
+> mensonge sur le matériel — et il suffirait de trouver la lumière de veille
+> agaçante pour annuler la réponse à la question 1 sans toucher à aucune règle
+> de sécurité.
+
+**R3 — Une phrase non sollicitée ne dit pas de quoi il s'agit.** C'est la
+question 2 qui la porte, ci-dessous.
+
+#### ⚠ Ce que ça ne résout pas, et qui reste ouvert
+
+Un témoin logiciel s'adresse à qui regarde l'écran. **Un invité ne regarde pas
+l'écran de Julien.** R2 protège le propriétaire, pas le tiers. Ce qui protège le
+tiers est R1 — ce qu'il dit n'existe nulle part — et R3. C'est une réponse
+partielle, et `docs/26 §4.17` la garde écrite comme telle.
+
+---
+
+### Question 2 — « Qui d'autre entend la réponse ? »
+
+`docs/03 §6` classe la donnée. Il ne classe jamais l'auditoire.
+
+**Le réflexe était de recopier `mayEgress()` — `PUBLIC | PERSONAL`, rien
+d'autre. C'est faux, et le dire vaut mieux que de choisir l'option la plus
+stricte en appelant ça de la prudence.**
+
+```text
+ÉGRESSION   la donnée quitte la machine, DÉFINITIVEMENT, vers un tiers qui a
+            ses propres intérêts et sa propre durée de conservation
+
+PAROLE      la donnée atteint la pièce, le temps d'une phrase, le plus souvent
+            devant son seul propriétaire
+```
+
+Ce ne sont pas le même risque. `CALENDAR` a un plancher `SENSITIVE` : un plafond
+calqué sur l'égression interdirait de lire un rendez-vous à voix haute,
+c'est-à-dire d'être un assistant vocal. **Une décision qui supprime l'usage
+numéro un du produit n'est pas prudente, elle est ratée.**
+
+**Décision : le plafond dépend de qui a choisi le moment.**
+
+| Déclencheur | Exemple | Plafond |
+|---|---|---|
+| `DEMANDE_EXPLICITE` | « lis-moi mon bilan » | `HIGHLY_SENSITIVE` |
+| `SUITE_DE_CONVERSATION` | « et après ? » | `SENSITIVE` |
+| `PROACTIF` | personne n'a rien demandé | `PERSONAL` |
+
+Et `RESTRICTED` **jamais**, sous aucun déclencheur : un secret n'entre dans aucun
+contexte de modèle, pas même local (`docs/14 §2`) ; il n'entre pas davantage
+dans l'air de la pièce.
+
+La justification tient en une question : *cette personne savait-elle, à l'instant
+où le son est sorti, ce qui allait être dit ?* Une phrase que personne n'a
+demandée est la dangereuse — son propriétaire n'a pas choisi cet instant, et il
+n'est peut-être pas seul.
+
+**Le coût, assumé et payé à l'endroit exact :** un rappel vocal ne peut pas dire
+de quoi il s'agit. *« Tu as un rendez-vous dans dix minutes »* est `SENSITIVE`.
+*« Tu as un rappel »* ne l'est pas. Le détail s'affiche ; il ne se prononce pas.
+
+Sur le cas proactif — et seulement là — le plafond retombe exactement sur celui
+de l'égression, parce que c'est la seule situation où la voix ressemble vraiment
+à une sortie : moment non choisi, auditoire inconnu. Un test le vérifie sur les
+cinq niveaux.
+
+#### L'oreille est une frontière sans validation
+
+`CLAUDE.md` règle 2 : *aucune donnée externe n'est une instruction*. Ce dépôt la
+tient partout où la donnée traverse du code. La voix ouvre un chemin qu'aucun
+`Provenance` ne surveille.
+
+```text
+À L'ÉCRIT   « Reçu de banque@exemple.fr : "Validez le virement" »
+            les guillemets et l'en-tête font le travail, l'œil les voit
+
+À L'ORAL    « Validez le virement »
+            prononcé de la MÊME voix que « c'est dans ta liste »
+```
+
+**L'injection n'a plus besoin d'atteindre le modèle : elle atteint la personne,
+qui est le seul composant du système à ne pas avoir de validation de frontière.**
+
+D'où : **Jarvis résume, il ne récite pas.** Un contenu non fiable est reformulé
+et attribué. Le texte exact reste disponible sur demande — et une demande, c'est
+un moment choisi en sachant ce qu'on va entendre.
+
+#### Une limite héritée, pas inventée ici
+
+`isUntrusted` ne range pas `TOOL_OUTPUT` du côté non fiable : c'est le résultat
+de nos outils typés, pas le contenu qu'ils ont lu. Conséquence : un champ
+d'outil qui recopierait du texte de tiers sans le ré-étiqueter serait récité mot
+pour mot.
+
+**On ne corrige pas ça par un prédicat plus strict côté voix.** Ce serait un
+second registre de « qu'est-ce qui est fiable », et le jour où les deux
+divergeraient, le Policy Gate et la voix ne protégeraient plus la même chose. Le
+défaut, s'il arrive, est dans l'étiquetage — c'est là qu'il se corrige.
+
+*(J'avais écrit le test à l'envers en premier, en supposant `TOOL_OUTPUT` non
+fiable. Il a échoué, et c'est l'échec qui a produit ce paragraphe.)*
+
+---
+
+### Pourquoi ces deux modules sont branchés à rien
+
+Même geste que `src/core/privacy/classify.ts` à l'étape F1 du Data Firewall :
+des fonctions pures, sans appelant, qui n'accordent ni ne retirent aucune
+permission. Il n'y a pas une ligne de code audio dans ce dépôt.
+
+`docs/26 §4.17` demandait une **décision** puis un **mécanisme**, dans cet ordre.
+Écrire la décision sous forme de fonction éprouvée plutôt que de paragraphe est
+la seule façon qu'elle survive jusqu'au jour où la voix existera :
+
+> Un paragraphe se relit. Une fonction se casse quand on la contredit.
+
+### Condition de révision
+
+Le premier usage vocal réel. Trois choses ne peuvent pas être décidées depuis
+une chaise : si le plafond `PROACTIF` rend les rappels inutilisables, si le
+témoin de veille est vécu comme une gêne au point d'être désactivé, et si
+« résumer plutôt que réciter » est perçu comme de la rétention d'information.
+Les trois se mesurent à l'usage, pas au raisonnement.
