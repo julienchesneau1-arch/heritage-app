@@ -402,6 +402,33 @@ zéro code émis. Vérifié, pas supposé.
 
 ---
 
+### 2.14 ADR-008 avait choisi un moteur pour un matériel jamais nommé
+
+**Trouvé en écrivant les fiches de Phase 5** (ADR-091).
+
+ADR-008 ratifie Whisper — décision saine et confirmée. Mais elle précise le
+moteur : *« `whisper.cpp` + Core ML, ou WhisperKit côté Swift »*, sur un
+argument explicitement **Apple Silicon** (export de l'encodeur vers le Neural
+Engine).
+
+La machine cible est un **MacBook Pro 13" 2019, Intel Core i5**. Ni ANE, ni
+accélération Core ML utile. **L'argument qui a fondé le choix du moteur ne
+s'applique pas.**
+
+> Une décision peut rester juste tout en perdant sa raison. Le jour où la
+> raison tombe, la décision n'est plus qu'une habitude — et rien ne le signale.
+
+Personne ne l'avait remarqué parce que **le matériel n'avait jamais été nommé
+dans le dépôt**. Un pack de spécification peut décider pour une machine
+imaginaire pendant des mois.
+
+**Traité, pas tranché** (ADR-091) : le critère est posé — `whisper.cpp`
+n'ajoute aucun runtime Python, `faster-whisper` si — et il est LIÉ au choix du
+mot d'activation, lui-même en Python. Les deux décisions se prennent ensemble,
+après mesure.
+
+---
+
 ### 2.13 Le dépôt poussé ne compilait pas — `.gitignore` excluait le coffre
 
 **Trouvé parce que le conteneur a été réapprovisionné**, donc le dépôt cloné à
@@ -1674,6 +1701,32 @@ phrase, mais par ce qui a été dit avant.
 ⚠ **Le piège du chiffre** : on peut le faire monter en ajoutant des règles pour
 les phrases exactes du scénario. Il grimperait sans que rien ne s'améliore. Les
 trente tours sont un **échantillon**, pas une cible.
+
+---
+
+### 4.17 Deux questions que la voix pose et auxquelles le dépôt n'a pas de réponse
+
+**Ouvertes par ADR-091**, en écrivant les fiches de Phase 5 — donc AVANT
+d'installer quoi que ce soit.
+
+Les trois briques (openWakeWord, Whisper, Piper) sont permissives, locales et
+sans réseau. Rien ne s'y oppose au sens de `docs/04`. Ce qui s'y oppose est
+ailleurs, et n'a pas de mécanisme :
+
+| Question | Ce que le dépôt en dit aujourd'hui |
+|---|---|
+| **Qui d'autre est dans la pièce ?** Un micro ouvert entend des tiers qui n'ont rien demandé et ignorent qu'un ordinateur écoute | **rien** |
+| **Qui d'autre entend la réponse ?** Prononcer, c'est DIFFUSER. `docs/03 §6` classe la donnée, jamais l'auditoire | **rien** |
+
+Le mot d'activation borne ce qui est **transcrit**, jamais ce qui est
+**capté** : la détection travaille par construction sur un flux continu.
+
+**Ce n'est pas un défaut du code** — il n'y a pas de code. C'est un trou dans
+le modèle de menace (`docs/13`), nommé avant d'être rencontré.
+
+**Condition de levée** : une décision de Julien sur ces deux points, puis un
+mécanisme. Pas l'inverse — écrire le mécanisme d'abord reviendrait à choisir à
+sa place.
 
 ---
 

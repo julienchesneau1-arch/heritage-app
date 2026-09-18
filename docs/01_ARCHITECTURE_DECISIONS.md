@@ -7500,3 +7500,107 @@ openWakeWord, faster-whisper, Piper. C'est **exactement** la Phase 5 de
 Elle n'est pas empruntée dans cette ADR : trois dépendances exigent trois
 fiches `docs/04`, et `CLAUDE.md` l'interdit sans elles. C'est le prochain pas,
 et il est nommé.
+
+---
+
+## ADR-091 — Les fiches de la voix, et deux arbitrages qui reviennent à Julien
+
+**Statut** : accepté · **Date** : 2026-09-18 · **Précède** : Phase 5 · **Révise partiellement** : ADR-008
+
+### Ce que cette ADR fait
+
+Elle remplit le préalable de `docs/04 §1` pour la Phase 5 : trois fiches —
+`openWakeWord`, Whisper, `Piper` — écrites **avant** toute ligne de code, et
+avant toute installation. Aucune des trois n'est branchée.
+
+Les trois sont permissives (Apache 2.0, MIT), locales, sans accès réseau après
+téléchargement. Sur le seul critère de `docs/04 §3`, rien ne s'oppose à elles.
+
+**Et c'est précisément pourquoi il faut dire ce qui s'y oppose ailleurs.**
+
+### Arbitrage 1 — un micro toujours ouvert n'est pas une dépendance
+
+```text
+un micro TOUJOURS OUVERT est une capacité nouvelle,
+pas une bibliothèque de plus
+```
+
+Jusqu'ici Jarvis ne voit que ce que Julien tape. Après, il entend **tout ce qui
+se dit dans la pièce** — y compris ce que disent des gens qui n'ont rien
+demandé et ignorent qu'un ordinateur écoute.
+
+Le mot d'activation borne ce qui est **transcrit**, jamais ce qui est **capté** :
+la détection travaille par construction sur un flux continu. Aucune fiche de
+dépendance ne peut trancher ça — c'est `docs/13` (modèle de menace) et
+`docs/03`, et c'est une décision de Julien.
+
+Symétriquement, `Piper` introduit un effet que ce dépôt n'a jamais eu :
+**prononcer, c'est diffuser.** Une réponse lue à voix haute est entendue par
+quiconque est présent. Aucun Policy Gate ne couvre aujourd'hui « qui d'autre
+écoute », et `docs/03 §6` classe la donnée sans jamais considérer l'auditoire.
+
+> Ce n'est pas un obstacle. C'est une question à laquelle le dépôt n'a pas
+> encore de réponse, et qui doit être posée AVANT, pas découverte après.
+
+### Arbitrage 2 — ADR-008 a choisi un moteur pour un matériel que Julien n'a pas
+
+ADR-008 ratifie Whisper — décision saine, et confirmée : Julien parle français,
+Whisper couvre 99 langues. **Ce n'est pas le modèle qui pose problème, c'est le
+moteur.**
+
+Elle précise *« `whisper.cpp` + Core ML, ou WhisperKit côté Swift »*, et son
+argument est explicitement l'**Apple Silicon** : l'export de l'encodeur vers le
+Neural Engine.
+
+La machine cible est un **MacBook Pro 13" 2019, Intel Core i5** : ni ANE, ni
+accélération Core ML utile. **L'argument qui a fondé le choix du moteur ne
+s'applique pas** — et personne ne l'avait remarqué parce que le matériel
+n'avait jamais été nommé dans le dépôt.
+
+> Une décision peut rester juste tout en perdant sa raison. Le jour où la raison
+> tombe, la décision n'est plus qu'une habitude — et rien ne le signale.
+
+**Ce n'est pas une raison de changer de moteur sur-le-champ.** C'est une raison
+de poser le critère honnêtement :
+
+| | `whisper.cpp` | `faster-whisper` |
+|---|---|---|
+| langage | C++ | Python + CTranslate2 |
+| runtime ajouté | **aucun** | **Python** |
+| choisi par ADR-008 | oui | non |
+| employé par `sosoj92` | non | oui, en production |
+
+**Le seul critère établi sans mesure est architectural** : `whisper.cpp`
+n'ajoute pas de runtime Python à une machine qui n'en a pas besoin. Latence et
+taux d'erreur en français sur CPU Intel demandent un banc — et ce dépôt ne
+publie pas d'estimation déguisée en mesure.
+
+**Les deux décisions sont liées.** `openWakeWord` est Python. S'il est retenu,
+Python entre de toute façon, et l'unique critère établi tombe. Choisir le
+moteur de transcription avant de décider du mot d'activation reviendrait à
+trancher sur une contrainte qui n'existera plus.
+
+### Ce que les fiches ne disent pas, et qui décide de tout
+
+Aucune des trois n'a tourné sur la machine de Julien.
+
+```text
+?  latence de transcription d'une phrase de 5 s
+?  taux de faux réveils sur une journée réelle
+?  charge CPU d'un micro ouvert en permanence
+```
+
+Le premier se mesure en dix minutes le jour de l'installation. Les deux autres
+demandent des jours d'usage réel — et ce sont eux qui décident si la voix est
+utilisable ou seulement possible.
+
+### Conséquence sur `docs/04`
+
+Deux entrées s'ajoutent à la liste des écartés :
+
+- **Porcupine (Picovoice)** — référence du domaine pour le mot d'activation,
+  licence propriétaire/freemium → interdite au cœur du produit (`docs/04 §3`).
+  Même raisonnement que XTTS v2 : une licence qui ne pose aucun problème
+  jusqu'au jour où le projet devient autre chose.
+- **La transcription permanente** — elle éviterait `openWakeWord` et coûterait
+  bien pire : tout ce qui se dit dans la pièce deviendrait du texte.
