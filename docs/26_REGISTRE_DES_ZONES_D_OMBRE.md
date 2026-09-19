@@ -667,7 +667,7 @@ I20 a été **retiré**. La leçon vaut d'être écrite :
 
 ## 4. DIFFÉRÉES — levables, non levées, avec leur condition
 
-### 4.1 Neuf modules de logique hors circuit
+### 4.1 Dix modules de logique hors circuit
 
 Inventoriés et figés par `wiring.test.ts`. Ils sont **implémentés et testés,
 jamais atteints par le produit**.
@@ -681,6 +681,7 @@ jamais atteints par le produit**.
 | `cost/gate.ts` | aucun fournisseur cloud à facturer | dès le premier fournisseur payant branché |
 | `update/candidat.ts` · `promotion.ts` · `surveillance.ts` · `lab.ts` | **ADR-088** — la couche qui DÉCIDE d'une mise à jour est écrite ; celle qui EXÉCUTE n'existe pas | un vérificateur TUF/Sigstore, **puis** un exécutant — dans cet ordre (§4.16) |
 | `voice/micro.ts` · `voice/plafond.ts` | **ADR-093** — les deux arbitrages de la voix, écrits en fonctions pures. Aucune ligne de code audio n'existe, donc rien ne peut les appeler | `micro.ts` : le module audio · `plafond.ts` : `assistant.say()` consultant un déclencheur (§4.17) |
+| `routing/router.ts` | **ADR-102** — il POURRAIT être branché : `createOllama` fournit un candidat local. Il ne l'est pas, parce qu'**arbitrer entre un seul candidat n'est pas arbitrer** — l'arbitrage pour lequel il existe (confidentialité avant disponibilité) ne se prend que face à un candidat distant | le premier `ModelProvider` dont `local` est faux |
 | ~~`intent/tier1.ts`~~ | **LEVÉE (ADR-082)** — `createOllama` implémente `ModelProvider` sur la boucle locale ; le `Tier 1` se construit dès que la configuration l'active | — |
 | ~~`tools/outcome.ts`~~ | **LEVÉE (ADR-065)** — `memory_forget` projette son statut sur la ligne mémoire ET chaque dérivé hors cascade ; une mémoire vit à plusieurs endroits, donc l'oubli est multi-cibles | — |
 
@@ -698,6 +699,7 @@ jamais atteints par le produit**.
 3   − intent/tier1.ts (ADR-082) — createOllama existe, le Tier 1 se construit
 7   + les QUATRE modules de l'Update Engine (ADR-088), d'un coup
 9   + voice/micro.ts et voice/plafond.ts (ADR-093) — la DÉCISION avant le son
+10  + routing/router.ts (ADR-102) — branchable, non branché : un seul candidat
 ```
 
 > **La dernière ligne monte de quatre d'un coup, et c'est assumé.** Ce compteur
@@ -720,6 +722,19 @@ jamais atteints par le produit**.
 > **Il est redescendu à l'ADR suivante, pour la raison annoncée.** Un
 > aller-retour d'une seule étape : c'est ce qu'on attend d'une dette DATÉE, par
 > opposition à celle qu'on découvre.
+
+> **ADR-102 y ajoute un TROISIÈME motif, et c'est le seul embarrassant.** Les
+> deux premiers sont des impossibilités — le CostGate n'a pas de payeur,
+> l'Update Engine n'a pas de vérificateur. Le Model Router, lui, **pourrait**
+> être branché : `createOllama` fournit un candidat local dès aujourd'hui.
+>
+> Il ne l'est pas parce qu'**arbitrer entre un seul candidat n'est pas
+> arbitrer**. Le brancher sur une liste d'un élément ferait descendre ce
+> compteur sans qu'aucun arbitrage n'ait jamais été rendu par lui : le compteur
+> mesurerait alors l'apparence du branchement.
+>
+> C'est le cas le plus facile à maquiller des trois, donc celui qu'il fallait
+> écrire ici.
 
 > **Le titre a dit « Cinq » pendant toute la période où il valait six.**
 > `wiring.test.ts` l'affirmait pourtant (`toHaveLength(6)`) ; ce document non.

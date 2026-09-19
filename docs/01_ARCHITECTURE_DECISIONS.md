@@ -8742,3 +8742,166 @@ avant d'avoir porté l'appareil. `docs/26 §4.19`.
 
 Tout ce paragraphe décrit une architecture prête à recevoir une capacité qui
 n'existe pas. La Phase 5 est à 0 %, et aucun arbitrage ne la remplace.
+
+---
+
+## ADR-102 — Le routeur choisit une capacité, et un modèle refusé n'est pas un repli
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** `docs/15 §2-§4`, `docs/04 §10-§11`, `docs/14 §4`, ADR-040, ADR-069, ADR-082
+
+Dernier livrable de code de la Phase 4. `docs/02` l'énonce ainsi : *« Model
+Router (capacité, pas fournisseur) + fallback »*.
+
+### 1. Le noyau ne connaît aucun modèle
+
+Le mandat nomme lui-même le piège :
+
+> « Je ne veux surtout pas 17 modèles + 42 routes + benchmark permanent. »
+
+Le routeur connaît donc **sept capacités** — `FAST_LOCAL`, `LOCAL_REASONING`,
+`CLOUD_REASONING`, `VISION_LOCAL`, `VISION_CLOUD`, `VOICE_REALTIME`,
+`EMBEDDING_LOCAL` — et un fournisseur déclare celles qu'il sert. Aucune chaîne
+`'gpt-…'`, `'claude-…'` ou `'llama…'` n'existe hors de `src/providers/`, et un
+test le vérifie sur ce fichier.
+
+La conséquence pratique : **changer de fournisseur ne touche pas le noyau.**
+C'est `docs/04 §11` — l'indépendance — écrite en type plutôt qu'en intention.
+
+### 2. L'ordre des filtres EST la propriété
+
+```text
+1. CAPACITÉ          qui sait faire cette chose ?
+2. CONFIDENTIALITÉ   qui a le droit de VOIR cette donnée ?     docs/14
+3. POLITIQUE         le cloud est-il autorisé ?                ADR-069
+4. DISPONIBILITÉ     répond-il ?
+   puis BUDGET       délégué au CostGate, qui reçoit l'allowance DÉJÀ tranchée
+```
+
+**Aucune étape ne peut être rattrapée par une suivante.** Un fournisseur écarté
+par la confidentialité ne revient pas parce qu'il est disponible, rapide ou
+gratuit — et ce n'est pas une promesse : **il n'existe dans ce module aucune
+fonction capable de réintégrer un candidat éliminé.** Même mécanique que
+`strictest()` dans le Policy Gate.
+
+#### ⚠ La disponibilité est en DERNIER, et ça change la phrase du refus
+
+Placée plus haut, elle écarterait un moteur local en panne **avant** que la
+confidentialité n'ait éliminé les distants. Le journal des écarts dirait alors
+« indisponible » là où la vraie raison est « cette donnée ne sort pas ».
+
+```text
+« aucun fournisseur disponible »   → l'utilisateur croit à une panne, il réessaie
+« je n'envoie pas ça dehors »      → il comprend que c'est une décision
+```
+
+Un ordre de filtres n'est pas un détail d'implémentation quand il détermine ce
+que le système **dit de lui-même**.
+
+### 3. ⚠ R4 — un modèle non autorisé n'existe pas comme repli
+
+C'est la règle qui distingue un routeur d'un système de secours. Quand plus
+aucun candidat n'est éligible, la réponse correcte est **une phrase**, pas une
+escalade :
+
+> « Le moteur local ne peut pas répondre, et cette donnée est classée
+> `SENSITIVE` : je ne l'envoie pas à un service externe. C'est une décision,
+> pas une panne. »
+
+Un routeur qui, faute de local, essaierait le cloud « juste cette fois »
+transformerait **une panne en fuite**. Et personne ne le verrait, parce que
+l'utilisateur aurait obtenu sa réponse.
+
+Le mot « fallback » de `docs/02` est donc honoré à l'envers de sa lecture
+naturelle : le repli est un repli **vers le refus**, jamais vers le moins
+protégé.
+
+### 4. Le tri préfère le local — et surtout pas le moins cher
+
+`docs/04` demande « le moins cher parmi les éligibles », et `docs/28` l'a
+répété pendant vingt ADR. **Le code trie par local d'abord, puis par latence.**
+
+Trier par coût donnerait aujourd'hui le même résultat — le local coûte zéro —
+et le mauvais demain, le jour où un cloud gratuit apparaîtrait. `docs/04 §11`
+veut que « le pourcentage local augmente continûment » : c'est une préférence
+de **principe**, pas une conséquence du prix.
+
+Et le budget n'est pas arbitré ici. Le routeur rend au CostGate une
+`allowance` — `LOCAL_ONLY` ou `LOCAL_OR_CLOUD` — qui transporte ce que la
+confidentialité et la politique ont **déjà** tranché. `docs/04 §10` :
+*le coût ne rouvre jamais cette question.*
+
+### 5. Fonction pure, sans entrée-sortie
+
+Le routeur ne sonde pas la santé des fournisseurs et n'interroge pas la base :
+il reçoit ce que l'appelant sait. Deux raisons, les mêmes que pour
+`intent/engine.ts` : la décision ne doit pas pouvoir échouer pour une raison
+d'infrastructure, et elle doit s'éprouver sans rien démarrer.
+
+`mayEgress` est **la même fonction** que celle du Policy Gate. Un second
+prédicat « à peu près équivalent » finirait par diverger (ADR-041).
+
+### 6. ⚠ Il n'est branché à rien, et c'est la partie à ne pas lire trop vite
+
+Le routeur entre dans la liste des orphelins de `wiring.test.ts`, qui passe de
+neuf à dix. **Son motif d'entrée n'est aucun des deux précédents :**
+
+| module | pourquoi il n'est pas branché |
+|---|---|
+| CostGate (ADR-040) | aucun **payeur** n'existe |
+| Update Engine (ADR-088) | aucun **vérificateur de signature** n'existe |
+| Model Router | il **pourrait** l'être — `createOllama` fournit un candidat |
+
+On ne le branche pas, et la raison est plus étroite :
+
+> **Arbitrer entre un seul candidat n'est pas arbitrer.**
+
+La décision pour laquelle ce module existe — la confidentialité passe avant la
+disponibilité — ne se prend que le jour où un candidat **non local** existe. Le
+brancher sur une liste d'un élément ferait descendre le compteur d'orphelins
+sans qu'aucun arbitrage n'ait jamais été rendu par lui : le compteur mesurerait
+alors l'apparence du branchement, pas l'usage.
+
+C'est la même triche que `docs/28` refuse depuis ADR-088, appliquée à un
+module qu'il aurait été facile de brancher pour faire joli.
+
+**Sa condition de sortie est mécanique** : le jour où `src/providers/` contient
+un `ModelProvider` dont `local` est faux. Ce jour-là, `wiring.test.ts`
+signalera qu'un fournisseur distant a été ajouté sans passer par le routeur —
+ce qui est exactement la faute qu'il doit attraper.
+
+### 7. Ce que le sabotage a trouvé — et une garde rendue plus fine
+
+Deux tests ont d'abord échoué **sur mes propres commentaires** : ils citaient
+`CostGate` et `gpt-` pour expliquer ce qui était interdit, et la garde
+textuelle ne distingue pas un nom de produit écrit en code d'un nom cité en
+prose.
+
+> **Troisième fois** qu'une garde textuelle mord la documentation qui
+> l'explique — ADR-096 sur un nom de variable, ADR-098 sur une liste citée.
+
+Les deux premières fois, j'ai reformulé la prose. Ici, la distinction
+commentaire / code est **réelle et mécanique** : c'est donc à la garde de la
+faire. `sansCommentaires()` retire les commentaires avant de chercher, et un
+**contrôle négatif** vérifie qu'un nom de produit écrit en vrai code est
+toujours attrapé — sans quoi la garde serait devenue aveugle au lieu de devenir
+fine.
+
+### Ce qui n'est pas résolu
+
+- **`local` est cru, pas vérifié.** Un fournisseur qui se dirait local sans
+  l'être ferait sortir une donnée `SENSITIVE` sans qu'aucune règle ne s'y
+  oppose. C'est `docs/26 §4.9`, et c'est à l'adaptateur — pas au routeur — de
+  rendre ce mensonge impossible (ADR-082 : la boucle locale est une **adresse**,
+  pas une intention).
+- **`disponible` est sondé par l'appelant**, qui n'existe pas encore. Le jour
+  où il existera, la fraîcheur de cette sonde deviendra une question.
+- **Aucune capacité distante n'a de fournisseur.** `CLOUD_REASONING` et
+  `VISION_CLOUD` sont des cases vides : le routeur sait les refuser, il n'a
+  jamais eu à les choisir.
+
+### Condition de révision
+
+Le premier fournisseur non local. Il éprouvera d'un coup les trois points
+ci-dessus — et fera sortir ce module de la liste des orphelins, ou révélera
+qu'on l'a contourné.

@@ -196,6 +196,32 @@ describe('RED TEAM — code mort en production', () => {
         'src/core/voice/micro.ts',
         'src/core/voice/plafond.ts',
 
+        /* ⚠ LE MODEL ROUTER — ADR-102. Et son motif d'entrée ici n'est AUCUN
+           des précédents.
+
+           Le CostGate ne pouvait pas être branché : aucun payeur n'existe.
+           L'Update Engine ne doit pas l'être : aucun vérificateur de signature
+           n'existe. Le routeur, lui, POURRAIT l'être — `createOllama` fournit
+           un candidat local dès aujourd'hui.
+
+           On ne le branche pas, et la raison est plus étroite :
+
+               **Arbitrer entre un seul candidat n'est pas arbitrer.**
+
+           La décision pour laquelle ce module existe — la confidentialité
+           passe avant la disponibilité — ne se prend que le jour où un
+           candidat NON LOCAL existe. Le brancher sur une liste d'un élément
+           ferait descendre ce compteur sans qu'aucun arbitrage n'ait jamais
+           été rendu par lui : le compteur mesurerait alors l'apparence du
+           branchement, pas l'usage.
+
+           ⚠ SA CONDITION DE SORTIE EST MÉCANIQUE, et c'est ce qui la rend
+           vérifiable : le jour où `src/providers/` contient un `ModelProvider`
+           dont `local` est faux. Ce jour-là, ce test signalera qu'on a ajouté
+           un fournisseur distant sans le faire passer par le routeur — ce qui
+           est exactement la faute qu'il doit attraper. */
+        'src/core/routing/router.ts',
+
 
         /* ⚠ `src/core/intent/tier1.ts` A QUITTÉ CETTE LISTE — ADR-082.
 
@@ -284,8 +310,14 @@ describe('RED TEAM — code mort en production', () => {
 
        Un compteur qui monte de deux pour cette raison-là est un bon compteur.
        Le faire baisser en branchant un micro sur un plafond non décidé serait
-       l'inversion exacte que la zone d'ombre refusait. */
-    expect(deadLogic).toHaveLength(9);
+       l'inversion exacte que la zone d'ombre refusait.
+
+       **À DIX avec ADR-102**, le Model Router. Troisième motif distinct
+       d'entrée dans cette liste, après « pas de payeur » (CostGate) et « pas
+       de vérificateur » (Update Engine) : ici le module POURRAIT être branché,
+       et ne l'est pas parce qu'arbitrer entre un seul candidat n'est pas
+       arbitrer. Sa condition de sortie est le premier fournisseur non local. */
+    expect(deadLogic).toHaveLength(10);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

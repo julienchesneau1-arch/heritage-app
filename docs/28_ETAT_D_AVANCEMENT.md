@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 65 %**
+## 1. Étendue fonctionnelle — **≈ 68 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -32,21 +32,46 @@ nombre de cases à cocher.
 | 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ — et **A2 est levé** (ADR-071/072/073) : Jarvis résout « ça » depuis le contexte récent, et **demande** dès que la lecture est ambiguë. La case de `docs/02` — « Jarvis demande » — est tenue par le produit, plus seulement par le module |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
 | 3 Les 10 outils restants | 12 % | **100 %** | 12,0 | **15 outils sur 15** (+`egress_review`, hors liste, en Phase 4). `web_search` livré (ADR-055) — et il met en circuit la séparation Privileged/Quarantined, hors circuit depuis ADR-004 |
-| 4 Confidentialité, coût, indépendance | 13 % | **80 %** | 10,4 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router ✗** |
+| 4 Confidentialité, coût, indépendance | 13 % | **85 %** | 11,1 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router écrit, NON branché** (ADR-102) · ⚠ **« Benchmark Jarvis local » est un livrable de `docs/02` qu'aucune ligne de ce tableau n'avait jamais compté** — il est absent |
 | 5 Voix | 10 % | **0 %** | 0,0 | rien |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 65 %** | |
+| **TOTAL** | 100 % | | **≈ 68 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
+
+> ⚠ **CE TOTAL EST PASSÉ DE 65 À 68, ET SEULEMENT UN POINT VIENT DU TRAVAIL
+> FAIT.** Les deux autres corrigent une addition qui n'additionnait pas.
+>
+> ```text
+> colonne Contribution, telle qu'elle était publiée
+>   3,0 + 12,0 + 12,0 + 15,0 + 12,0 + 10,4 + 0,0 + 2,6 + 0,0 = 67,0
+> total publié en titre et en résumé                          ≈ 65 %
+> ```
+>
+> Chaque contribution de ligne était juste — poids × fait, au dixième près.
+> **C'est la somme qui était fausse**, et elle l'était depuis assez longtemps
+> pour que personne ne sache quand.
+>
+> `coherence-des-chiffres.test.ts` existait pourtant, écrit exprès contre ce
+> défaut. Il vérifiait que le total du tableau et le titre disent la **même
+> chose** — et ils la disaient : tous les deux 65. Il ne vérifiait pas que cette
+> chose soit **l'addition des lignes**.
+>
+> **Cinquième occurrence de la même forme** (ADR-054, ADR-055, ADR-057,
+> ADR-058) : une affirmation que le mécanisme censé l'établir n'établit pas.
+> Ici la garde tenait la cohérence entre deux copies d'un nombre faux. Le test
+> qui manquait a été écrit en même temps que cette note, avec son contrôle
+> négatif.
 
 ### Vérifications, pas déclarations
 
 | Affirmation | Mesure |
 |---|---|
 | 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ 7 hors liste : `egress_review` en Phase 4, **`memory_forget`, `note_delete`, `task_cancel`, `reminder_cancel`** avec l'Undo Engine, et **`entity_create`, `entity_delete`** avec le Context Engine sans modèle — ADR-071/072) |
-| Model Router absent | aucun fichier de `src/` ne contient « router » |
+| Model Router écrit, non branché | `src/core/routing/router.ts` existe ; `wiring.test.ts` le compte parmi les **dix** modules qu'aucun point d'entrée n'atteint (ADR-102) |
+| Benchmark local absent | aucun fichier de `ops/` ne mesure un modèle local |
 | Voix absente | aucun module STT/TTS/VAD |
 | Update Engine absent | aucun module canary/rollback/twin |
 | iOS absent | aucun répertoire |
@@ -255,9 +280,9 @@ enregistré fait rougir le test **en le nommant**.
 
 | | |
 |---|---|
-| **La qualité de ce qui est fait** | 64 % ne dit pas si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
+| **La qualité de ce qui est fait** | aucun pourcentage d'étendue ne dit si le noyau est solide. Neuf défauts majeurs ont été trouvés et corrigés par la mesure ; le dixième existe. |
 | **La difficulté restante** | la Phase 5 (voix) est plus longue que la Phase 3, à poids presque égal. |
-| **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent pas dans les 36 %. |
+| **Le travail hors plan** | `docs/17` à `docs/27` — banc de défaillance, chaos, deux mondes — ne figurent dans aucune phase de `docs/02`. Onze documents et 149 tests de banc n'entrent dans aucune part du total. |
 | **Ce qui est irréductible** | `docs/26 §5` — six limites qu'aucun pourcentage ne fera bouger. |
 
 Le troisième point mérite d'être lu deux fois : **le plan d'exécution n'a jamais
@@ -271,10 +296,10 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **101 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **102 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 FRANCHIE — et désormais VÉRIFIABLE** par `pnpm gate:phase3` (ADR-087). Elle était déclarée « COMPLÈTE (10/10) » **sans porte de sortie** : le chiffre comptait des outils écrits, pas les trois conditions de `docs/02`. La porte existe, elle passe — l'affirmation était juste, mais sans preuve ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **10/15 nommés en test** (67 %) — S11 y entre en Phase 7, et par le bon chemin : son exemption portait sa condition de fin (`absent: 'src/core/update'`), qui a rougi le jour où ce répertoire a existé. **Zéro exemption restante.** ⚠ Cette ligne a affiché « 7/15 » face à un tableau qui disait 9, dans le même document. Elle n'avait pas menti : elle était vraie à la date de sa mesure, et le travail a nommé deux invariants de plus sans qu'elle bouge. La ligne 62 est gardée par `coherence-des-chiffres.test.ts` ; celle-ci ne l'était par rien — c'est toute la différence (§2) |
-| 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. Model Router absent |
+| 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. **Model Router écrit** (ADR-102), non branché pour un motif distinct : arbitrer entre un seul candidat n'est pas arbitrer. Le §11 — l'indépendance — est tenu par le type : le noyau ne nomme aucun modèle |
 | 05 | Tests dorés | **29/30 référencés**, 1 bloqué déclaré — lien mécanique, et chaque blocage prouve désormais que ce qui manque manque ENCORE (ADR-055) |
 | 06 | Prompt maître | appliqué à chaque session |
 | 07 | Update Engine | **spécifié, rien d'implémenté** |
@@ -311,10 +336,10 @@ mesurer contre `docs/02` le fait donc disparaître.
 | ~~1. Data Firewall F2~~ | **FAIT** — ADR-051. `docs/14 §6.4` passe. A levé `docs/26 §4.5` et créé `§4.9` : le solde est positif, pas nul. |
 | ~~2. Data Firewall F3~~ | **FAIT** — ADR-052. **C4 débloqué** (26/4). Un sabotage y a révélé que la couverture de l'égression par le hachage n'était testée par rien. |
 | **1. `web_search`** (Phase 3, dernier outil) | Le Data Firewall existe désormais : le seul outil restant de Phase 3 n'est plus bloqué. |
-| **2. Model Router** (Phase 4) | Choisir le moins cher **parmi les éligibles**. `docs/14 §4` en fixe l'ordre, et le CostGate l'attend depuis ADR-040. |
+| ~~2. Model Router~~ (Phase 4) | **FAIT** — ADR-102, et il ne choisit PAS « le moins cher ». Il trie local d'abord, puis latence : le coût donnerait le même résultat aujourd'hui et le mauvais le jour où un cloud gratuit apparaîtrait. Le budget reste au CostGate, qui reçoit une `allowance` déjà tranchée. ⚠ **Non branché** — dixième module hors circuit, délibérément. |
 | **3. Câbler le Context Engine** | débloque **A2**, dernier blocage qui ne dépende d'aucun outil manquant. |
 | **2. Câbler le Context Engine** | débloque **A2**, et tient la promesse de levée d'ambiguïté du `QUICKSTART`. |
-| **3. Model Router** (Phase 4) | choisir le moins cher **parmi les éligibles** — l'ordre de `docs/14 §4` devra y être respecté, et c'est le point à ne pas manquer. |
+| ~~3. Model Router~~ (Phase 4) | **FAIT** — ADR-102. L'ordre de `docs/14 §4` est respecté, et il est la propriété : capacité → confidentialité → politique → disponibilité, sans rattrapage possible. `docs/15 §R4` tenu — un modèle non autorisé n'existe pas comme repli. |
 | ~~2. Câbler le Context Engine~~ | **FAIT** — ADR-071 à ADR-073. **A2 débloqué** (29/30), et **sans modèle** : trois causes sont tombées l'une après l'autre. |
 | ~~1. Résolution de dates~~ | **FAIT** — ADR-077. Le verrou réel du cas d'usage de Julien : il bloquait `reminder_create` ET les trois outils d'agenda. Levé **sans modèle** — le `Tier 0` reconnaît, PostgreSQL calcule. Surface parlée : **11 outils sur 22**. |
 | ~~2. Adaptateur Google Agenda~~ | **ÉCRIT** — ADR-078, **zéro dépendance npm**. Premier fournisseur réseau du dépôt : idempotence par identifiant dérivé, fenêtre lecture/écriture fermée par etag, secrets au coffre. ⚠ **Jamais exécuté contre l'API réelle** — aucun compte connecté. |
@@ -323,6 +348,9 @@ mesurer contre `docs/02` le fait donc disparaître.
 | ~~4. `Tier 1` — l'enveloppe de sûreté~~ | **ÉCRITE** — ADR-081. Chaque paramètre `MODEL_OUTPUT` → le Policy Gate force `L4` → confirmation sur la VALEUR. Schéma de frontière pauvre, `userConfirms` cloué à `false`, outil vérifié contre le catalogue réel. ⚠ **Aucun modèle branché** : `tier1: null`, quatrième module hors circuit, délibérément. |
 | **4. Un `ModelProvider` LOCAL** | le dernier verrou de la fluidité. L'enveloppe l'attend ; il n'y a plus qu'à écrire l'adaptateur (Ollama en référence, ADR-007) et à choisir un modèle. C'est ce qui fera passer les 43 % d'ADR-080. |
 | ~~3. Contrat du tour de parole~~ | **FAIT** — ADR-074. `ecouter()` est branché ; `accuseReception` est écrit et **déclaré sans appelant**, en attente d'une surface où l'attente existe. Le pipeline audio, lui, reste entier. |
+| **1. Audio Gateway abstrait** (Phase 5) | la seule moitié de la voix qui s'écrit et se PROUVE sans matériel : `docs/02` en fait une porte de sortie — « changer de moteur STT par configuration seule ». Les moteurs viendront après ; la substituabilité, elle, se cloue à froid. |
+| **2. Connecter un compte Google** | inchangé depuis ADR-078 : trois secrets au coffre, et deux appels réels à provoquer. C'est le seul verrou restant de `calendar_update`, dernier outil hors surface parlée. |
+| **3. Relire la migration `data_level`** | `docs/29`, ligne par ligne. C'est la seule migration du dépôt dont une erreur EXPOSE une donnée, et `docs/14 §5` exige une relecture humaine. Elle ferme les 15 % restants de la Phase 4 avec le benchmark local. |
 
 La voix, l'iOS et l'Update Engine viennent après : chacun est un chantier
 entier.
@@ -346,7 +374,7 @@ entier.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 65 %     ce que Jarvis sait faire
+ÉTENDUE FONCTIONNELLE   ≈ 68 %     ce que Jarvis sait faire
 PROFONDEUR DE PREUVE    ≈ 83 %     ce qu'on peut en démontrer
 ```
 
@@ -364,5 +392,11 @@ Et la phrase qui les relie, qui n'a pas changé depuis le début :
 > Une fonctionnalité ne peut jamais être plus autonome que la qualité de la
 > preuve disponible sur son effet.
 
-Un projet à 64 % d'étendue et 80 % de preuve est exactement dans le bon ordre.
-L'inverse aurait été inquiétant.
+Les deux chiffres ci-dessus sont dans cet ordre — la preuve devant l'étendue —
+et c'est l'ordre qu'on veut. L'inverse aurait été inquiétant.
+
+> ⚠ **CETTE PHRASE RÉPUBLIAIT « 64 % et 80 % »**, une troisième copie périmée
+> de deux révisions, à huit lignes du bloc qui dit les vrais chiffres. Elle
+> échappait à la garde d'ADR-058 parce que celle-ci lit un format précis, pas
+> de la prose. Un chiffre qu'on peut lire ailleurs n'a pas à être recopié : la
+> phrase dit désormais la RELATION, qui, elle, ne se périme pas.

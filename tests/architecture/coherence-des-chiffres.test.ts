@@ -123,6 +123,65 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
     expect(total).toBe(titre);
   });
 
+  it('⚠ le TOTAL est bien l’ADDITION des lignes de phases', () => {
+    /* CINQUIÈME OCCURRENCE DE LA FORME QUE CE FICHIER COMBAT — et cette fois
+       c'est ce fichier qui l'a laissée passer.
+
+       Le test précédent vérifie que le total du tableau et le titre disent la
+       MÊME chose. Ils la disaient : tous les deux « ≈ 65 % ». Ce que personne
+       ne vérifiait, c'est que cette chose soit l'addition des lignes :
+
+           3,0 + 12,0 + 12,0 + 15,0 + 12,0 + 10,4 + 0,0 + 2,6 + 0,0 = 67,0
+
+       Deux copies d'un nombre faux passaient une garde de COHÉRENCE, parce
+       qu'une garde de cohérence ne mesure pas la vérité — elle mesure
+       l'accord. Il manquait la fidélité au réel, et ici le « réel » est de
+       l'arithmétique.
+
+       On vérifie donc les deux niveaux : chaque contribution est poids × fait,
+       et le total est leur somme. */
+    const lignes = [
+      ...AVANCEMENT.matchAll(/^\| [^|]*? \| (\d+) % \| \*\*(\d+) %\*\* \| ([\d,]+) \|/gm),
+    ].map((m) => ({
+      poids: Number(m[1]),
+      fait: Number(m[2]),
+      contribution: Number((m[3] ?? '').replace(',', '.')),
+    }));
+
+    /* `docs/02` définit les phases −1 à 7 : neuf lignes. Un motif qui n'en
+       mordrait que trois rendrait la somme fausse ET le test vert. */
+    expect(lignes.length, 'le tableau de phases est introuvable').toBe(9);
+    expect(lignes.reduce((a, l) => a + l.poids, 0), 'les poids doivent faire 100 %').toBe(100);
+
+    for (const l of lignes) {
+      const attendue = Math.round((l.poids * l.fait) / 100 * 10) / 10;
+      expect(l.contribution, `${String(l.poids)} % × ${String(l.fait)} %`).toBe(attendue);
+    }
+
+    const somme = lignes.reduce((a, l) => a + l.contribution, 0);
+    const total = nombre(AVANCEMENT, /\| \*\*TOTAL\*\* \| 100 % \| \| \*\*≈ (\d+) %\*\*/);
+    expect(total, 'ligne TOTAL introuvable').not.toBeNull();
+    expect(total, `la somme des lignes vaut ${somme.toFixed(1)}`).toBe(Math.round(somme));
+  });
+
+  it('DÉTECTE un total qui ne somme pas — contrôle négatif du précédent', () => {
+    /* Sans ce contrôle, le test ci-dessus serait vrai dans un document dont le
+       motif ne mord aucune ligne : `lignes` serait vide, la somme nulle, et
+       `expect(lignes.length).toBe(9)` est la seule chose qui l'en empêche.
+       On falsifie donc un total pour vérifier que l'écart est bien vu. */
+    const falsifie = AVANCEMENT.replace(
+      /\| \*\*TOTAL\*\* \| 100 % \| \| \*\*≈ \d+ %\*\*/,
+      '| **TOTAL** | 100 % | | **≈ 99 %**',
+    );
+    const lignes = [
+      ...falsifie.matchAll(/^\| [^|]*? \| (\d+) % \| \*\*(\d+) %\*\* \| ([\d,]+) \|/gm),
+    ].map((m) => Number((m[3] ?? '').replace(',', '.')));
+    const somme = lignes.reduce((a, b) => a + b, 0);
+    expect(nombre(falsifie, /\| \*\*TOTAL\*\* \| 100 % \| \| \*\*≈ (\d+) %\*\*/)).not.toBe(
+      Math.round(somme),
+    );
+  });
+
   it('la MOYENNE de profondeur est celle annoncée en titre', () => {
     const titre = nombre(AVANCEMENT, /## 2\. Profondeur de preuve — \*\*≈ (\d+) %/);
     const moyenne = nombre(AVANCEMENT, /\| \*\*Moyenne\*\* \| \| \*\*≈ (\d+) %\*\* \|/);
@@ -305,6 +364,24 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
     expect(
       readFileSync('tests/redteam/wiring.test.ts', 'utf8'),
     ).toContain(`expect(deadLogic).toHaveLength(${String(morts)});`);
+  });
+
+  it('le POURCENTAGE de phase cité par `docs/30` est celui de `docs/28`', () => {
+    /* Trouvé en corrigeant l'addition de `docs/28` : le récit citait « Phase 4
+       à 80 % » en toutes lettres. C'est un huitième registre du même fait —
+       exactement ce qu'ADR-075 a payé six fois pour les capacités, et
+       ADR-041 pour les données.
+
+       On ne retire pas le chiffre du récit : une page qui dit « Phase 4 à
+       85 % » est plus utile qu'une page qui renvoie ailleurs. On l'ATTACHE. */
+    const cite = nombre(RECIT, /Phase 4 à (\d+) %/);
+    expect(cite, 'docs/30 ne cite plus la Phase 4 — attacher le nouveau chiffre').not.toBeNull();
+    const source = nombre(
+      AVANCEMENT,
+      /\| 4 Confidentialité[^|]*\| \d+ % \| \*\*(\d+) %\*\*/,
+    );
+    expect(source, 'ligne Phase 4 introuvable dans docs/28').not.toBeNull();
+    expect(cite, 'docs/30 contredit docs/28 sur la Phase 4').toBe(source);
   });
 
   it('le README ne republie AUCUN pourcentage d’avancement', () => {
