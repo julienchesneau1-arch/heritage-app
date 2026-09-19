@@ -177,6 +177,7 @@ annoncée sans exister. Celle-ci en est une copie — vérifiée par
 
 ```text
 retiens que …                         mémoriser un fait
+je préfère …                          retenir une préférence (Jarvis le dit)
 que sais-tu sur …                     chercher en mémoire
 enregistre <nom> comme personne       créer une entité
 ajoute … à ma liste                   créer une tâche

@@ -18,6 +18,7 @@ import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/
 
 import { arretDouble } from '../helpers/arret.js';
 import { undoDouble } from '../helpers/undo.js';
+import { modePriveDouble } from '../helpers/mode-prive.js';
 function intentOf(proposal: IntentProposal): IntentEngine {
   return { propose: () => proposal };
 }
@@ -114,6 +115,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf({ kind: 'CLARIFY', question: 'Quoi retenir ?', understood: '' }),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -151,6 +153,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf({
         kind: 'UNSUPPORTED',
         understood: 'un envoi de message',
@@ -195,6 +198,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation([]),
       setGuardConfirmed: () => undefined,
@@ -240,6 +244,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -289,6 +294,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -328,6 +334,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -372,6 +379,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -415,6 +423,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -462,6 +471,7 @@ describe('Assistant', () => {
     const assistant = createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: intentOf({ ...TOOL_CALL, toolId: 'memory_add', userConfirms: true }),
       gateway: {
         register: () => ok(undefined),

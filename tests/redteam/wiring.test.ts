@@ -494,7 +494,7 @@ describe('RED TEAM — code mort en production', () => {
     expect(intent).toContain("import type { GenreDesigne }");
   });
 
-  it('DÉMONSTRATION — 5 clés de configuration sur 16 n\'ont aucun effet', () => {
+  it('DÉMONSTRATION — 4 clés de configuration sur 16 n\'ont aucun effet', () => {
     // `06` impose « aucune configuration critique cachée dans le code ». Le
     // dépôt fait l'inverse du reproche attendu : la configuration existe, est
     // validée par Zod… et n'est lue par personne. Une clé décorative est pire
@@ -507,7 +507,6 @@ describe('RED TEAM — code mort en production', () => {
     // Aucun consommateur nulle part dans `src/` hors du schéma lui-même.
     for (const key of [
       'defaultDecision',
-      'startInPrivateMode',
       'externalTelemetry',
       'verifyChainOnStartup', // le CLI ne vérifie PAS la chaîne au démarrage
     ]) {
@@ -525,9 +524,26 @@ describe('RED TEAM — code mort en production', () => {
       expect(sources.includes(key), key).toBe(true);
     }
 
+    /* ⚠ `startInPrivateMode` A QUITTÉ LA LISTE DES DÉCORATIVES — ADR-106.
+
+       Elle y figurait depuis les fondations, documentée « 03 §7 — mode privé
+       actif au démarrage ? », et rien ne la lisait. La règle du Policy Gate
+       existait pourtant : « mode privé actif : aucune sortie réseau ».
+
+       Une clé décorative est pire qu'une valeur en dur, parce qu'elle laisse
+       croire à un interrupteur — et celui-ci portait la promesse la plus
+       simple du produit : « rien ne sort ».
+
+       Elle est désormais lue à CHAQUE appel du Tool Gateway, pas au seul
+       démarrage : une activation au démarrage aurait demandé un chemin
+       asynchrone qu'`openRuntime` n'a pas, et une activation « au mieux » qui
+       échoue en silence ferait démarrer en clair un Jarvis configuré privé. */
+    expect(sources.includes('startInPrivateMode'), 'startInPrivateMode').toBe(true);
+
     /* `policy.directory` reste contourné : le runtime prend le chemin en dur.
        `cloud.enabled`, LUI, A ÉTÉ CÂBLÉ (ADR-069) — il quitte donc cette liste,
-       et le compteur passe de six à cinq. */
+       et le compteur passe de six à cinq. Puis à QUATRE avec
+       `startInPrivateMode` (ADR-106). */
     const runtime = readFileSync(join(ROOT, 'src', 'apps', 'runtime.ts'), 'utf8');
     expect(runtime).toContain("join(process.cwd(), 'policies')");
     expect(runtime).toContain('config.value.public.cloud.enabled');

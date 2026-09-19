@@ -34,6 +34,7 @@ import { createSnapshotStore } from '../undo/snapshots.js';
 import { floorFor } from '../privacy/classify.js';
 import { sealExternal } from '../quarantine/processor.js';
 import { createEmergencyHalt } from '../safety/halt.js';
+import { createModePrive } from '../privacy/mode-prive.js';
 import { confirmableKey, renderConfirmable } from './confirmation.js';
 import type { OperationIdentity } from './identity.js';
 import type { UnknownReason, VerificationEngine } from '../verification/engine.js';
@@ -335,6 +336,26 @@ export function createToolGateway(deps: {
   vault: SecretVault;
   ledger: Ledger;
   verifier: VerificationEngine;
+  /**
+   * `privacy.startInPrivateMode` — ADR-106.
+   *
+   * ⚠ C'EST UNE VALEUR DE CONFIGURATION, PAS UN COMPOSANT DE SÉCURITÉ. La
+   * distinction est celle qui justifie que `EmergencyHalt` et `ModePrive`
+   * soient construits ICI et non injectés : une doublure pourrait mentir sur
+   * un état, elle ne peut pas mentir sur un booléen lu dans `config/`.
+   *
+   * ⚠ ET IL N'EST PAS UN DÉFAUT DE DÉMARRAGE, C'EST UNE CONTRAINTE.
+   * Le nom de la clé dit « au démarrage », mais une activation au démarrage
+   * demanderait un chemin asynchrone que `openRuntime` n'a pas — et une
+   * activation « au mieux » qui échoue en silence ferait démarrer en clair un
+   * Jarvis configuré privé. On lit donc la clé à CHAQUE appel : c'est plus
+   * strict, et surtout ça ne peut pas rater.
+   *
+   * Conséquence assumée : quand elle vaut `true`, le mode privé n'est pas
+   * levable par la parole. `ModePrive.lever()` le dit plutôt que de laisser
+   * croire à une levée sans effet.
+   */
+  startInPrivateMode?: boolean;
 }): ToolGateway {
   const tools = new Map<string, RegisteredTool>();
   const snapshots = createSnapshotStore(deps.db);
@@ -347,6 +368,9 @@ export function createToolGateway(deps: {
      factice ne prouverait que notre intention ». Même raisonnement, même
      traitement que `snapshots`. */
   const haltState = createEmergencyHalt(deps.db);
+  /* MÊME RAISON, MÊME TRAITEMENT — ADR-106. Un `ModePrive` injectable serait
+     remplaçable par une doublure qui répond toujours « pas privé ». */
+  const modePrive = createModePrive(deps.db);
 
   /* ══════════════════════════════════════════════════════════════════════
      LA PRIMITIVE UNIQUE D'ÉCRITURE AUTORITAIRE — ADR-035.
@@ -863,6 +887,29 @@ export function createToolGateway(deps: {
       sensitive: spec.sensitive,
     }));
 
+    /* ⚠ LE MODE PRIVÉ EST LU, JAMAIS REÇU — ADR-106, ADR-052.
+
+       `gate.ts` refuse l'égression quand `context.mode === 'PRIVATE'`. Si ce
+       champ venait de l'appelant seul, il suffirait d'envoyer `NORMAL` pour
+       désactiver le mode privé sans jamais le lever — la même faille que pour
+       `egress` et pour l'arrêt d'urgence, et sur la protection que
+       l'utilisateur croit la plus simple.
+
+       ⚠ ET LA LECTURE NE PEUT QUE DURCIR. Un appelant qui demande déjà
+       `PRIVATE` le reste ; la base ne peut pas l'assouplir. C'est
+       `strictest()` du Policy Gate appliqué à une autre dimension.
+
+       ⚠ LE REPLI EST L'INVERSE DE CELUI DE L'ARRÊT D'URGENCE, et c'est
+       raisonné. L'arrêt refuse tout quand son état est illisible : un arrêt
+       inconnu affecte TOUTES les actions. Un mode privé inconnu n'affecte que
+       le droit de SORTIR — se croire privé bloque l'égression et rien
+       d'autre. Refuser toute action serait plus strict sans être plus sûr. */
+    const prive = await modePrive.etat();
+    const modeEffectif =
+      deps.startInPrivateMode === true || !prive.ok || prive.value.actif
+        ? 'PRIVATE'
+        : call.context.mode;
+
     const decision = deps.gate.decide({
       actor: call.actor,
       action: { tool: def.id, operation: 'invoke' },
@@ -879,7 +926,7 @@ export function createToolGateway(deps: {
         dataLevel: floorFor(def.dataCategory),
       },
       context: {
-        mode: call.context.mode,
+        mode: modeEffectif,
         egress: def.networkRequired,
         cloudEnabled: call.context.cloudEnabled,
         proactive: call.context.proactive,

@@ -37,6 +37,7 @@ import type { RegisteredTool } from '../../src/core/tools/contract.js';
 import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/gateway.js';
 import { arretDouble } from '../helpers/arret.js';
 import { undoDouble } from '../helpers/undo.js';
+import { modePriveDouble } from '../helpers/mode-prive.js';
 
 const OUTILS = [
   {
@@ -138,6 +139,7 @@ function assistantAvec(
     arret: arretDouble(),
     // ADR-105 — même règle : un assemblage qui ne peut pas défaire est diminué.
     undo: undoDouble(),
+    modePrive: modePriveDouble(),
     intent: TIER0_MUET,
     gateway: passerelle(calls),
     setGuardConfirmed: () => undefined,

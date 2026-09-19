@@ -18,6 +18,7 @@ import { createDb, type Db, type DbHealth } from '../core/db/client.js';
 import { createLedger, type Ledger } from '../core/ledger/ledger.js';
 import { createEmergencyHalt } from '../core/safety/halt.js';
 import { createControleDArret, type ControleDArret } from '../core/safety/controle.js';
+import { createModePrive, type ModePrive } from '../core/privacy/mode-prive.js';
 import { digestPayload } from '../core/ledger/event.js';
 import { createPolicyGate } from '../core/policy/gate.js';
 import { createMemoryGuard } from '../core/memory/guard.js';
@@ -65,6 +66,16 @@ export interface Runtime {
    * et c'est la dette que cette ADR paie.
    */
   readonly arret: ControleDArret;
+  /** Le mode privé — ADR-106. Exposé pour la levée (surface locale) et l'affichage. */
+  readonly modePrive: ModePrive;
+  /**
+   * `privacy.startInPrivateMode` — ADR-106.
+   *
+   * Quand elle vaut `true`, le mode privé est IMPOSÉ : le Gateway le durcit à
+   * chaque appel, et aucune levée n'y change rien. Les surfaces doivent le
+   * DIRE plutôt que de laisser croire à une levée sans effet.
+   */
+  readonly modePriveImpose: boolean;
   readonly sessions: SessionStore;
   readonly intent: IntentEngine;
   readonly assistant: Assistant;
@@ -113,6 +124,7 @@ export function buildRuntime(
      * est une OPTION ; Jarvis fonctionne sans (I1, I2).
      */
     localModel?: { enabled: boolean; url: string; model: string };
+    startInPrivateMode?: boolean;
   } = {},
 ): Result<Runtime> {
   const source = loadPolicySource(options.policyDir ?? join(process.cwd(), 'policies'));
@@ -144,6 +156,14 @@ export function buildRuntime(
     vault,
     ledger,
     verifier: createVerificationEngine(),
+    /* ⚠ LA CLÉ EST ENFIN LUE — ADR-106, et elle ne l'avait JAMAIS été.
+
+       `privacy.startInPrivateMode` existait dans le schéma depuis les
+       fondations, avec ce commentaire : « 03 §7 — mode privé actif au
+       démarrage ? ». Rien ne la consultait. C'est la même famille que
+       `cloud.enabled` avant ADR-069 : une clé déclarée que rien ne lit, et
+       un utilisateur qui se croit protégé par son choix. */
+    startInPrivateMode: options.startInPrivateMode ?? false,
   });
 
   /* CONSTRUIT AVANT L'ASSISTANT — ADR-105.
@@ -154,6 +174,15 @@ export function buildRuntime(
      constructions auraient donné deux moteurs sur la même base : rien de
      faux, mais deux endroits où brancher les futures dépendances. */
   const undo = createUndoEngine({ snapshots: createSnapshotStore(db), gateway });
+
+  /* ⚠ LE MÊME OBJET QUE CELUI DU TOOL GATEWAY ? NON — ET C'EST VOULU.
+
+     Le Gateway construit le sien en privé, pour qu'aucune doublure ne puisse
+     lui faire croire que le mode privé est éteint. Ce n'est pas un second
+     registre au sens d'ADR-041 : l'état n'est pas dans l'objet, il est dans la
+     table `mode_prive`. Les deux lisent et écrivent la même ligne, et l'index
+     unique de la base garantit qu'il n'y en a qu'une. */
+  const modePrive = createModePrive(db);
 
   // La confirmation utilisateur est une propriété de la CONVERSATION : elle est
   // pilotée par la boucle, jamais devinée par un outil.
@@ -199,6 +228,8 @@ export function buildRuntime(
     ledger,
     inbox,
     arret,
+    modePrive,
+    modePriveImpose: options.startInPrivateMode ?? false,
     sessions: createSessionStore(db),
     intent: createIntentEngine(),
     assistant: createAssistant({
@@ -218,6 +249,8 @@ export function buildRuntime(
          depuis le CLI. Le moteur était branché à une seule surface, ce qui
          est la même chose qu'une capacité absente vu du téléphone. */
       undo,
+      // ADR-106 — « passe en mode privé » atteint enfin `docs/03 §7`.
+      modePrive,
       // ADR-077 : les dates sont calculées PAR LA BASE, jamais par le processus.
       temps: createResolveurTemporel(db),
       /* LE `TIER 1`, SI ET SEULEMENT SI UN MODÈLE LOCAL EST CONFIGURÉ — ADR-082.
@@ -275,6 +308,8 @@ export function openRuntime(
      de défaut que `docs/26 §2` recense huit fois. */
   const runtime = buildRuntime(db, {
     cloudEnabled: config.value.public.cloud.enabled,
+    // ADR-106 — même geste qu'ADR-069 pour `cloud.enabled`.
+    startInPrivateMode: config.value.public.privacy.startInPrivateMode,
     localModel: config.value.public.localModel,
   });
   if (!runtime.ok) {

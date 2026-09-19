@@ -37,6 +37,8 @@ import type { ToolGateway } from './tools/gateway.js';
 import type { ControleDArret } from './safety/controle.js';
 import { estUneParoleDArret } from './safety/parole-d-arret.js';
 import { estUneDemandeDAnnulation } from './undo/parole.js';
+import { estUnPassageEnModePrive } from './privacy/parole.js';
+import type { ModePrive } from './privacy/mode-prive.js';
 import type { UndoEngine, UndoOutcome } from './undo/engine.js';
 import type { Result } from './types/result.js';
 import type { Mode, Surface, VerificationStatus } from './types/domain.js';
@@ -106,6 +108,19 @@ export type AssistantReply =
       readonly detail: string;
       /** Ce qui a été remis en état, pour que la phrase soit concrète. */
       readonly cible: string;
+    }
+  | {
+      /**
+       * LE MODE PRIVÉ EST ACTIF — `docs/02` Phase 4, `docs/03 §7`, ADR-106.
+       *
+       * `depuis` est rendu même quand le mode était DÉJÀ actif : « c'est fait »
+       * sur une bascule qui n'a rien basculé laisserait croire à un
+       * changement. L'utilisateur doit pouvoir distinguer « je viens de
+       * l'activer » de « il l'était déjà ».
+       */
+      readonly kind: 'MODE_PRIVE';
+      readonly depuis: string;
+      readonly dejaActif: boolean;
     }
   | {
       /**
@@ -266,6 +281,15 @@ export interface AssistantDeps {
    * capacité existait, et une seule surface l'atteignait.
    */
   readonly undo: UndoEngine;
+  /**
+   * LE MODE PRIVÉ — ADR-106, livrable de la Phase 4.
+   *
+   * ⚠ REQUIS ET NON NULLABLE, pour la raison d'`arret` et d'`undo` : un
+   * assemblage qui ne peut pas se taire n'est pas un assemblage normal. La
+   * règle du Policy Gate existait depuis le début et personne ne pouvait
+   * l'atteindre — un champ optionnel aurait laissé ce trou se reformer.
+   */
+  readonly modePrive: ModePrive;
 }
 
 /**
@@ -459,6 +483,28 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           annulees: arrete.value.annulees,
           enVol: arrete.value.enVol,
           journalMuet: arrete.value.journalMuet,
+        };
+      }
+
+      /* PASSER EN MODE PRIVÉ — `docs/03 §7`, ADR-106.
+
+         Comme l'arrêt d'urgence et l'annulation : ce n'est pas un appel
+         d'outil, c'est un changement de RÉGIME. Lui inventer un `toolId` le
+         ferait traverser le Policy Gate — c'est-à-dire soumettre à la
+         politique le geste qui durcit la politique. */
+      if (estUnPassageEnModePrive(text)) {
+        const actif = await deps.modePrive.activer(
+          `demandé par l’utilisateur : « ${text} »`,
+        );
+        if (!actif.ok) return { kind: 'ERROR', message: actif.error.message };
+        /* `dejaActif` est calculé par comparaison d'instants plutôt que rendu
+           par le module : `activer()` est idempotent et ne distingue pas les
+           deux cas — c'est justement ce qui le rend sûr à répéter. */
+        const depuis = actif.value.depuis ?? new Date().toISOString();
+        return {
+          kind: 'MODE_PRIVE',
+          depuis,
+          dejaActif: Date.now() - new Date(depuis).getTime() > 2000,
         };
       }
 

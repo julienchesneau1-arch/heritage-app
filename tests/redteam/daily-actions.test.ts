@@ -80,10 +80,25 @@ const ACTIONS: readonly Action[] = [
      l'utilisateur ne nomme aucun outil : c'est l'Undo Engine qui sait lequel
      est l'inverse. */
   { label: 'annuler la dernière action', phrase: 'Annule ce que tu viens de faire', expects: HORS_OUTIL },
-  { label: 'définir une préférence', phrase: 'Je préfère les rendez-vous le jeudi matin', expects: null },
+  /* ⚠ A CHANGÉ DE CAMP — ADR-106, et ce n'est PAS une capacité nouvelle.
+
+     `memory_add` existe depuis les fondations. Ce qui manquait est que
+     personne ne dit « retiens que je préfère les rendez-vous le jeudi matin » :
+     on dit « je préfère les rendez-vous le jeudi matin ». Pour l'utilisateur
+     les deux sont indiscernables, et l'un répondait « capacité absente ».
+
+     Le dire plutôt que de le compter comme une capacité : ADR-096 avait payé
+     la même leçon sur deux autres lignes de ce tableau. */
+  { label: 'définir une préférence', phrase: 'Je préfère les rendez-vous le jeudi matin', expects: 'memory_add' },
   { label: 'poser une question de suivi', phrase: 'Et le suivant ?', expects: null },
   { label: 'demander pourquoi', phrase: 'Pourquoi as-tu demandé confirmation ?', expects: null },
-  { label: 'passer en mode privé', phrase: 'Passe en mode privé', expects: null },
+  /* ⚠ A CHANGÉ DE CAMP — ADR-106, et c'est un livrable NOMMÉ de `docs/02`.
+
+     La règle existait dans le Policy Gate depuis le début — « mode privé
+     actif : aucune sortie réseau » — et les deux surfaces envoyaient
+     `NORMAL`. Un régime de confidentialité qu'aucune phrase n'active n'est
+     pas un régime, c'est une branche de code. */
+  { label: 'passer en mode privé', phrase: 'Passe en mode privé', expects: HORS_OUTIL },
   /* ⚠ A CHANGÉ DE CAMP — ADR-104, et c'était le plus grave des dix-neuf.
 
      `docs/05 §C2` est le seul scénario doré `CRITIQUE` dont l'ENTRÉE est une
@@ -119,6 +134,11 @@ function classify(reply: AssistantReply): string {
          C'est exactement ce qu'on attend d'une union discriminée : le
          compilateur tient l'inventaire à la place du relecteur. */
       return 'MIS EN FILE (à confirmer sur la machine)';
+    case 'MODE_PRIVE':
+      /* ADR-106. Quatrième type signalé par ce `switch` exhaustif plutôt que
+         tombé dans un repli silencieux — après `EN_ATTENTE`, `ARRET` et
+         `ANNULE`. Un `default` aurait coûté quatre capacités invisibles. */
+      return `MODE PRIVÉ ACTIF${reply.dejaActif ? ' (il l’était déjà)' : ''}`;
     case 'ANNULE':
       /* ADR-105. Troisième fois que ce `switch` exhaustif signale un type
          nouveau au lieu de le laisser tomber dans un repli silencieux —
@@ -163,6 +183,20 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
        lever serait une panne, pas un bouton. */
     const leve = await runtime.arret.lever('fin du banc des trente actions');
     if (!leve.ok) throw new Error(`arrêt non levé : ${leve.error.message}`);
+
+    /* ⚠ ET LE MODE PRIVÉ AUSSI — ADR-106, MÊME PIÈGE, DEUXIÈME FOIS.
+
+       « Passe en mode privé » est la 28ᵉ phrase, et elle l'active VRAIMENT :
+       la ligne vit en base, partagée par tous les fichiers qui suivent. Mesuré
+       en lançant la suite entière — `web-search` et le banc de succès partiel
+       sont tombés d'un coup, avec « Mode privé actif : aucune sortie réseau »,
+       un message parfaitement correct et parfaitement déroutant.
+
+       J'avais écrit exactement cet avertissement pour l'arrêt d'urgence trois
+       commits plus tôt, et je ne l'ai pas appliqué à la bascule suivante. Le
+       commentaire n'a pas protégé ; c'est la suite complète qui l'a fait. */
+    const normal = await runtime.modePrive.lever('fin du banc des trente actions');
+    if (!normal.ok) throw new Error(`mode privé non levé : ${normal.error.message}`);
   }, 60_000);
 
   afterAll(async () => {
@@ -181,9 +215,9 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
     expect(lines).toHaveLength(30);
   });
 
-  it('les 13 capacités existantes fonctionnent et sont vérifiées', () => {
+  it('les 15 capacités existantes fonctionnent et sont vérifiées', () => {
     const supported = ACTIONS.filter((a) => a.expects !== null);
-    expect(supported).toHaveLength(13);
+    expect(supported).toHaveLength(15);
 
     /* ⚠ UNE SEULE EXCEPTION, ET ELLE EST NOMMÉE PLUTÔT QUE TOLÉRÉE.
 
@@ -243,7 +277,7 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
     // La règle est désormais absolue : un outil n'a jamais le droit de
     // prétendre avoir effectué une action différente de celle demandée.
     const unsupported = ACTIONS.filter((a) => a.expects === null);
-    expect(unsupported).toHaveLength(17);
+    expect(unsupported).toHaveLength(15);
 
     const substituted = unsupported.filter(
       (a) => observed.get(a.label)?.reply.kind === 'DONE',
@@ -347,7 +381,7 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
     expect(errors).toEqual([]);
   });
 
-  it('couverture réelle du quotidien : 10 actions sur 30', () => {
+  it('couverture réelle du quotidien : 12 actions sur 30', () => {
     /* ⚠ DEUX CHIFFRES, ET ILS NE DISENT PAS LA MÊME CHOSE.
 
        ```text
@@ -378,7 +412,7 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
        d'avancement du produit, mesuré au lieu d'être estimé. Il n'y a
        toujours aucune substitution pour le gonfler. */
     const done = ACTIONS.filter((a) => observed.get(a.label)?.reply.kind === 'DONE');
-    expect(done).toHaveLength(9);
+    expect(done).toHaveLength(10);
     expect(done.every((a) => a.expects !== null)).toBe(true);
 
     /* ⚠ LA DIXIÈME N'EST PAS UN `DONE`, ET ELLE COMPTE QUAND MÊME — ADR-104.
@@ -389,9 +423,12 @@ describe.skipIf(skip)('RED TEAM — 30 actions du quotidien', () => {
 
        Elle est donc comptée À PART, ce qui est la seule façon honnête : le
        chiffre du quotidien est 10, et sa composition est lisible. */
-    const arret = ACTIONS.filter((a) => observed.get(a.label)?.reply.kind === 'ARRET');
-    expect(arret).toHaveLength(1);
-    expect(done.length + arret.length).toBe(10);
+    const horsOutil = ACTIONS.filter((a) => {
+      const k = observed.get(a.label)?.reply.kind;
+      return k === 'ARRET' || k === 'MODE_PRIVE';
+    });
+    expect(horsOutil).toHaveLength(2);
+    expect(done.length + horsOutil.length).toBe(12);
 
     /* ⚠ L'ORDRE, ÉPROUVÉ PLUTÔT QUE SUBI.
 

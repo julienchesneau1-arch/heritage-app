@@ -90,6 +90,14 @@ export const HTML = `<!doctype html>
 <body>
 <header>
   <h1>Jarvis</h1>
+  <!-- ⚠ L'« INDICATEUR VISIBLE » EXIGÉ PAR docs/02 — ADR-106.
+       (Aucun accent grave dans ce commentaire : il vit dans un littéral
+       gabarit TypeScript, et c'est la QUATRIÈME fois que ce fichier me le
+       rappelle.)
+       Dans l'EN-TÊTE, pas dans le menu : un indicateur qu'il faut aller
+       chercher ne répond pas à la question « est-ce que quelque chose peut
+       sortir d'ici ? » au moment où on se la pose. -->
+  <span id="prive" hidden>⦿ privé</span>
   <button id="menu" type="button" aria-label="Menu">···</button>
 </header>
 
@@ -147,6 +155,11 @@ header {
   position: sticky; top: 0; background: var(--bg); z-index: 2;
 }
 h1 { font-size: 1rem; font-weight: 600; margin: 0; letter-spacing: .02em; }
+#prive {
+  font-size: .75rem; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: .7rem; padding: .1rem .45rem; margin-left: auto;
+  margin-right: .5rem; letter-spacing: .02em;
+}
 #menu {
   background: none; border: none; color: var(--muted);
   font-size: 1.3rem; line-height: 1; cursor: pointer; padding: .2rem .5rem;
@@ -358,6 +371,18 @@ ${capacitesInjectees()}
     /* ADR-105 — l'annulation a abouti. On NOMME ce qui a été défait : « c'est
        annulé » sans dire quoi laisse l'utilisateur vérifier lui-même, ce qui
        est exactement ce qu'une annulation devait lui éviter. */
+    if (reply.kind === 'MODE_PRIVE') {
+      badgePrive(true);
+      node.appendChild(el('div', null, reply.dejaActif
+        ? 'Le mode privé était déjà actif, depuis ' + reply.depuis + '.'
+        : '⦿ MODE PRIVÉ ACTIF. Plus rien ne sort de la machine.'));
+      /* ⚠ LA SORTIE N'EST PAS ICI, ET C'EST LA MÊME FRONTIÈRE QU'ADR-101.
+         Activer va dans le sens sûr ; désactiver rend à Jarvis le droit de
+         parler à l'extérieur. Le téléphone peut fermer, pas rouvrir. */
+      node.appendChild(el('div', 'note',
+        'Pour en sortir : « /normal <raison> » sur ton Mac.'));
+      return;
+    }
     if (reply.kind === 'ANNULE') {
       node.appendChild(el('div', null, 'Annulé — ' + reply.cible));
       node.appendChild(el('div', 'detail', reply.detail));
@@ -420,6 +445,9 @@ ${capacitesInjectees()}
           r.pending + ' mémoire(s) en attente',
           'Embeddings ' + (r.embeddings ? 'disponibles' : 'absents — voie sémantique indisponible'),
           'Cloud ' + (r.cloud ? 'activé' : 'désactivé'),
+          'Mode privé ' + (r.modePrive
+            ? (r.modePriveImpose ? 'ACTIF — imposé par la configuration' : 'ACTIF')
+            : 'inactif'),
         ]);
       } else if (cmd === '/attente') {
         /* ADR-101 — LECTURE SEULE. Aucun bouton n'exécute d'ici : confirmer
@@ -453,6 +481,20 @@ ${capacitesInjectees()}
     try { renderReply(await api('/api/say', { text }), text); }
     catch (e) { jarvis().appendChild(el('div', 'detail', e.message)); }
   };
+
+  function badgePrive(actif) {
+    const b = document.getElementById('prive');
+    if (b) b.hidden = !actif;
+  }
+
+  /* L'ÉTAT EST LU AU CHARGEMENT, pas seulement après une bascule : le mode
+     privé survit aux redémarrages et aux surfaces (il vit en base, ADR-106).
+     Un badge qui n'apparaîtrait qu'après l'avoir activé DANS CET ONGLET
+     mentirait à chaque réouverture. */
+  (async () => {
+    try { badgePrive((await api('/api/diagnostic')).modePrive); }
+    catch { /* pas de jeton, ou hors ligne : on n'affiche rien plutôt que faux */ }
+  })();
 
   document.getElementById('menu').onclick = () => sheet.showModal();
   sheet.onclick = (event) => { if (event.target === sheet) sheet.close(); };

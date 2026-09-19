@@ -159,7 +159,26 @@ const RENDU: Readonly<Record<string, Rendu>> = {
       return ['Déposé dans l’inbox : je te demanderai confirmation avant de le retenir.'];
     }
     if (issue === 'DEDUPLICATED') return ['Je le savais déjà.'];
-    return liste(o, 'adjustments').map((a) => `(${txt(a)})`);
+
+    /* ⚠ « ✓ C'EST FAIT » NE DIT PAS QU'ON A MÉMORISÉ — ADR-106.
+
+       Mesuré en utilisant Jarvis : « je préfère les rendez-vous le jeudi
+       matin » répondait « ✓ C'est fait », suivi d'une note sur la confiance.
+       L'utilisateur avait DÉCLARÉ quelque chose ; Jarvis l'avait RETENU, et
+       ne le lui disait pas.
+
+       ⚠ ET ON N'ÉCHO PAS LE CONTENU. Le renvoyer demanderait de l'ajouter à
+       la sortie de l'outil, donc de faire traverser au texte une frontière de
+       plus — alors qu'ADR-096 a établi qu'une mémoire dont le plancher dépasse
+       PERSONAL se NOMME et ne se cite pas. On dit qu'on a retenu, et de quelle
+       nature ; l'utilisateur relit avec « que sais-tu sur … ». */
+    const lignes: string[] = [];
+    if (txt(champ(o, 'memoryId')).length > 0) {
+      const genre = txt(champ(o, 'kind'));
+      lignes.push(genre.length > 0 ? `Retenu (${genre}).` : 'Retenu.');
+    }
+    lignes.push(...liste(o, 'adjustments').map((a) => `(${txt(a)})`));
+    return lignes;
   },
   memory_search: (o) => {
     const lignes: string[] = [];

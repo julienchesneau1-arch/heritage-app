@@ -58,6 +58,8 @@ ${capacitesParlees()
     /annule         défaire la dernière action annulable
     /reprendre <raison>
                     lever un arrêt d'urgence — dis « arrête tout » pour l'engager
+    /normal <raison>
+                    sortir du mode privé — dis « passe en mode privé » pour l'activer
     /confirmer      exécuter ce qui a été préparé depuis le téléphone
     /inbox          les mémoires en attente de ta confirmation
     /diagnostic     état du système
@@ -313,6 +315,17 @@ async function showDiagnostic(runtime: Runtime): Promise<void> {
   stdout.write(`  Cloud          ${d.cloud ? 'activé' : 'désactivé'}\n`);
   /* ADR-086 : la ligne qui manquait, et la seule que l'utilisateur regarde
      juste après avoir installé un modèle. */
+  /* ADR-106 — l'indicateur. Placé AVANT le modèle local : c'est la ligne qui
+     répond à « est-ce que quelque chose peut sortir d'ici ». */
+  stdout.write(
+    `  Mode privé     ${
+      d.modePrive
+        ? d.modePriveImpose
+          ? 'ACTIF — imposé par la configuration'
+          : 'ACTIF — rien ne sort de la machine'
+        : 'inactif'
+    }\n`,
+  );
   stdout.write(`  Modèle local   ${d.modeleLocal}\n`);
 }
 
@@ -344,6 +357,18 @@ function show(reply: AssistantReply): void {
         `  Tape « /confirmer » sur cette machine — il te reste `
           + `${String(reply.minutesRestantes)} min.\n`,
       );
+      return;
+
+    case 'MODE_PRIVE':
+      /* ⚠ « IL L'ÉTAIT DÉJÀ » N'EST PAS UN DÉTAIL. Une bascule qui n'a rien
+         basculé, annoncée comme un changement, apprend à l'utilisateur que
+         ses commandes font quelque chose même quand elles ne font rien. */
+      stdout.write(
+        reply.dejaActif
+          ? `  ⦿ Mode privé — il l'était déjà, depuis ${reply.depuis}.\n`
+          : '  ⦿ MODE PRIVÉ ACTIF. Plus rien ne sort de la machine.\n',
+      );
+      stdout.write('  Pour en sortir : « /normal <raison> », sur cette machine.\n');
       return;
 
     case 'ANNULE':
@@ -599,6 +624,38 @@ async function main(): Promise<void> {
         stdout.write(
           leve.ok
             ? '  ▶ Arrêt levé. Jarvis peut de nouveau agir.\n'
+            : `  ${leve.error.message}\n`,
+        );
+        continue;
+      }
+      if (line === '/normal' || line.startsWith('/normal ')) {
+        /* ⚠ SORTIR DU MODE PRIVÉ EST UNE COMMANDE, PAS UNE PHRASE — ADR-106.
+
+           Même dissymétrie que `/reprendre` : activer va dans le sens sûr,
+           désactiver rend à Jarvis le droit de parler à l'extérieur. Si
+           « sors du mode privé » était une phrase, quelqu'un qui détiendrait
+           le jeton du téléphone pourrait rouvrir le réseau à distance — et
+           l'utilisateur ne verrait qu'un indicateur éteint, ce qu'il lit
+           comme « normal ». */
+        if (runtime.value.modePriveImpose) {
+          stdout.write(
+            '  Le mode privé est IMPOSÉ par la configuration '
+              + '(`privacy.startInPrivateMode`). Aucune levée n\'y changera rien :\n'
+              + '  c\'est le fichier de configuration qu\'il faut modifier.\n',
+          );
+          continue;
+        }
+        const raison = line.slice('/normal'.length).trim();
+        if (raison.length === 0) {
+          stdout.write(
+            '  Il faut une raison : « /normal je suis seul et j\'ai besoin du web ».\n',
+          );
+          continue;
+        }
+        const leve = await runtime.value.modePrive.lever(raison);
+        stdout.write(
+          leve.ok
+            ? '  ○ Mode privé levé. Les sorties réseau redeviennent possibles.\n'
             : `  ${leve.error.message}\n`,
         );
         continue;

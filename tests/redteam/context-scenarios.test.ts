@@ -241,11 +241,20 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
   it('les tours qui n\'exigent aucun contexte passent', () => {
     const simples = results.filter((r) => r.turn.aptitude === 'ACTION');
     const rates = simples.filter((r) => r.reply.kind !== 'DONE');
-    expect(rates.map((r) => r.turn.phrase)).toEqual([
-      // Une préférence énoncée sans « retiens que » n'est pas captée : le
-      // Tier 0 ne reconnaît pas la formulation. Attendu, et dit.
-      'Je préfère les rendez-vous le jeudi matin',
-    ]);
+    /* ⚠ LA LISTE EST VIDE DEPUIS ADR-106, et elle n'avait qu'une entrée.
+
+       Elle portait : « une préférence énoncée sans "retiens que" n'est pas
+       captée : le Tier 0 ne reconnaît pas la formulation. Attendu, et dit. »
+
+       C'était vrai, et c'était surtout une CONSTATATION prise pour une
+       fatalité. Personne ne dit « retiens que je préfère les rendez-vous le
+       jeudi matin » ; on dit « je préfère les rendez-vous le jeudi matin ». La
+       capacité existait, le mot manquait.
+
+       Onze tours d'ACTION sur onze aboutissent désormais. C'est la seule
+       aptitude complète de ce banc, et elle mesure exactement ce qu'elle dit :
+       quand la formulation matche une règle, ça marche. */
+    expect(rates.map((r) => r.turn.phrase)).toEqual([]);
   });
 
   it('DÉMONSTRATION — aucun tour exigeant du contexte n\'est traité', () => {
@@ -308,7 +317,7 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     await db.close();
   });
 
-  it('LA FLUIDITÉ, EN CHIFFRES — 13 tours sur 30 aboutissent', () => {
+  it('LA FLUIDITÉ, EN CHIFFRES — 14 tours sur 30 aboutissent', () => {
     /* ⚠ LE CHIFFRE QUI RÉPOND À « PEUT-ON DISCUTER AVEC JARVIS ? », ET IL
        N'ÉTAIT COMPTÉ NULLE PART.
 
@@ -319,7 +328,10 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
        On compte donc ce qui ABOUTIT, par aptitude. La répartition compte plus
        que le total :
 
-         ACTION            10/11   quand la formulation matche une règle, ça marche
+         ACTION            11/11   ⚠ COMPLET depuis ADR-106 — la seule aptitude
+                                    entière de ce banc. Le tour qui manquait
+                                    n'était pas une capacité absente, c'était
+                                    une formulation que personne n'emploie.
          REFERENCE          0/8    « il », « la première », « ça » — RIEN
          TEMPOREL           1/4
          DESAMBIGUISATION   1/2
@@ -327,7 +339,7 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
          SUPPRESSION        0/2
          COMPARAISON        0/1
          ─────────────────────────
-         TOTAL             13/30   43 %
+         TOTAL             14/30   47 %
 
        **`REFERENCE` à 0/8 est le chiffre décisif.** Huit tours sur trente —
        plus d'un quart d'une vraie conversation — désignent une chose sans la
@@ -343,6 +355,12 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
 
        Corrigé — session ouverte, tours enregistrés comme dans le CLI — et
        **le chiffre n'a pas bougé d'une unité**. 13/30, `REFERENCE` 0/8.
+
+       ⚠ **PUIS 14/30 AVEC ADR-106**, et c'est une unité qui dit quelque chose :
+       elle vient d'une FORMULATION ajoutée, pas d'une capacité. « Je préfère
+       les rendez-vous le jeudi matin » atteint `memory_add`, qui existait
+       depuis les fondations. `REFERENCE` reste à 0/8 — le verrou décrit
+       ci-dessous n'a pas bougé d'un pouce, et c'est bien lui qui compte.
 
        C'est un résultat, pas un non-événement : le 0/8 était **surdéterminé**.
        On sait maintenant qu'il mesure le produit, et non le banc.
@@ -369,16 +387,16 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
 
     expect(parAptitude.get('REFERENCE')?.agi, 'aucun référent ne se résout').toBe(0);
     expect(parAptitude.get('REFERENCE')?.total).toBe(8);
-    expect(parAptitude.get('ACTION')?.agi).toBeGreaterThanOrEqual(10);
+    expect(parAptitude.get('ACTION')?.agi).toBe(11);
 
     const agi = results.filter((r) => r.reply.kind === 'DONE').length;
-    expect(agi).toBe(13);
+    expect(agi).toBe(14);
     expect(results).toHaveLength(30);
   });
 
   it('et AUCUN tour ne produit d’erreur technique — le refus est propre', () => {
-    /* Le pendant du chiffre ci-dessus, et il compte autant. 43 % d'aboutissement
-       serait inquiétant si les 57 % restants étaient des plantages. Ce sont des
+    /* Le pendant du chiffre ci-dessus, et il compte autant. Un aboutissement
+       partiel serait inquiétant si le reste était des plantages. Ce sont des
        refus formulés : Jarvis dit ce qu'il a compris et ce qui manque.
 
        C'est la différence entre « incomplet » et « cassé ». */

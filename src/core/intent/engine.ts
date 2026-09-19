@@ -280,6 +280,71 @@ const RULES: readonly Rule[] = [
     },
   },
 
+  /* --- Mémoire : une PRÉFÉRENCE déclarée — ADR-106 ------------------------
+
+     ⚠ CE N'EST PAS UNE CAPACITÉ NOUVELLE, C'EST UNE FORMULATION.
+
+     `memory_add` existe depuis les fondations. Ce qui manquait est que
+     personne ne dit « retiens que je préfère les rendez-vous le jeudi
+     matin » : on dit « je préfère les rendez-vous le jeudi matin ». Pour
+     l'utilisateur, les deux sont indiscernables — et l'un marchait, l'autre
+     répondait « capacité absente ».
+
+     Le dépôt a déjà payé cette leçon : ADR-096 avait gagné deux actions du
+     quotidien par de simples synonymes, et l'avait dit plutôt que de les
+     compter comme des capacités.
+
+     ⚠⚠ ET `userConfirms` VAUT `false`, CONTRAIREMENT À « RETIENS QUE ».
+
+     C'est toute la différence entre les deux phrases. « Retiens que X » est un
+     ORDRE de mémorisation : le verbe porte le consentement. « Je préfère X »
+     est une DÉCLARATION — en conclure qu'il faut l'écrire en mémoire est une
+     inférence, et une inférence sur ce qu'on garde de quelqu'un est
+     exactement ce que le Memory Guard existe pour refuser.
+
+     Jarvis demande donc : « je le retiens ? ». C'est une question de plus, et
+     c'est la bonne — un assistant qui mémorise tout ce qu'on dit devant lui
+     n'est pas plus pratique, il est plus inquiétant. */
+  {
+    id: 'memory_add_preference',
+    exemple: '« je préfère … »',
+    pattern:
+      /^j(?:e\s+|')(?:pr[ée]f[èe]re|aime\s+mieux|aime\s+pas|n(?:e\s+|')aime\s+pas|d[ée]teste)\s+(.+)$/iu,
+    build(match) {
+      /* LE TEXTE EST CONSERVÉ EN ENTIER, verbe compris : « je préfère les
+         rendez-vous le jeudi matin » se relit ; « les rendez-vous le jeudi
+         matin » ne dit plus si c'est une préférence ou un rejet. */
+      const content = clean(match[0] ?? '');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'memory_add',
+        input: {
+          content,
+          memoryType: 'SEMANTIC',
+          /* `USER_INFERRED`, pas `USER_EXPLICIT` : l'utilisateur a dit sa
+             préférence, il n'a pas demandé qu'on l'écrive. La distinction est
+             portée jusqu'au Memory Guard plutôt que gommée ici. */
+          sourceType: 'USER_INFERRED',
+          dataCategory: 'PERSONAL_MEMORY',
+          source: 'conversation',
+          suggestedConfidence: 0.7,
+        },
+        parameterProvenance: {
+          content: FROM_USER,
+          memoryType: 'SYSTEM',
+          sourceType: 'SYSTEM',
+          dataCategory: 'SYSTEM',
+          subjectEntityId: 'SYSTEM',
+        },
+        confidence: 0.85,
+        tier: 0,
+        // ⚠ FALSE. Voir l'en-tête : déclarer n'est pas demander à retenir.
+        userConfirms: false,
+        referents: {},
+      };
+    },
+  },
+
   /* --- Mémoire : chercher ------------------------------------------------
      PORTÉE EXPLICITE, ET C'EST LE POINT (HIGH-4).
 

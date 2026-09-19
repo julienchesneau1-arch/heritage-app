@@ -151,6 +151,10 @@ export interface DiagnosticReport {
   readonly pending: number;
   readonly embeddings: boolean;
   readonly cloud: boolean;
+  /** ADR-106 — l'« indicateur visible » de `docs/02`. Vrai aussi si illisible. */
+  readonly modePrive: boolean;
+  /** Vrai si `privacy.startInPrivateMode` l'impose : aucune levée n'y change rien. */
+  readonly modePriveImpose: boolean;
   /**
    * LE MODÈLE LOCAL, EN UNE PHRASE — ADR-086.
    *
@@ -180,6 +184,13 @@ async function modeleLocalLisible(runtime: Runtime): Promise<string> {
   return `${id} — répond`;
 }
 
+/** Vrai si le mode privé est actif — ou si on ne peut pas le savoir. */
+async function modePriveLisible(runtime: Runtime): Promise<boolean> {
+  if (runtime.modePriveImpose) return true;
+  const etat = await runtime.modePrive.etat();
+  return !etat.ok || etat.value.actif;
+}
+
 export async function diagnosticReport(
   runtime: Runtime,
 ): Promise<Result<DiagnosticReport>> {
@@ -199,6 +210,19 @@ export async function diagnosticReport(
     pending: pending.value,
     embeddings: runtime.embeddingsAvailable,
     cloud: runtime.cloudEnabled,
+    /* ⚠ L'INDICATEUR VISIBLE QUE `docs/02` EXIGE — ADR-106.
+
+       « Mode privé (cloud OFF, réseau externe OFF, indicateur visible) ». Sans
+       cette ligne, l'utilisateur ne peut savoir s'il est protégé qu'en
+       ESSAYANT de sortir — c'est-à-dire en faisant exactement ce qu'il
+       cherchait à éviter.
+
+       ⚠ ET L'ÉTAT ILLISIBLE SE DIT `true`. Le Gateway, lui, durcit en
+       `PRIVATE` quand il ne sait pas ; afficher `false` ici ferait croire à
+       l'utilisateur que le réseau est ouvert alors qu'il est fermé. Les deux
+       registres doivent dire la même chose, et dans le même sens. */
+    modePrive: await modePriveLisible(runtime),
+    modePriveImpose: runtime.modePriveImpose,
     modeleLocal: await modeleLocalLisible(runtime),
   });
 }

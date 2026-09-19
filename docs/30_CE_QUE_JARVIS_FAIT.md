@@ -547,13 +547,13 @@ délibérément privilégié le second.
 | Outils écrits | **22** |
 | Outils atteignables en parlant | **21** |
 | Tests | le compte vit dans `docs/28` et se vérifie en lançant `pnpm test` — le figer ici garantirait qu'il se périme |
-| Décisions d'architecture | **105**, chacune avec sa condition de révision |
+| Décisions d'architecture | **106**, chacune avec sa condition de révision |
 | Documents de spécification | **30** |
 | Zones d'ombre recensées | **48**, chacune avec son état |
 | Modules hors circuit | **12**, chacun avec sa condition de levée |
 | Coût récurrent | **0 €** — et c'est un invariant, pas une observation |
 
-Phases : 0, 1, 2, 3 franchies avec leur porte automatisée. Phase 4 à 85 %.
+Phases : 0, 1, 2, 3 franchies avec leur porte automatisée. Phase 4 à 90 %.
 Phase 5 (voix) à 15 % — la passerelle est substituable, aucun moteur n'existe. Phase 6 (interfaces) à 20 % — passerelle web oui, iOS non.
 Phase 7 : la couche de décision seulement.
 

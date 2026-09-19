@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 69 %**
+## 1. Étendue fonctionnelle — **≈ 70 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -32,11 +32,11 @@ nombre de cases à cocher.
 | 1 Mémoire et Contexte | 12 % | **100 %** | 12,0 | `gate:phase1` ✅ — et **A2 est levé** (ADR-071/072/073) : Jarvis résout « ça » depuis le contexte récent, et **demande** dès que la lecture est ambiguë. La case de `docs/02` — « Jarvis demande » — est tenue par le produit, plus seulement par le module |
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
 | 3 Les 10 outils restants | 12 % | **100 %** | 12,0 | **15 outils sur 15** (+`egress_review`, hors liste, en Phase 4). `web_search` livré (ADR-055) — et il met en circuit la séparation Privileged/Quarantined, hors circuit depuis ADR-004 |
-| 4 Confidentialité, coût, indépendance | 13 % | **85 %** | 11,1 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router écrit, NON branché** (ADR-102) · ⚠ **« Benchmark Jarvis local » est un livrable de `docs/02` qu'aucune ligne de ce tableau n'avait jamais compté** — il est absent |
+| 4 Confidentialité, coût, indépendance | 13 % | **90 %** | 11,7 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router écrit, NON branché** (ADR-102) · **Mode privé ✅** (ADR-106 — phrase, persistance partagée, indicateur dans l'en-tête ; `startInPrivateMode` enfin LUE) · ⚠ **« Benchmark Jarvis local » est un livrable de `docs/02` qu'aucune ligne de ce tableau n'avait jamais compté** — il est absent |
 | 5 Voix | 10 % | **15 %** | 1,5 | **Passerelle audio abstraite ✅** (ADR-103) — 1 livrable sur 6, et **la porte « pipeline substituable » de `docs/02` est franchie**. Les cinq autres livrables demandent du son : VAD, activation, STT, TTS, barge-in. ⚠ **Aucun moteur audio n'existe** — les deux registres sont vides, et un test l'exige |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 69 %** | |
+| **TOTAL** | 100 % | | **≈ 70 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -48,6 +48,7 @@ elle n'est donc pas un dû.
 > +2   correction de la somme (ci-dessous)
 > +0,7 Phase 4 : le Model Router (ADR-102), moins le benchmark jamais compté
 > +1,5 Phase 5 : la passerelle audio substituable (ADR-103)
+> +0,6 Phase 4 : le mode privé atteignable (ADR-106)
 > ```
 >
 > ```text
@@ -302,7 +303,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **105 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **106 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 FRANCHIE — et désormais VÉRIFIABLE** par `pnpm gate:phase3` (ADR-087). Elle était déclarée « COMPLÈTE (10/10) » **sans porte de sortie** : le chiffre comptait des outils écrits, pas les trois conditions de `docs/02`. La porte existe, elle passe — l'affirmation était juste, mais sans preuve ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **10/15 nommés en test** (67 %) — S11 y entre en Phase 7, et par le bon chemin : son exemption portait sa condition de fin (`absent: 'src/core/update'`), qui a rougi le jour où ce répertoire a existé. **Zéro exemption restante.** ⚠ Cette ligne a affiché « 7/15 » face à un tableau qui disait 9, dans le même document. Elle n'avait pas menti : elle était vraie à la date de sa mesure, et le travail a nommé deux invariants de plus sans qu'elle bouge. La ligne 62 est gardée par `coherence-des-chiffres.test.ts` ; celle-ci ne l'était par rien — c'est toute la différence (§2) |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. **Model Router écrit** (ADR-102), non branché pour un motif distinct : arbitrer entre un seul candidat n'est pas arbitrer. Le §11 — l'indépendance — est tenu par le type : le noyau ne nomme aucun modèle |
@@ -389,7 +390,7 @@ entier.
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 69 %     ce que Jarvis sait faire
+ÉTENDUE FONCTIONNELLE   ≈ 70 %     ce que Jarvis sait faire
 PROFONDEUR DE PREUVE    ≈ 83 %     ce qu'on peut en démontrer
 ```
 

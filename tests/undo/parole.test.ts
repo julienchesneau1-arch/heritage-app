@@ -26,6 +26,7 @@ import { ok, err, jarvisError, type Result } from '../../src/core/types/result.j
 import { sansCommentaires } from '../helpers/source.js';
 import { arretDouble } from '../helpers/arret.js';
 import { apercuDeNote, undoDouble } from '../helpers/undo.js';
+import { modePriveDouble } from '../helpers/mode-prive.js';
 import type {
   UndoEngine,
   UndoOutcome,
@@ -121,6 +122,7 @@ function assistantAvec(
   const deps: AssistantDeps = {
     arret: arretDouble(),
     undo,
+    modePrive: modePriveDouble(),
     intent: createIntentEngine(),
     gateway: passerelleMuette(extra.calls ?? []),
     setGuardConfirmed: () => undefined,

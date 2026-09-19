@@ -19,6 +19,7 @@ import { createIntentEngine } from '../../src/core/intent/engine.js';
 import { ok, err, jarvisError, type Result } from '../../src/core/types/result.js';
 import { arretDouble } from '../helpers/arret.js';
 import { undoDouble } from '../helpers/undo.js';
+import { modePriveDouble } from '../helpers/mode-prive.js';
 import { appDb, databaseAvailable } from '../helpers/db.js';
 import { buildRuntime, type Runtime } from '../../src/apps/runtime.js';
 import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/gateway.js';
@@ -104,6 +105,7 @@ function assistantAvec(arret: ControleDArret, calls: ToolCall[]) {
   return createAssistant({
     arret,
     undo: undoDouble(),
+    modePrive: modePriveDouble(),
     intent: createIntentEngine(),
     gateway: passerelleQuiCompte(calls),
     setGuardConfirmed: () => undefined,
@@ -214,6 +216,7 @@ describe('⚠ l’arrêt court-circuite TOUT — `docs/05 §C2`', () => {
     const reponse = await createAssistant({
       arret: arretDouble(),
       undo: undoDouble(),
+    modePrive: modePriveDouble(),
       intent: { propose },
       gateway: passerelleQuiCompte([]),
       setGuardConfirmed: () => undefined,

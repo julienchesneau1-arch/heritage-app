@@ -9424,3 +9424,171 @@ seul test ne rougisse.
 
 Le premier genre supplémentaire. Et le premier usage réel où trente minutes
 d'expiration s'avèrent trop courtes pour aller du téléphone au bureau.
+
+---
+
+## ADR-106 — Le mode privé existait ; personne ne pouvait l'atteindre
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** `docs/02` Phase 4, `docs/03 §7`, ADR-052, ADR-057, ADR-069, ADR-096, ADR-104, ADR-105
+
+### 1. Troisième fois, même forme
+
+```text
+ADR-104   l'arrêt d'urgence    mécanisme complet, aucun appelant
+ADR-105   l'annulation         moteur complet, UNE seule surface
+ADR-106   le mode privé        RÈGLE complète, aucune phrase
+```
+
+`gate.ts` refuse toute égression quand `context.mode === 'PRIVATE'`. C'est
+écrit, testé, et **les deux surfaces envoyaient `NORMAL`**.
+
+> Un régime de confidentialité qu'aucune phrase n'active n'est pas un régime.
+> C'est une branche de code.
+
+`docs/02` en fait pourtant un livrable de Phase 4, en trois parties dont la
+troisième est souvent oubliée : *« Mode privé (cloud OFF, réseau externe OFF,
+**indicateur visible**) »*.
+
+### 2. ⚠ Le mode est LU, jamais REÇU
+
+C'est la propriété centrale, et elle rejoint `egress` (ADR-052) et l'arrêt
+d'urgence (ADR-057) :
+
+> Si `context.mode` venait de l'appelant seul, il suffirait d'envoyer `NORMAL`
+> pour désactiver le mode privé **sans jamais le lever**.
+
+Le Tool Gateway lit donc l'état en base avant d'interroger le Policy Gate, et
+**la lecture ne peut que durcir** — un appelant qui demande déjà `PRIVATE` le
+reste. C'est `strictest()` appliqué à une autre dimension.
+
+#### ⚠ Et le repli est l'INVERSE de celui de l'arrêt d'urgence
+
+```text
+arrêt d'urgence illisible   → on refuse TOUTE action
+mode privé illisible        → on se croit PRIVÉ, et rien d'autre
+```
+
+Un arrêt inconnu affecte toutes les actions : refuser est la seule réponse
+sûre. Un mode privé inconnu n'affecte que le droit de **sortir** — se croire
+privé bloque l'égression et rien d'autre. Refuser tout serait plus strict sans
+être plus sûr, et transformerait une panne de lecture en panne totale.
+
+L'indicateur suit la même règle : **illisible s'affiche ACTIF**. Les deux
+registres doivent dire la même chose, et dans le même sens — sinon
+l'utilisateur croit le réseau ouvert alors qu'il est fermé.
+
+### 3. Une table, parce que le CLI et la passerelle sont deux processus
+
+Un booléen en mémoire leur donnerait **deux modes privés** : le téléphone se
+croirait protégé pendant que le terminal laisserait sortir. ADR-041, sur le
+fait le plus simple du produit — *est-ce que quelque chose peut sortir d'ici*.
+
+La forme est celle d'`emergency_halt` : une **histoire**, pas un interrupteur,
+pour pouvoir répondre à « depuis quand ? » et « qui l'a levé ? ». Un index
+unique partiel garantit qu'il n'y a qu'une activation ouverte — sans lui,
+« passe en mode privé » répété trois fois créerait trois lignes et la levée
+n'en fermerait qu'une : Jarvis resterait privé après qu'on lui a dit d'arrêter.
+
+### 4. La dissymétrie, pour la troisième fois
+
+```text
+ACTIVER      sens sûr       → une phrase, depuis n'importe quelle surface
+DÉSACTIVER   sens dangereux → « /normal <raison> », sur la machine
+```
+
+Si « sors du mode privé » était une phrase, quelqu'un détenant le jeton du
+téléphone pourrait **rouvrir le réseau à distance**, puis faire sortir ce qu'il
+veut — et l'utilisateur ne verrait qu'un indicateur éteint, ce qu'il lit comme
+« normal ». Même frontière qu'ADR-101 : *voir n'est pas pouvoir* ; ici,
+*fermer n'est pas rouvrir*.
+
+### 5. ⚠ `privacy.startInPrivateMode` n'était lue par PERSONNE
+
+Elle existait dans le schéma depuis les fondations, documentée *« 03 §7 — mode
+privé actif au démarrage ? »*, et **rien ne la consultait**. Même famille que
+`cloud.enabled` avant ADR-069 : une clé décorative est pire qu'une valeur en
+dur, parce qu'elle laisse croire à un interrupteur.
+
+`wiring.test.ts` la comptait d'ailleurs parmi les clés sans effet ; le compteur
+passe de cinq à **quatre**.
+
+⚠ **Elle est lue à chaque appel, pas au démarrage.** Le nom dit « au
+démarrage », mais une activation au démarrage demanderait un chemin
+asynchrone qu'`openRuntime` n'a pas — et une activation « au mieux » qui échoue
+en silence ferait démarrer **en clair** un Jarvis configuré privé. Conséquence
+assumée : quand elle vaut `true`, le mode privé n'est pas levable, et les
+surfaces le **disent** plutôt que de laisser croire à une levée sans effet.
+
+### 6. L'indicateur, dans l'en-tête
+
+Un indicateur qu'il faut aller chercher ne répond pas à la question *« est-ce
+que quelque chose peut sortir d'ici ? »* au moment où on se la pose. Le badge
+est donc dans l'en-tête du téléphone, et **lu au chargement** : le mode vit en
+base, il survit aux redémarrages et il est partagé entre les surfaces. Un badge
+qui n'apparaîtrait qu'après l'avoir activé dans cet onglet mentirait à chaque
+réouverture.
+
+Vérifié en exécution, les deux surfaces :
+
+```text
+CLI        « passe en mode privé »                → ⦿ MODE PRIVÉ ACTIF
+CLI        « cherche sur le web … »               → Refusé : Mode privé actif
+CLI        /diagnostic                            → Mode privé  ACTIF
+CLI        /normal je suis seul                   → ○ Mode privé levé
+CLI        « cherche sur le web … »               → refusé pour une AUTRE raison
+téléphone  « mode privé »                         → MODE_PRIVE, badge allumé
+```
+
+La dernière ligne du CLI est celle qui compte : après la levée, le refus change
+de **raison**. Sans ce contrôle, l'assertion serait vraie dans un Jarvis qui
+refuse tout, pour toujours.
+
+### 7. Et une phrase que personne ne disait
+
+`memory_add` existe depuis les fondations. Personne ne dit *« retiens que je
+préfère les rendez-vous le jeudi matin »* : on dit *« je préfère les rendez-vous
+le jeudi matin »*. Pour l'utilisateur, les deux sont indiscernables — et l'un
+répondait « capacité absente ».
+
+**Ce n'est pas une capacité nouvelle, c'est une formulation**, et le dire vaut
+mieux que de la compter comme une capacité — ADR-096 avait payé la même leçon.
+
+⚠ Mais `userConfirms` vaut **`false`**, contrairement à « retiens que ». Le
+verbe *retiens* porte le consentement ; *je préfère* est une **déclaration**, et
+en conclure qu'il faut l'écrire est une inférence. La mémoire est donc rangée
+avec une origine `USER_INFERRED` et une confiance rabaissée par le Memory
+Guard, au lieu d'être posée comme un fait dicté.
+
+Le banc de fluidité passe de 13 à 14 tours sur 30 — et **`ACTION` atteint
+11/11**, la seule aptitude complète. `REFERENCE` reste à 0/8 : le vrai verrou
+n'a pas bougé d'un pouce, et c'est bien lui qui compte.
+
+### 8. Ce que l'exécution a trouvé, et que les tests n'avaient pas vu
+
+1. **La suite entière est tombée** — `web-search`, le banc de succès partiel —
+   avec *« Mode privé actif : aucune sortie réseau »*. Le banc des trente
+   actions active désormais le mode pour de vrai, et ne le levait pas. J'avais
+   écrit exactement cet avertissement pour l'arrêt d'urgence trois commits plus
+   tôt, et je ne l'ai pas appliqué à la bascule suivante. **Le commentaire n'a
+   pas protégé ; la suite complète l'a fait.**
+2. **« ✓ C'est fait » ne disait pas qu'on avait mémorisé.** L'utilisateur avait
+   *déclaré* quelque chose ; Jarvis l'avait *retenu*, et ne le lui disait pas.
+   Le rendu annonce désormais « Retenu (SEMANTIC) » — sans citer le contenu,
+   parce qu'ADR-096 a établi qu'une mémoire se nomme et ne se cite pas.
+
+### Ce que cette ADR ne résout pas
+
+- **« Sors du mode privé » n'est reconnu par rien** — c'est voulu, et ça reste
+  une friction assumée : depuis le téléphone, on peut fermer, pas rouvrir.
+- **Le mode privé ne coupe pas le réseau du système**, il refuse les égressions
+  que Jarvis contrôle. Un processus tiers sur la même machine n'est pas
+  concerné, et ce n'est pas ce que la phrase promet.
+- **`startInPrivateMode` n'active rien au démarrage** ; elle contraint à chaque
+  appel. C'est plus strict que son nom, jamais moins.
+
+### Condition de révision
+
+Le premier fournisseur cloud branché. C'est lui qui donnera au mode privé
+quelque chose de substantiel à refuser — aujourd'hui il refuse surtout
+`web_search`, qui n'a pas d'adaptateur.
