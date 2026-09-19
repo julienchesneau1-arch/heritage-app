@@ -22,6 +22,7 @@ import { mint, fromClient } from '../../core/tools/identity.js';
 import { openRuntime, type Runtime } from '../runtime.js';
 import { ecouter } from '../../core/voice/turn.js';
 import { capacitesParlees } from '../../core/intent/engine.js';
+import { enteteDeReponse, lignesDeSortie } from '../render-sortie.js';
 import { auditReport, diagnosticReport, inboxReport } from '../reports.js';
 import type { AssistantReply } from '../../core/assistant.js';
 import {
@@ -62,70 +63,19 @@ ${capacitesParlees()
     /quitter        fin de session
 `;
 
-/** Rend une valeur inconnue en texte, sans jamais produire « [object Object] ». */
-function text(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return JSON.stringify(value) ?? '';
-}
+/* ⚠ `renderOutput` ET `text` ONT ÉTÉ RETIRÉS D'ICI — ADR-100.
 
-/** Rend lisible la sortie d'un outil, sans la paraphraser. */
-function renderOutput(toolId: string, output: unknown): string {
-  if (typeof output !== 'object' || output === null) return '';
-  const record: Record<string, unknown> = { ...output };
+   Ils traitaient `task_list`, `memory_search` et `memory_add`, et rendaient la
+   chaîne VIDE pour les dix-huit autres outils. « fais-moi un point » affichait
+   une coche et jetait le briefing entier.
 
-  if (toolId === 'task_list' && Array.isArray(record['tasks'])) {
-    const tasks: unknown[] = record['tasks'];
-    if (tasks.length === 0) return '  Aucune tâche ouverte.';
-    return tasks
-      .map((t) => {
-        const item: Record<string, unknown> =
-          typeof t === 'object' && t !== null ? { ...t } : {};
-        return `  • ${text(item['title'])}`;
-      })
-      .join('\n');
-  }
+   Et le script servi au téléphone portait la MÊME logique, en JavaScript,
+   couvrant les mêmes trois outils — deux copies d'un même fait qui auraient
+   divergé à la première correction faite d'un seul côté.
 
-  if (toolId === 'memory_search' && Array.isArray(record['results'])) {
-    const results: unknown[] = record['results'];
-    const lines: string[] = [];
-    // La PORTÉE est dite à chaque fois, pas seulement quand rien n'est trouvé :
-    // l'utilisateur doit savoir ce qui n'a pas été consulté (HIGH-4).
-    const scope = text(record['scopeLabel']);
-    if (scope.length > 0) lines.push(`  (${scope})`);
-    if (record['degraded'] === true) {
-      // La dégradation est dite, pas masquée par un résultat plus court.
-      lines.push('  (recherche sans la voie sémantique — aucun modèle d\'embeddings)');
-    }
-    if (results.length === 0) {
-      lines.push('  Rien trouvé dans ta mémoire personnelle.');
-      return lines.join('\n');
-    }
-    for (const r of results) {
-      const item: Record<string, unknown> =
-        typeof r === 'object' && r !== null ? { ...r } : {};
-      lines.push(`  • ${text(item['content'])}  [${text(item['kind'])}]`);
-    }
-    return lines.join('\n');
-  }
+   `src/apps/render-sortie.ts` est désormais le seul endroit, et un test exige
+   qu'il couvre CHAQUE outil enregistré. */
 
-  if (toolId === 'memory_add') {
-    if (record['outcome'] === 'QUEUED') {
-      return '  Déposé dans l\'inbox : je te demanderai confirmation avant de le retenir.';
-    }
-    if (record['outcome'] === 'DEDUPLICATED') {
-      return '  Je le savais déjà.';
-    }
-    const adjustments = record['adjustments'];
-    if (Array.isArray(adjustments) && adjustments.length > 0) {
-      const list: unknown[] = adjustments;
-      return list.map((a) => `  (${text(a)})`).join('\n');
-    }
-  }
-
-  return '';
-}
 
 async function showAudit(runtime: Runtime): Promise<void> {
   const report = await auditReport(runtime);
@@ -424,14 +374,18 @@ function show(reply: AssistantReply): void {
       // faire. Dire « c'est fait » sur une recherche vide était une petite
       // malhonnêteté, mais une malhonnêteté quand même (audit `docs/11`,
       // LOW-3).
-      const readOnly = reply.toolId === 'memory_search' || reply.toolId === 'task_list';
+      /* ⚠ LA LISTE DES LECTURES ÉTAIT ÉCRITE ICI, et elle n'en connaissait
+         que DEUX sur neuf. « qu'as-tu fait », « fais-moi un point »,
+         « comment vas-tu » s'annonçaient donc « C'est fait » — alors que rien
+         n'avait été fait. Elle vit désormais dans `render-sortie.ts`, avec un
+         test qui éprouve les deux sens. */
       stdout.write(
-        readOnly && reply.status === 'CONFIRMED'
-          ? '  ✓ Voici ce que j\'ai trouvé.\n'
-          : `  ${mark(reply.status)} ${announce({ status: reply.status, detail: reply.detail })}\n`,
+        `  ${mark(reply.status)} `
+          + `${enteteDeReponse(reply.toolId, reply.status, (s) => announce({ status: s, detail: reply.detail }))}\n`,
       );
-      const rendered = renderOutput(reply.toolId, reply.output);
-      if (rendered.length > 0) stdout.write(`${rendered}\n`);
+      for (const ligne of lignesDeSortie(reply.toolId, reply.output)) {
+        stdout.write(`  ${ligne}\n`);
+      }
       return;
     }
   }

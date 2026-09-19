@@ -8541,3 +8541,112 @@ deux temps.
 
 Le premier usage réel. Et le jour où une file trop longue apparaît : ce sera le
 signe qu'il faut un plafond, pas un délai plus court.
+
+---
+
+## ADR-100 — Sept outils affichaient une coche et jetaient leur résultat
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** ADR-062, ADR-075, ADR-094, ADR-098, `docs/11`
+
+### Trouvé en utilisant Jarvis, pas en le relisant
+
+```text
+> fais-moi un point
+  ✓ C'est fait.
+
+> cherche sur le web le prix du carrelage
+  ✓ C'est fait.
+```
+
+**Rien d'autre.** Le briefing avait lu l'agenda, les tâches, les rappels et les
+mémoires en attente. Il affichait une coche et jetait tout.
+
+La cause : un `renderOutput` qui traitait `task_list`, `memory_search` et
+`memory_add`, et rendait la chaîne vide pour le reste. **Sept outils sur
+vingt-et-un étaient muets** — briefing, agenda, web, fichiers, journal,
+égression, état du système.
+
+### Ce n'est pas un mensonge, et ça coûte pareil
+
+L'action a eu lieu, la vérification est réelle, `CONFIRMED` est mérité. Mais
+l'utilisateur ne peut pas distinguer **« le briefing est vide »** de **« le
+briefing ne s'affiche pas »**.
+
+> C'est ADR-094 déplacé d'un cran. Du siège de l'utilisateur, une capacité que
+> rien ne montre est une capacité absente.
+
+### Le neuvième registre
+
+Le CLI avait son renderer ; le script servi au téléphone avait le sien, en
+JavaScript, couvrant les mêmes trois outils. Deux copies d'un même fait —
+*comment montre-t-on la sortie d'un outil* — qui auraient divergé à la première
+correction faite d'un seul côté.
+
+Et la liste des **lectures** était elle aussi écrite deux fois : le CLI en
+connaissait deux sur neuf, le téléphone les deux mêmes. « Qu'as-tu fait ? »,
+« fais-moi un point », « comment vas-tu » s'annonçaient donc *« C'est fait »* —
+alors que rien n'avait été fait.
+
+`src/apps/render-sortie.ts` est le seul endroit. Le serveur y applique le
+**même code** que le CLI et envoie les lignes au téléphone, qui n'a plus qu'à
+les afficher. **Le navigateur ne décide plus rien, donc il ne peut plus
+diverger.**
+
+### Exhaustif par construction
+
+`tests/apps/render-sortie.test.ts` lit les identifiants dans `src/tools/` et
+exige que **chacun** figure dans la table. Un outil ajouté demain sans rendu
+fait rougir la CI.
+
+Et un outil inconnu rend une **ligne visible**, jamais le silence : le repli
+naturel — `[]` — reproduirait exactement le défaut corrigé. On préfère une
+ligne laide qui se voit à un silence propre qui ne se voit pas.
+
+### Ce que le rendu dit, et qu'il aurait pu taire
+
+| | |
+|---|---|
+| Un **rappel** | *« rien ne sonne encore »* — ADR-048. Le taire laisserait croire à une alarme qui n'existe pas, et on s'en apercevrait le jour où elle ne sonne pas |
+| Un **oubli** | nomme les copies qui survivent — ADR-065. « Oublié » sans dire ce qui reste ailleurs est une fausse promesse de confidentialité |
+| Le **web** et les **fichiers** | marquent le contenu de tiers — `CLAUDE.md` règle 2 |
+| Le **briefing** | dit l'état de chaque section. Une section indisponible affichée vide ferait croire à une journée libre — c'est la règle de `calendar_read` appliquée à l'écran |
+| Les **fichiers** | disent ce qu'ils n'ont **pas** pu voir. Une liste courte sans explication ressemble à « il n'y a rien » |
+
+### ⚠ Deux défauts de ma propre rédaction, et le second est le plus instructif
+
+**Une puce vide.** La première version cherchait `title | text | content` pour
+chaque élément de briefing. Les points « en attente » portent `tool` et
+`state` : ils s'affichaient comme `• ` — le même défaut en plus petit.
+
+**Un accent grave dans un littéral gabarit.** `ui.ts` vit entièrement dans des
+littéraux gabarits ; un accent grave y ferme la chaîne. J'en ai mis quatre, le
+compilateur les a signalés, j'ai corrigé — **et j'en ai remis un trois minutes
+plus tard, dans le bloc CSS, juste après avoir écrit l'avertissement.**
+
+Pire : `tsc` l'avait imprimé, et j'avais enchaîné la commande suivante sans le
+lire.
+
+> Un commentaire ne protège pas de ce qu'il décrit. Le compilateur, si — encore
+> faut-il **lire sa sortie avant d'enchaîner**. Même famille que le
+> `tail -2` qui avait masqué le scanner de secrets.
+
+### ⚠ Deux pièges d'installation, trouvés en démarrant à froid
+
+Un clone neuf de la branche poussée a été installé de bout en bout — `pnpm
+install`, `jarvis:setup`, usage réel. C'est la vérification qu'ADR-089 avait
+rendue obligatoire, et elle passe.
+
+Elle a révélé autre chose :
+
+> **Un second `jarvis:setup` fait tourner les mots de passe de TOUS les rôles,
+> et casse silencieusement le premier clone.**
+
+Le second clone marche ; le premier répond *« password authentication failed
+for user jarvis_app »* à la requête suivante. Rien ne prévient. C'est la
+conséquence normale d'un script qui génère des secrets — mais personne ne s'y
+attend, et le message n'oriente vers rien.
+
+Documenté dans `QUICKSTART.md` plutôt que corrigé : régénérer les secrets est
+le bon comportement pour une installation ; c'est **l'existence d'un second
+clone** qui est l'exception.

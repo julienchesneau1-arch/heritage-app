@@ -28,6 +28,7 @@ import { z } from 'zod';
 import { HTML, CSS, JS } from './ui.js';
 import { bearerToken, tokenMatches, type AuthLimiter } from './auth.js';
 import { auditReport, diagnosticReport, inboxReport } from '../reports.js';
+import { estUneLecture, lignesDeSortie } from '../render-sortie.js';
 import type { Runtime } from '../runtime.js';
 
 export interface HttpRequest {
@@ -183,6 +184,22 @@ export function createHandler(deps: HandlerDeps) {
         });
       }
 
+      /* ⚠ LES LIGNES SONT CALCULÉES ICI, PAS DANS LE NAVIGATEUR — ADR-100.
+
+         Le script servi au téléphone portait son propre renderer, en
+         JavaScript, couvrant trois outils sur vingt-et-un. C'était le neuvième
+         registre d'un même fait : *comment montre-t-on la sortie d'un outil*.
+
+         Le serveur applique désormais `lignesDeSortie` — le MÊME code que le
+         CLI — et envoie le résultat. Le navigateur n'a plus qu'à afficher des
+         chaînes ; il ne décide plus rien, donc il ne peut plus diverger. */
+      if (reply.kind === 'DONE') {
+        return json(200, {
+          ...reply,
+          lignes: lignesDeSortie(reply.toolId, reply.output),
+          lecture: estUneLecture(reply.toolId),
+        });
+      }
       return json(200, reply);
     }
 

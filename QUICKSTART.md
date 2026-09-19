@@ -35,6 +35,25 @@ Le script détecte le serveur, génère des mots de passe aléatoires dans `.env
 S'il ne peut pas se connecter en superutilisateur, renseignez
 `JARVIS_DB_SUPERUSER_PASSWORD` dans `.env` puis relancez.
 
+> ⚠ **UN SECOND CLONE CASSE LE PREMIER, et rien ne prévient.**
+>
+> `jarvis:setup` **régénère les mots de passe de tous les rôles PostgreSQL**.
+> Si vous installez Jarvis une seconde fois — un autre dossier, une autre
+> machine partageant la même base — le premier clone répondra à la requête
+> suivante :
+>
+> ```text
+> ✗ query: password authentication failed for user "jarvis_app"
+> ```
+>
+> Ce n'est pas une panne : c'est le comportement normal d'un script qui génère
+> des secrets. Mais le message n'oriente vers rien.
+>
+> **Deux issues** : relancer `pnpm jarvis:setup` dans le clone cassé (il
+> régénère à son tour), ou recopier les trois lignes `*_PASSWORD` du `.env` le
+> plus récent vers l'autre. *Trouvé en installant un clone neuf pour vérifier
+> que le démarrage à froid fonctionne — ADR-100.*
+
 **B. Vous partez de zéro — Docker**
 
 ```bash

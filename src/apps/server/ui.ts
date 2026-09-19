@@ -153,6 +153,15 @@ main {
 .turn.jarvis { align-self: flex-start; background: var(--bubble-jarvis); border: 1px solid var(--line); }
 .turn .mark { font-weight: 600; margin-right: .35rem; }
 .turn .detail, .turn .note { color: var(--muted); font-size: .85rem; margin-top: .35rem; }
+/* ADR-100 — les lignes de résultat, calculées par le serveur.
+   « pre-wrap » parce qu'une ligne de recherche web porte son URL sur une
+   seconde ligne : l'écraser la rendrait illisible sur un écran de téléphone.
+
+   ⚠ ET CE BLOC AUSSI VIT DANS UN LITTÉRAL GABARIT. J'ai écrit l'avertissement
+   quarante lignes plus haut, puis j'ai remis un accent grave ICI trois minutes
+   après. Un commentaire ne protège pas de ce qu'il décrit — seul le
+   compilateur le fait, et encore faut-il le LIRE avant d'enchaîner. */
+.turn .ligne { margin-top: .3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .turn ul { margin: .4rem 0 0; padding-left: 1.1rem; }
 .turn li { margin: .15rem 0; }
 .kind { color: var(--muted); font-size: .78rem; }
@@ -244,61 +253,42 @@ ${capacitesInjectees()}
     return res.json();
   }
 
-  function renderOutput(node, toolId, output) {
-    if (!output || typeof output !== 'object') return;
-    if (Array.isArray(output.tasks)) {
-      if (!output.tasks.length) { node.appendChild(el('div', 'note', 'Aucune tâche ouverte.')); return; }
-      const ul = el('ul');
-      output.tasks.forEach(t => ul.appendChild(el('li', null, t.title)));
-      node.appendChild(ul);
-    }
-    if (Array.isArray(output.results)) {
-      /* La PORTÉE est affichée à chaque recherche : l'utilisateur doit savoir
-         ce qui n'a PAS été consulté, pas seulement ce qui l'a été. */
-      if (output.scopeLabel) node.appendChild(el('div', 'note', output.scopeLabel));
-      if (output.degraded) {
-        node.appendChild(el('div', 'note', "recherche sans la voie sémantique — aucun modèle d'embeddings"));
-      }
-      if (!output.results.length) {
-        node.appendChild(el('div', 'note', 'Rien trouvé dans ta mémoire personnelle.'));
-        return;
-      }
-      const ul = el('ul');
-      output.results.forEach(r => {
-        const li = el('li', null, r.content + ' ');
-        li.appendChild(el('span', 'kind', '[' + r.kind + ']'));
-        ul.appendChild(li);
-      });
-      node.appendChild(ul);
-    }
-    if (output.outcome === 'QUEUED') {
-      node.appendChild(el('div', 'note', "Déposé dans l'inbox : je demanderai confirmation avant de le retenir."));
-    }
-    if (output.outcome === 'DEDUPLICATED') {
-      node.appendChild(el('div', 'note', 'Je le savais déjà.'));
-    }
-    if (Array.isArray(output.adjustments)) {
-      output.adjustments.forEach(a => node.appendChild(el('div', 'note', a)));
-    }
-  }
+  /* ⚠ « renderOutput » A ÉTÉ RETIRÉ D'ICI — ADR-100.
+
+     Il couvrait trois outils sur vingt-et-un, et il doublait celui du CLI.
+     Deux copies d'un même fait qui auraient divergé à la première correction
+     faite d'un seul côté. Les lignes arrivent désormais du serveur.
+
+     ⚠ AUCUN ACCENT GRAVE DANS CE BLOC, et ce n'est pas du style : tout ce
+     fichier vit dans un littéral gabarit. Un accent grave y ferme la chaîne,
+     et le compilateur rend alors des erreurs de syntaxe à cinquante lignes de
+     là. Ma première rédaction en contenait quatre. */
+
 
   function renderReply(reply, originalText) {
     const node = jarvis();
 
     if (reply.kind === 'DONE') {
-      /* Une lecture ne s'annonce pas « C'est fait » : rien n'a été fait. */
-      const readOnly = reply.toolId === 'memory_search' || reply.toolId === 'task_list';
+      /* ⚠ « lecture » ET « lignes » VIENNENT DU SERVEUR — ADR-100.
+
+         Ce bloc décidait lui-même quels outils sont des lectures, et il n'en
+         connaissait que DEUX sur neuf. Il appelait ensuite un renderer local
+         qui traitait trois outils sur vingt-et-un.
+
+         Le serveur applique désormais le MÊME code que le CLI. Le navigateur
+         affiche des chaînes ; il ne décide plus rien, donc il ne peut plus
+         diverger. */
       const head = el('div');
       /* Les tables couvrent l'ENUMERATION entière (ADR-062) : le repli ne
          devrait jamais servir. Il reste comme filet, pas comme mécanisme. */
       head.appendChild(el('span', 'mark', MARK[reply.status] || '·'));
       head.appendChild(document.createTextNode(
-        readOnly && reply.status === 'CONFIRMED'
+        reply.lecture && reply.status === 'CONFIRMED'
           ? "Voici ce que j'ai trouvé."
           : (SAY[reply.status] || reply.status)));
       node.appendChild(head);
       if (reply.status !== 'CONFIRMED') node.appendChild(el('div', 'detail', reply.detail));
-      renderOutput(node, reply.toolId, reply.output);
+      (reply.lignes || []).forEach(function (l) { node.appendChild(el('div', 'ligne', l)); });
       return;
     }
 
