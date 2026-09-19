@@ -1706,6 +1706,51 @@ trente tours sont un **échantillon**, pas une cible.
 
 ---
 
+### 4.18 Trois capacités inatteignables depuis le téléphone — et pourquoi
+
+**Ouverte par ADR-098**, en vérifiant la passerelle en exécution.
+
+Dix-huit des vingt-et-une capacités répondent depuis l'iPhone. Les trois qui
+manquent sont les **suppressions définitives** — `note_delete`,
+`memory_forget`, `entity_delete` — refusées par ADR-090 :
+
+> « Action de niveau L4 demandée depuis une surface distante : une confirmation
+> donnée par le même canal que la demande ne prouve rien. À faire depuis la
+> machine. »
+
+**Ce n'est pas un défaut** : c'est la règle qui fonctionne. Mais c'est une
+limite de produit, et elle est ici pour être vue.
+
+#### La levée possible, et ce qu'elle coûte
+
+Une **file d'attente de confirmations** : le téléphone prépare l'action, la
+machine la confirme.
+
+```text
+jeton détenu          → droit de METTRE EN FILE
+présence à la machine → droit d'EXÉCUTER
+```
+
+Le raisonnement tient : un attaquant qui détient le jeton peut mettre en file,
+pas exécuter, parce qu'il n'est pas devant la machine. La présence physique
+devient le second facteur que le canal distant ne fournit pas — exactement ce
+qu'ADR-090 constate manquant.
+
+**Ce que ça contredit** : ADR-023 a choisi une confirmation **sans état**, avec
+ce motif — *« aucune session à stocker, donc aucune session à détourner »*. Une
+file d'attente est un état persistant d'actions préparées.
+
+La différence est réelle et défendable — une file n'est pas une session, et
+l'approuver exécute exactement ce qui y est écrit, pas autre chose. Mais
+**renverser une décision ratifiée pour trois capacités sur vingt-et-une est un
+arbitrage de produit**, pas une évidence technique.
+
+**Condition de levée** : une décision de Julien. Le mécanisme est conçu ; il
+n'est pas écrit, et il ne le sera pas avant qu'il tranche — écrire d'abord
+reviendrait à choisir à sa place, comme pour §4.17.
+
+---
+
 ### 4.17 Deux questions que la voix pose — TRANCHÉES, mécanisme partiel
 
 **Ouvertes par ADR-091**, en écrivant les fiches de Phase 5 — donc AVANT

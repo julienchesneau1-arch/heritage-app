@@ -8309,3 +8309,92 @@ partagé — et un titre d'événement est vu par les invités. Il devient
 Le premier compte Google réellement connecté. Ce code **n'a jamais parlé à
 l'API réelle** : il est éprouvé contre un transport simulé, ce qui prouve la
 logique et pas le dialogue.
+
+---
+
+## ADR-098 — Le huitième registre vivait dans le téléphone
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** ADR-075, ADR-094, ADR-062, ADR-090
+
+### Ce qui a été trouvé
+
+Le script servi au navigateur portait **sa propre liste de capacités** :
+
+```text
+renderReport('Ce que je sais faire :', [ … six entrées écrites à la main … ])
+```
+
+Six sur vingt-et-une. Et l'une d'elles était **fausse** : elle annonçait un
+rappel là où la règle crée une tâche — c'est la forme datée
+(« rappelle-moi jeudi de… ») qui fait un rappel.
+
+Le bouton s'appelle **« Ce que je sais faire »**. Sur un écran de six
+centimètres, cette liste *est* le mode d'emploi.
+
+### Pourquoi la garde d'ADR-075 ne l'avait pas vu
+
+Elle cherche les capacités **mot pour mot**. Cette liste les **paraphrasait** :
+`note <texte>` au lieu de `« note … »`.
+
+> Une paraphrase passe à travers un test d'occurrence exacte. C'est la limite
+> structurelle de cette forme de garde, et elle méritait d'être nommée plutôt
+> que découverte une troisième fois.
+
+Le compte des registres de cette même liste est donc :
+
+```text
+1-6   ADR-075   messages du moteur, question d'ambiguïté, aide du CLI
+7     ADR-094   QUICKSTART.md
+8     ADR-098   le script servi au téléphone
+```
+
+### Ce qui est fait
+
+La liste est **injectée** dans le script depuis `capacitesParlees()`, exactement
+comme les tables de statut le sont depuis ADR-062 — même fichier, même geste,
+même raison. Un outil ajouté demain apparaît sur le téléphone sans que personne
+y pense.
+
+Et la garde gagne l'assertion que la paraphrase ne peut pas contourner : `ui.ts`
+doit contenir `capacitesParlees()`, doit lire la liste injectée, et ne doit
+contenir aucune des trois paraphrases retirées.
+
+### ⚠ Le test a rougi sur ma propre documentation
+
+La première rédaction de ce commentaire citait la liste fautive mot pour mot.
+La garde a échoué — **et elle avait raison** : un test textuel ne distingue pas
+un commentaire d'un message, et c'est précisément ce qui le rend fiable.
+
+> Décrire vaut mieux que citer, quand ce qu'on cite est ce qu'on interdit.
+
+### Ce que la passerelle fait, vérifié en exécution
+
+Lancée réellement pendant cette session, interrogée comme le ferait un
+téléphone :
+
+| Phrase | Réponse |
+|---|---|
+| « mes tâches » | `DONE` · `task_list` · `CONFIRMED` |
+| « note … » | `DONE` · `note_create` · `CONFIRMED` |
+| « qu'as-tu fait aujourd'hui » | `DONE` · `audit_query` (ADR-096) |
+| « qu'est-ce qui est sorti de la machine » | `DONE` · `egress_review` (ADR-096) |
+| « qu'ai-je de prévu demain » | `UNSUPPORTED` — « aucun agenda connecté » (ADR-097) |
+| « supprime la note … » | **`DENIED`** — surface distante (ADR-090) |
+
+**Dix-huit des vingt-et-une capacités sont atteignables depuis le téléphone.**
+Les trois qui manquent sont les suppressions définitives, refusées par ADR-090.
+
+### Ce qui reste ouvert, et qui n'est pas à moi de trancher
+
+Rendre les trois suppressions atteignables depuis le téléphone demanderait une
+**file d'attente de confirmations** : le téléphone prépare, la machine confirme.
+
+Le raisonnement tient — le jeton donnerait le droit de *mettre en file*, la
+présence physique devant la machine celui d'*exécuter*, ce qui est un second
+facteur réel. Mais cela **contredit ADR-023**, qui a choisi une confirmation
+*sans état* précisément pour n'avoir aucune session à détourner.
+
+Renverser une décision ratifiée pour trois capacités sur vingt-et-une est un
+arbitrage de produit, pas une évidence technique. Il est donc exposé plutôt que
+pris. Voir `docs/26 §4.18`.

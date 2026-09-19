@@ -217,6 +217,37 @@ describe('Jarvis ne ment pas sur son propre catalogue', () => {
     // L'ancienne aide énumérait les commandes en toutes lettres.
     expect(cli).not.toContain('ajoute <chose> à ma liste');
 
+    /* ⚠ LE HUITIÈME REGISTRE — ADR-098, et il a échappé à CE test.
+
+       Le script servi au téléphone portait sa propre liste :
+
+           'note <texte>', 'ajoute <chose> à ma liste', 'rappelle-moi de <chose>',
+           'mes tâches', 'retiens que <fait>', 'que sais-tu sur <sujet>',
+
+       Six sur vingt-et-une, dont une FAUSSE — « rappelle-moi de <chose> » crée
+       une tâche, pas un rappel.
+
+       Pourquoi la boucle ci-dessous ne l'a pas vu : elle cherche les capacités
+       **mot pour mot**. Cette liste les PARAPHRASAIT — `note <texte>` au lieu
+       de `« note … »`. Une paraphrase passe à travers un test d'occurrence
+       exacte, et c'est la limite structurelle de ce genre de garde.
+
+       On ajoute donc l'assertion que la paraphrase ne peut pas contourner :
+       la liste servie est INJECTÉE depuis `capacitesParlees()`. */
+    const ui = readFileSync('src/apps/server/ui.ts', 'utf8');
+    expect(ui, 'la liste du téléphone doit être dérivée').toContain('capacitesParlees()');
+    expect(ui).toContain('const CAPACITES = ');
+    expect(ui, "le gestionnaire /aide doit lire la liste injectée").toContain(
+      "renderReport('Ce que je sais faire :', CAPACITES)",
+    );
+    for (const paraphrase of [
+      "'note <texte>'",
+      "'mes tâches', 'retiens que <fait>'",
+      "'rappelle-moi de <chose>'",
+    ]) {
+      expect(ui, `le téléphone recopie « ${paraphrase} »`).not.toContain(paraphrase);
+    }
+
     /* ⚠ CHAQUE EXEMPLE N'APPARAÎT QUE DANS DES DÉCLARATIONS `exemple:`.
 
        La première version exigeait UNE occurrence, et elle avait tort deux

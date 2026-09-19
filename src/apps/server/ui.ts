@@ -12,6 +12,7 @@
  */
 
 import { VerificationStatus } from '../../core/types/domain.js';
+import { capacitesParlees } from '../../core/intent/engine.js';
 import { headline, mark } from '../cli/report.js';
 
 /**
@@ -39,6 +40,40 @@ function tablesDeStatut(): string {
     `  const MARK = ${JSON.stringify(marque)};\n` +
     `  const SAY = ${JSON.stringify(say)};`
   );
+}
+
+/**
+ * ⚠ LE HUITIÈME REGISTRE DE LA LISTE DES CAPACITÉS — ADR-098.
+ *
+ * ADR-075 en avait recensé six et les avait tous dérivés des règles. Tous
+ * étaient en TypeScript côté noyau. ADR-094 a trouvé le septième dans
+ * `QUICKSTART.md`. Celui-ci est le huitième, et il vivait **dans le script
+ * servi au navigateur** :
+ *
+ * ```text
+ * renderReport('Ce que je sais faire :', [ … six entrées écrites à la main … ])
+ * ```
+ *
+ * Six lignes sur vingt-et-une, et l'une d'elles était FAUSSE : elle annonçait
+ * un rappel là où la règle crée une TÂCHE — c'est la forme DATÉE
+ * (« rappelle-moi jeudi de… ») qui fait un rappel. Le bouton s'appelle « Ce que
+ * je sais faire ».
+ *
+ * ⚠ ET CE COMMENTAIRE NE RECOPIE PAS LA LISTE FAUTIVE, volontairement. La
+ * première rédaction la citait mot pour mot — et le test d'ADR-075 a rougi sur
+ * ma propre documentation. Il a eu raison : un test textuel ne distingue pas
+ * un commentaire d'un message, et c'est précisément ce qui rend la garde
+ * fiable. Décrire vaut mieux que citer.
+ *
+ * **C'est la surface que Julien consulte depuis son téléphone**, donc celle où
+ * la divergence coûte le plus : sur un écran de six centimètres, cette liste
+ * EST le mode d'emploi.
+ *
+ * Elle est désormais injectée depuis `capacitesParlees()`, comme les tables de
+ * statut juste au-dessus. Même geste, même raison.
+ */
+function capacitesInjectees(): string {
+  return `  const CAPACITES = ${JSON.stringify([...capacitesParlees()])};`;
 }
 
 export const HTML = `<!doctype html>
@@ -192,6 +227,7 @@ export const JS = `(() => {
   function jarvis() { return push(el('div', 'turn jarvis')); }
 
 ${tablesDeStatut()}
+${capacitesInjectees()}
 
   async function api(path, body) {
     const res = await fetch(path, {
@@ -341,10 +377,7 @@ ${tablesDeStatut()}
           'Cloud ' + (r.cloud ? 'activé' : 'désactivé'),
         ]);
       } else if (cmd === '/aide') {
-        renderReport('Ce que je sais faire :', [
-          'note <texte>', 'ajoute <chose> à ma liste', 'rappelle-moi de <chose>',
-          'mes tâches', 'retiens que <fait>', 'que sais-tu sur <sujet>',
-        ]);
+        renderReport('Ce que je sais faire :', CAPACITES);
       }
     } catch (e) { jarvis().appendChild(el('div', 'detail', e.message)); }
   }

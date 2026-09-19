@@ -450,7 +450,7 @@ délibérément privilégié le second.
 | Outils écrits | **22** |
 | Outils atteignables en parlant | **21** |
 | Tests | le compte vit dans `docs/28` et se vérifie en lançant `pnpm test` — le figer ici garantirait qu'il se périme |
-| Décisions d'architecture | **97**, chacune avec sa condition de révision |
+| Décisions d'architecture | **98**, chacune avec sa condition de révision |
 | Documents de spécification | **30** |
 | Zones d'ombre recensées | **45**, chacune avec son état |
 | Modules hors circuit | **9**, chacun avec sa condition de levée |
