@@ -360,6 +360,30 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
       'le chiffre de docs/30 doit être celui que surface-parlee.test.ts fige',
     ).toContain(`toHaveLength(${String(parlants)})`);
 
+    /* ⚠ CE CHIFFRE N'ÉTAIT ATTACHÉ À RIEN, ET IL AVAIT DÉRIVÉ — ADR-104.
+
+       `docs/30` publiait « 45 zones recensées » ; `docs/26` en portait 47.
+       Personne ne pouvait dire ce que 45 comptait, parce qu'aucune mesure ne
+       le produisait — c'est la cinquième fois que ce document rencontre la
+       même forme.
+
+       ⚠ ET ON CHANGE LA DÉFINITION EN L'ÉCRIVANT, plutôt que de deviner
+       l'ancienne : une zone est une section `### N.M` de `docs/26`, levées
+       comprises — une zone levée reste recensée, avec son état, et c'est
+       justement ce que la colonne annonce.
+
+       ⚠ LE MOTIF ACCEPTE LES SUFFIXES, et la première version ne le faisait
+       pas : elle exigeait une espace après le numéro, donc elle ratait
+       `### 2.6-bis`, `### 2.8-bis`, `### 4.5-bis` et leurs voisins — six
+       sections, c'est-à-dire six zones réelles qui n'auraient pas compté.
+       Une mesure trop étroite n'est pas plus prudente qu'un chiffre faux :
+       elle est un chiffre faux avec l'air d'une mesure. */
+    const zones = [...ZONES.matchAll(/^### \d+\.\d+\S*[ \u00a0]/gm)].length;
+    const publiees = nombre(RECIT, /Zones d'ombre recensées \| \*\*(\d+)\*\*/);
+    expect(publiees, 'ligne zones d’ombre introuvable dans docs/30').not.toBeNull();
+    expect(zones, 'la mesure ne doit pas rendre zéro').toBeGreaterThan(20);
+    expect(publiees, 'docs/30 contredit le décompte de docs/26').toBe(zones);
+
     const morts = nombre(RECIT, /Modules hors circuit \| \*\*(\d+)\*\*/);
     expect(morts, 'ligne modules hors circuit introuvable').not.toBeNull();
     expect(

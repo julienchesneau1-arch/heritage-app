@@ -1723,6 +1723,67 @@ trente tours sont un **échantillon**, pas une cible.
 
 ---
 
+### 4.20 « Annule » n'atteint pas le téléphone — et la file ne sait pas le porter
+
+**Ouverte par ADR-104**, en cherchant la prochaine capacité présente mais
+inatteignable. C'est **exactement la forme du défaut qu'ADR-104 vient de
+réparer**, sur un autre mécanisme.
+
+#### Le constat, mesuré
+
+```text
+CLI        « /annule » et « annule la dernière action »   →  marchent
+say()      la même phrase                                  →  UNSUPPORTED
+téléphone  aucun bouton, aucune route                      →  rien
+```
+
+L'Undo Engine existe depuis ADR-066, quatre outils inverses sur cinq sont
+écrits, et `runtime.undo` est exposé au runtime exactement pour éviter un
+module hors circuit. Il est branché — **à une seule surface.**
+
+#### ⚠ Pourquoi ce n'est pas un simple câblage
+
+La voie naturelle serait celle d'ADR-099 : depuis le téléphone, mettre
+l'annulation **en file**, et la rejouer devant la machine. La file stocke des
+appels d'outil et `/confirmer` les rejoue par `gateway.invoke`. L'appel inverse
+est parfaitement dérivable de la capture — `inverseToolId`, `inverseInput`,
+provenance `SYSTEM`, et une clé d'opération **déterministe** (`forUndo`), donc
+aucun risque de double effet.
+
+**Mais le rejeu s'arrêterait à mi-chemin.** `undoLast` fait deux choses :
+
+```text
+1. gateway.invoke(appel inverse)        ← ce que la file sait rejouer
+2. snapshots.markUndone(capture)        ← ce qu'elle ne sait pas faire
+```
+
+Sans l'étape 2, la capture resterait annulable : « annule la dernière action »
+la reproposerait, et le second essai tomberait sur le refus de rejeu du
+Gateway. Aucun double effet — la clé est déterministe — mais une comptabilité
+fausse et un utilisateur perdu.
+
+#### Deux issues, et aucune n'est gratuite
+
+| | ce qu'elle coûte |
+|---|---|
+| **A.** La file porte une étape « marquer la capture » après exécution | donne une seconde responsabilité à un module tenu, depuis ADR-099, **incapable d'exécuter quoi que ce soit** — et c'est cette incapacité qui le rend sûr |
+| **B.** `/confirmer` route les entrées d'annulation vers `undo.undoOperation` | ouvre un **second chemin de rejeu** dans le système, là où il n'y en a qu'un aujourd'hui |
+
+#### ⚠ Pourquoi la décision n'est pas prise ici
+
+ADR-099 porte la mention **« arbitré par Julien »** : la file est née d'un
+renversement de décision ratifiée qu'il a tranché lui-même. Élargir ce qu'elle
+sait faire, ou lui ajouter un chemin de rejeu, modifie la forme de cet
+arbitrage — pas son application.
+
+> Un doute exposé coûte moins cher qu'une décision implicite enterrée dans le
+> code. `CLAUDE.md`.
+
+**Condition de levée :** l'arbitrage A ou B, puis le câblage. Le reste —
+reconnaissance de la phrase, aperçu, file — est du travail ordinaire.
+
+---
+
 ### 4.19 Les lunettes : le refus de parler suppose un écran
 
 **Ouverte par ADR-101**, en préparant la surface portée plutôt qu'en la
