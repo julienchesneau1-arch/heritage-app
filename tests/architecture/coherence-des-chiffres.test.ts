@@ -43,6 +43,7 @@ const AVANCEMENT = readFileSync('docs/28_ETAT_D_AVANCEMENT.md', 'utf8');
 const ZONES = readFileSync('docs/26_REGISTRE_DES_ZONES_D_OMBRE.md', 'utf8');
 const README = readFileSync('README.md', 'utf8');
 const QUICKSTART = readFileSync('QUICKSTART.md', 'utf8');
+const RECIT = readFileSync('docs/30_CE_QUE_JARVIS_FAIT.md', 'utf8');
 
 /** Premier nombre capturé par `motif`, ou `null` si le motif ne mord pas. */
 function nombre(source: string, motif: RegExp): number | null {
@@ -254,13 +255,56 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
        Un compte de tests ne peut d'ailleurs pas être vérifié sans exécuter la
        suite : le figer en prose garantit qu'il se périme. Il vit dans
        `docs/28`, qui est le document dont c'est le sujet. */
+    /* ⚠ `docs/30` A REJOINT CETTE LISTE — ADR-095.
+
+       Il a été écrit en republiant « 1 176 tests » à trois endroits, dans le
+       document même qui explique que ce dépôt ne publie pas de chiffre non
+       mesuré. Le motif était donc reproduit par la page qui le décrit — et
+       c'est ce test, écrit deux révisions plus tôt, qui l'a arrêté avant la
+       publication plutôt qu'après. */
     for (const [nom, texte] of [
       ['README.md', README],
       ['QUICKSTART.md', QUICKSTART],
+      ['docs/30_CE_QUE_JARVIS_FAIT.md', RECIT],
     ] as const) {
       const fautes = [...texte.matchAll(/(\d{2,4})\s+tests/g)].map((m) => m[0]);
       expect(fautes, `${nom} republie un compte de tests`).toEqual([]);
     }
+  });
+
+  it('les chiffres de `docs/30` sont ceux que les autres tests figent', () => {
+    /* `docs/30` est le RÉCIT — il raconte ce que Jarvis fait, et il cite des
+       nombres pour le rendre concret. Chacun est donc un registre de plus
+       (ADR-041), et chacun se périmera exactement comme les six registres de
+       capacités d'ADR-075.
+
+       On ne les interdit PAS : un récit sans chiffre ne vaut rien. On les
+       ATTACHE à leur source, qui est toujours une mesure faite ailleurs.
+
+       ⚠ Les comptes de TESTS sont traités à part, au test précédent : eux ne
+       peuvent pas se vérifier sans exécuter la suite, donc ils n'ont leur
+       place que dans `docs/28`. */
+    const adr = nombre(RECIT, /Décisions d'architecture \| \*\*(\d+)\*\*/);
+    expect(adr, 'ligne ADR introuvable dans docs/30').not.toBeNull();
+    expect(adr).toBe(adrMesurees());
+
+    const outils = nombre(RECIT, /Outils écrits \| \*\*(\d+)\*\*/);
+    expect(outils, 'ligne outils introuvable').not.toBeNull();
+    expect(outils).toBe(outilsEnregistres().length);
+
+    const parlants = nombre(RECIT, /Outils atteignables en parlant \| \*\*(\d+)\*\*/);
+    expect(parlants, 'ligne surface parlée introuvable').not.toBeNull();
+    const surface = readFileSync('tests/intent/surface-parlee.test.ts', 'utf8');
+    expect(
+      surface,
+      'le chiffre de docs/30 doit être celui que surface-parlee.test.ts fige',
+    ).toContain(`toHaveLength(${String(parlants)})`);
+
+    const morts = nombre(RECIT, /Modules hors circuit \| \*\*(\d+)\*\*/);
+    expect(morts, 'ligne modules hors circuit introuvable').not.toBeNull();
+    expect(
+      readFileSync('tests/redteam/wiring.test.ts', 'utf8'),
+    ).toContain(`expect(deadLogic).toHaveLength(${String(morts)});`);
   });
 
   it('le README ne republie AUCUN pourcentage d’avancement', () => {

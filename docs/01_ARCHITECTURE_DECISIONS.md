@@ -7973,3 +7973,92 @@ Le test échouait en disant « bloc introuvable » — exact, et pointant au mau
 endroit.
 
 > **Un helper recopié d'un fichier voisin hérite de ses hypothèses avec lui.**
+
+---
+
+## ADR-095 — Le récit complet, et les chiffres qu'il ne peut pas inventer
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** `docs/30`, ADR-041, ADR-075, ADR-094
+
+### Ce qui est écrit
+
+`docs/30_CE_QUE_JARVIS_FAIT.md` — demandé en ces termes : *« tout l'intérêt de ce
+Jarvis, ce qu'il fait exactement dans les moindres détails, sans zone d'ombre,
+et les limites »*.
+
+Neuf sections : l'intérêt en cinq propriétés, les 22 outils avec leur niveau et
+leur mode de vérification, les huit étapes d'un tour, les défenses contre le
+détournement, **six familles de limites**, les chiffres mesurés, et une section
+« comment vérifier sans me croire ».
+
+### Le chiffre qui manquait au récit : **11 sur 22**
+
+La contribution du document n'est pas d'ajouter de l'information — elle est de
+mettre côte à côte deux nombres que personne ne rapprochait :
+
+```text
+22   outils ÉCRITS, tous éprouvés, tous conformes    ← la mesure de docs/28
+11   outils ATTEIGNABLES par une phrase              ← la mesure de surface-parlee
+```
+
+La première est la bonne mesure de l'ingénierie. La seconde est la bonne mesure
+de ce que Julien obtient. Elles ne se confondent que si on lit vite, et le récit
+oblige à les lire ensemble. Le détail y est ventilé :
+
+| | Nombre |
+|---|---|
+| atteignables en parlant | 11 |
+| atteignables par commande | 1 |
+| atteignables seulement sur la **dernière** action, via `/annule` | 5 |
+| **hors d'atteinte depuis le CLI** | **5** |
+
+Les cinq derniers — les trois outils d'agenda, `task_complete`, `egress_review`
+— sont écrits, testés, conformes, et aucune phrase ne les atteint.
+
+### ⚠ Le document a reproduit le motif qu'il décrit
+
+Première rédaction : *« 1 176 tests »*, à **trois endroits**.
+
+Dans la page qui explique que ce dépôt ne publie pas de chiffre non mesuré. Le
+test qui l'a arrêté existait depuis ADR-058 et disait déjà pourquoi :
+
+> Un compte de tests ne peut pas être vérifié sans exécuter la suite : le figer
+> en prose garantit qu'il se périme.
+
+Il ne couvrait que `README` et `QUICKSTART`. `docs/30` n'existait pas quand il a
+été écrit — **la garde était juste et son périmètre était daté.**
+
+> C'est la seizième occurrence du motif, et la plus embarrassante : non pas une
+> affirmation que le mécanisme n'établit pas, mais une affirmation faite dans la
+> page qui décrit le mécanisme.
+
+### Ce qui est fait
+
+`docs/30` rejoint la liste des documents où un compte de tests est interdit. Et
+ses **quatre autres chiffres** — ADR, outils écrits, outils atteignables,
+modules hors circuit — sont désormais attachés à leur source :
+
+```text
+ADR                      compté dans docs/01
+outils écrits            comptés dans src/tools/
+outils atteignables      figé par surface-parlee.test.ts
+modules hors circuit     figé par wiring.test.ts
+```
+
+**On n'interdit pas les chiffres : un récit sans chiffre ne vaut rien.** On les
+attache à une mesure faite ailleurs. C'est la différence entre citer et
+recopier.
+
+### Ce que le document assume de dire
+
+Trois phrases qu'un document de vente n'écrirait pas, et qui sont la raison
+d'être de celui-ci :
+
+- *« 13 sur 30 »* en fluidité conversationnelle, avec sa cause en amont ;
+- *« cinq outils sont hors d'atteinte depuis le CLI »* ;
+- et la dernière ligne :
+
+> **Pas un ChatGPT vocal. Un système qui fait moins, et qui peut prouver ce
+> qu'il fait. Le pari du projet est que la seconde propriété vaut plus que la
+> première — et c'est un pari, pas un théorème.**
