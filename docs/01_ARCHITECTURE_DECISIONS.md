@@ -9729,3 +9729,124 @@ maintenant là aussi (ADR-096, ADR-098, ADR-102, ADR-105, ADR-107).
 
 Le premier modèle local branché. C'est lui qui dira si les ordinaux restent
 utiles — ou si la reconnaissance générale les rend superflus.
+
+---
+
+## ADR-108 — Le prérequis que rien n'annonçait
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** ADR-078, ADR-094, `docs/03 §9`, `docs/04`, `CLAUDE.md`
+
+### 1. L'adaptateur existait ; la ligne à remplir n'existait nulle part
+
+ADR-078 a livré l'adaptateur Google Agenda. `googleAgendaConfigure(vault)`
+cherche trois clés au coffre :
+
+```text
+GOOGLE_OAUTH_CLIENT_ID
+GOOGLE_OAUTH_CLIENT_SECRET
+GOOGLE_OAUTH_REFRESH_TOKEN
+```
+
+Le seul fichier dont le métier est de dire **quoi remplir** — `.env.example` —
+ne les nommait pas. Pas une faute de frappe : elles n'y ont jamais figuré.
+
+Du siège de Julien, `calendar_read` répondait « aucun agenda connecté » sans
+que rien, nulle part, n'indique comment en connecter un. ADR-094 avait déjà
+formulé la règle et c'est sa onzième application : **une capacité que
+l'interface n'annonce pas est une capacité absente.** Ici l'interface était un
+fichier d'exemple, ce qui ne change rien.
+
+### 2. Documenter la clé ne suffisait pas : le jeton ne se tape pas
+
+Les deux premières valeurs se copient depuis la console Google. La troisième —
+le jeton de rafraîchissement — **s'obtient par un échange OAuth**. Écrire
+« mettre le jeton ici » aurait déplacé le problème d'un cran : la ligne existe,
+et reste impossible à remplir.
+
+D'où `pnpm google:connecter`. Il ouvre la page de consentement, écoute la
+boucle locale, échange le code, et écrit le jeton dans `.env`.
+
+### 3. Pourquoi cet appel réseau ne passe pas par le Data Firewall
+
+`CLAUDE.md` interdit « un appel réseau sortant sans passer par le Data
+Firewall ». La règle gouverne ce que **Jarvis** envoie : des données de Julien,
+décidées par une politique, journalisées.
+
+Ce script n'envoie rien de cela. L'opérateur échange **ses propres identifiants
+de client** contre **son propre jeton**, sur sa machine, parce qu'il vient de
+taper la commande. Aucune mémoire, aucune note, aucune tâche n'est lue.
+
+La distinction ne tient que tant qu'elle est vraie, donc un test la tient :
+
+```text
+aucun import de `src/core`, `createDb`, `ToolGateway`, `assistant`
+un seul appel sortant, et sa destination est le serveur de jetons
+quatre hôtes dans la source, énumérés — un cinquième fait rougir le test
+```
+
+Le jour où ce script lirait la base, il redeviendrait une action de Jarvis et
+devrait passer par le Firewall comme tout le reste.
+
+### 4. Ce que le script refuse de faire
+
+| Refus | Motif |
+|---|---|
+| **Afficher le jeton** | un jeton affiché reste dans l'historique du terminal, le tampon de défilement, et la capture d'écran qu'on enverra pour demander de l'aide (`docs/03 §9`) |
+| **Demander plus que l'agenda** | portée `calendar` seule. Ni Gmail, ni Drive, ni Contacts — un test lit la source *commentaires retirés*, parce qu'une portée s'ajoute en une ligne |
+| **PKCE `plain`** | il transmet le vérificateur en clair et n'apporte rien |
+| **Écouter sur `0.0.0.0`** | cette porte ne s'ouvre pas au réseau, même quelques secondes |
+| **Recopier la réponse de Google** | elle peut porter un jeton d'accès ; on rend le code d'erreur, qui suffit à diagnostiquer |
+| **Ajouter une deuxième ligne** | deux lignes de même clé, et le jour où elles divergent aucune ne fait autorité (ADR-041) |
+
+### 5. L'onglet annonçait un succès que rien n'établissait
+
+Première rédaction : la page HTML rendue au navigateur était écrite **avant**
+toute vérification, et disait « C'est fait » dès qu'un paramètre `code` était
+présent — donc **aussi quand l'état était faux et l'échange abandonné**.
+
+```text
+l'onglet    « C'est fait »
+le terminal « État OAuth inattendu : échange abandonné. »
+```
+
+Deux registres du même fait, qui divergent (ADR-041), et la vingt-et-unième
+occurrence du même motif : *une affirmation que le mécanisme censé l'établir
+n'établit pas.*
+
+Corrigé en deux temps. On décide, **puis** on annonce. Et l'annonce ne promet
+pas le jeton : au moment où cette page s'affiche, l'échange n'a pas encore eu
+lieu. Elle dit ce qu'elle sait — « Code reçu » — et renvoie au terminal, seul
+endroit qui verra la réponse de Google.
+
+Cinq épreuves **ouvrent réellement** le serveur et lui parlent : état faux,
+refus de Google, code absent, code valide, et fermeture après le premier
+retour. Une garde qu'on lit dans la source n'est pas une garde qu'on a vue
+refuser.
+
+### 6. Le module agissait à l'import
+
+`await main()` en fin de fichier : importer le module ouvrait un port, imprimait
+un lien, ou sortait en `process.exit(1)`. Ses propres tests ne pouvaient donc
+pas le charger. Une garde d'entrée (`pathToFileURL(process.argv[1])`) sépare
+« la commande a été tapée » de « le fichier a été lu ».
+
+### 7. Ce qui n'a PAS été éprouvé
+
+**Ce script n'a jamais tourné contre Google.** Aucun compte n'est connecté dans
+l'environnement où il a été écrit.
+
+| Éprouvé, en exécution réelle | Non éprouvé |
+|---|---|
+| l'URL de consentement, affichée avant l'attente | la réponse réelle du serveur de jetons |
+| la boucle locale : quatre refus, un succès | le contenu d'un vrai `refresh_token` |
+| la réécriture de `.env`, commentaires préservés | le comportement de `prompt=consent` au 2ᵉ passage |
+
+Même réserve qu'ADR-078 pour l'adaptateur lui-même, et elle se lève de la même
+façon : **en le lançant une fois.**
+
+### Condition de révision
+
+Le premier lancement réel. S'il échoue, c'est ici qu'il faut écrire pourquoi —
+et si Google modifie le type de client « Application de bureau », la boucle
+locale change avec lui.

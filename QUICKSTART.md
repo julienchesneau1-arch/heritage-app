@@ -210,6 +210,36 @@ crée un rendez-vous jeudi à 14h …     créer un événement   ⚠ compte Goo
 > `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`. L'agenda
 > s'active tout seul au démarrage suivant.
 >
+> **Comment les obtenir** (ADR-108) — et jusqu'à cette décision, aucun fichier
+> du dépôt ne le disait :
+>
+> 1. [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+>    → « Créer des identifiants » → « ID client OAuth » → **Application de
+>    bureau**. Cela donne les deux premières valeurs ; copie-les dans `.env`.
+> 2. Active l'API Agenda pour ce projet :
+>    [console.cloud.google.com/apis/library/calendar-json.googleapis.com](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com)
+> 3. La troisième ne se tape pas — elle s'échange :
+>
+> ```bash
+> pnpm google:connecter
+> ```
+>
+> Il imprime un lien de consentement, écoute la boucle locale sur `127.0.0.1`,
+> échange le code, et écrit le jeton dans `.env` (droits `600`).
+> **Il ne l'affiche jamais** — un jeton dans l'historique du terminal est un
+> jeton qui traîne. Portée demandée : `calendar` seulement. Pas Gmail, pas
+> Drive, pas Contacts.
+>
+> ⚠ **Ce script n'a jamais tourné contre Google** : aucun compte n'était
+> connecté là où il a été écrit. Sa boucle locale, ses quatre refus et sa
+> réécriture de `.env` sont éprouvés en exécution réelle ; la réponse du
+> serveur de jetons ne l'est pas. Si le premier lancement échoue, c'est cette
+> réserve qui se paie — dis-le, elle se lève en une fois.
+>
+> ⚠ **Et ces trois valeurs ne sortent jamais de ta machine.** Ni dans un
+> message, ni dans une conversation avec un modèle, ni dans une capture
+> d'écran.
+>
 > **Les huit précédentes sont arrivées avec ADR-096.** Leurs outils existaient
 > déjà — il leur manquait seulement de quoi désigner la cible. Les trois
 > marquées ⚠ sont `L4` : Jarvis te montre **ce qu'il a trouvé** et attend ta

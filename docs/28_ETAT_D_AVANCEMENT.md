@@ -303,7 +303,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **107 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **108 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 FRANCHIE — et désormais VÉRIFIABLE** par `pnpm gate:phase3` (ADR-087). Elle était déclarée « COMPLÈTE (10/10) » **sans porte de sortie** : le chiffre comptait des outils écrits, pas les trois conditions de `docs/02`. La porte existe, elle passe — l'affirmation était juste, mais sans preuve ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **10/15 nommés en test** (67 %) — S11 y entre en Phase 7, et par le bon chemin : son exemption portait sa condition de fin (`absent: 'src/core/update'`), qui a rougi le jour où ce répertoire a existé. **Zéro exemption restante.** ⚠ Cette ligne a affiché « 7/15 » face à un tableau qui disait 9, dans le même document. Elle n'avait pas menti : elle était vraie à la date de sa mesure, et le travail a nommé deux invariants de plus sans qu'elle bouge. La ligne 62 est gardée par `coherence-des-chiffres.test.ts` ; celle-ci ne l'était par rien — c'est toute la différence (§2) |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. **Model Router écrit** (ADR-102), non branché pour un motif distinct : arbitrer entre un seul candidat n'est pas arbitrer. Le §11 — l'indépendance — est tenu par le type : le noyau ne nomme aucun modèle |
