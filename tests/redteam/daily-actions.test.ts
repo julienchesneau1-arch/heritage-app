@@ -85,6 +85,15 @@ function classify(reply: AssistantReply): string {
       return 'CAPACITÉ ABSENTE (dit)';
     case 'DENIED':
       return 'REFUSÉ PAR POLITIQUE';
+    case 'EN_ATTENTE':
+      /* ADR-099. Ce banc tourne en surface LOCALE, donc ce cas ne se produit
+         pas ici — mais le `switch` est EXHAUSTIF, sans `default`, et c'est
+         lui qui a signalé l'ajout du type. Une réponse non traitée serait
+         tombée dans un repli silencieux ; elle a fait échouer la compilation.
+
+         C'est exactement ce qu'on attend d'une union discriminée : le
+         compilateur tient l'inventaire à la place du relecteur. */
+      return 'MIS EN FILE (à confirmer sur la machine)';
     case 'ERROR':
       return `ERREUR : ${reply.message}`;
   }

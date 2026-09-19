@@ -95,4 +95,33 @@ export interface PolicyOutcome {
    * requise ? » (P6 du PRD) et le journal d'audit.
    */
   readonly reasons: readonly string[];
+  /**
+   * POURQUOI, SOUS UNE FORME QUE DU CODE PEUT LIRE — ADR-099.
+   *
+   * `reasons` est écrit pour un humain. Un appelant qui voudrait distinguer
+   * « refusé parce que la surface est distante » de « refusé par une politique
+   * Cedar » devrait lire du français — et une reformulation de la phrase
+   * changerait silencieusement son comportement.
+   *
+   * ⚠ CE CHAMP NE DOIT JAMAIS SERVIR À CONTOURNER UN REFUS. Il existe pour que
+   * la file d'attente d'ADR-099 n'accueille QUE les refus de surface : un
+   * `forbid` Cedar ne doit pas devenir « à confirmer plus tard ». La
+   * distinction ne peut pas reposer sur une comparaison de chaînes.
+   *
+   * Absent quand la décision n'est pas un refus, ou quand le refus n'a pas de
+   * motif structuré — et dans ce cas l'appelant ne met RIEN en file.
+   */
+  readonly motif?: MotifDeRefus;
 }
+
+/**
+ * Les refus que du code peut distinguer.
+ *
+ * Volontairement pauvre : seul `SURFACE_DISTANTE` y figure aujourd'hui, parce
+ * que c'est le seul refus dont un appelant a besoin de savoir qu'il est
+ * RÉPARABLE — la même demande, faite devant la machine, passerait.
+ *
+ * Tout autre refus reste sans motif, donc sans traitement particulier. C'est
+ * le défaut fermé : ajouter un motif est un geste délibéré.
+ */
+export type MotifDeRefus = 'SURFACE_DISTANTE';

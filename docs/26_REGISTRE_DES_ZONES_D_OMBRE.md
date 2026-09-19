@@ -1706,7 +1706,14 @@ trente tours sont un **échantillon**, pas une cible.
 
 ---
 
-### 4.18 Trois capacités inatteignables depuis le téléphone — et pourquoi
+### 4.18 Trois capacités inatteignables depuis le téléphone — LEVÉE (ADR-099)
+
+> **↻ LEVÉE le 19/09/2026.** Julien a tranché pour la file d'attente. Le
+> téléphone prépare, la machine confirme — et **les vingt-et-une capacités sont
+> désormais atteignables depuis l'iPhone**, dont trois en deux temps.
+>
+> Ce qui suit décrit l'état d'avant, gardé parce que l'arbitrage vaut mieux que
+> son résultat. Ce qui a changé est en fin de section.
 
 **Ouverte par ADR-098**, en vérifiant la passerelle en exécution.
 
@@ -1748,6 +1755,46 @@ arbitrage de produit**, pas une évidence technique.
 **Condition de levée** : une décision de Julien. Le mécanisme est conçu ; il
 n'est pas écrit, et il ne le sera pas avant qu'il tranche — écrire d'abord
 reviendrait à choisir à sa place, comme pour §4.17.
+
+#### ✅ Ce qui a été fait — ADR-099
+
+La file existe. Vérifiée **en exécution**, pas seulement en test :
+
+```text
+téléphone  « supprime la note du carreleur »
+           → EN_ATTENTE, rien n'est exécuté, 29 min pour décider
+
+Mac        « /confirmer »
+           → « Demandé depuis le téléphone · expire dans 29 min »
+           → oui  →  ✓ Effacement vérifié : note … absente
+           → non  →  « Abandonnée. Rien n'a été fait. »
+```
+
+**Ce qui rend la file sûre**, et qui est plus important que ce qu'elle permet :
+
+| | |
+|---|---|
+| Une ligne est une **intention**, jamais une permission | la confirmation rejoue la chaîne COMPLÈTE, Policy Gate compris |
+| Seuls les refus de **surface** y entrent | un `forbid` Cedar reste `DENIED`, définitivement |
+| La distinction se fait sur un **champ typé** | `motif: 'SURFACE_DISTANTE'`, jamais une phrase française |
+| Le module de file **ne peut pas exécuter** | il n'importe ni passerelle ni outil, et un test le vérifie |
+
+#### ⚠ Ce qui reste, et qui est nouveau
+
+**La file affiche un résumé, et c'est une surface de plus.** Il est produit par
+`libelleSur` (ADR-096), donc une mémoire au-dessus de `PERSONAL` y est nommée
+sans être citée. Mais c'est un **troisième** endroit où ce résumé s'affiche —
+terminal, téléphone, file — et chacun est un endroit où une future modification
+pourrait oublier la redaction.
+
+**Trente minutes est un choix, pas un calcul.** Rien n'établit ce délai. Ce qui
+est établi, c'est qu'un délai doit exister. Condition de révision : le premier
+usage réel.
+
+**Un attaquant qui détient le jeton peut remplir la file.** Il ne peut rien
+exécuter — mais il peut noyer l'écran de `/confirmer` sous des demandes, et un
+utilisateur habitué à approuver finirait par approuver vite. Aucun mécanisme ne
+limite aujourd'hui le nombre d'intentions en attente.
 
 ---
 

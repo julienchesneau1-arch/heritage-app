@@ -18,7 +18,7 @@
  */
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { mint } from '../../core/tools/identity.js';
+import { mint, fromClient } from '../../core/tools/identity.js';
 import { openRuntime, type Runtime } from '../runtime.js';
 import { ecouter } from '../../core/voice/turn.js';
 import { capacitesParlees } from '../../core/intent/engine.js';
@@ -55,6 +55,7 @@ ${capacitesParlees()
 
     /audit          ce que j'ai fait, depuis le journal
     /annule         défaire la dernière action annulable
+    /confirmer      exécuter ce qui a été préparé depuis le téléphone
     /inbox          les mémoires en attente de ta confirmation
     /diagnostic     état du système
     /aide           ce message
@@ -246,6 +247,112 @@ async function annulerDerniere(
   stdout.write(`  ${mark(fait.value.status)} ${fait.value.detail}\n`);
 }
 
+/**
+ * LES INTENTIONS PRÉPARÉES AILLEURS — ADR-099.
+ *
+ * Le téléphone a demandé une action irréversible. ADR-090 l'a refusée : une
+ * confirmation renvoyée par le même canal que la demande ne prouve rien. Elle a
+ * donc été mise en file, et c'est ici — devant la machine — qu'un humain
+ * décide.
+ *
+ * ⚠⚠ LA CHAÎNE EST REJOUÉE EN ENTIER, ET C'EST TOUT LE SUJET.
+ *
+ * On n'exécute pas « ce que la file a autorisé » : la file n'autorise rien.
+ * On rejoue `gateway.invoke` avec l'appel stocké, sur la surface `LOCALE`, et
+ * le Policy Gate décide de nouveau — Cedar compris.
+ *
+ * Sans ce rejeu, la file deviendrait un contournement : il suffirait d'y
+ * écrire une ligne pour obtenir demain ce qui est interdit aujourd'hui. Avec
+ * lui, y écrire une ligne ne donne que le droit d'être RELU par un humain.
+ */
+async function confirmerEnAttente(
+  runtime: Runtime,
+  ask: (question: string) => Promise<string>,
+): Promise<void> {
+  const attente = await runtime.file.enAttente();
+  if (!attente.ok) {
+    stdout.write(`  File indisponible : ${attente.error.message}\n`);
+    return;
+  }
+  if (attente.value.length === 0) {
+    stdout.write('  Rien n’attend ta confirmation.\n');
+    return;
+  }
+
+  for (const demande of attente.value) {
+    /* CE QUI EST MONTRÉ EST CE QUI SERA FAIT. Le résumé vient de la file, et
+       il a été produit par `libelleSur` (ADR-096) : une mémoire dont le
+       plancher dépasse PERSONAL y est NOMMÉE, jamais citée. */
+    stdout.write(
+      `\n  Demandé depuis ${demande.demandeeDe === 'DISTANTE' ? 'le téléphone' : 'cette machine'}` +
+        ` · expire dans ${String(demande.minutesRestantes)} min\n`,
+    );
+    stdout.write(
+      `${confirmationPrompt('Exécuter cette action ?', { action: demande.resume })}\n`,
+    );
+
+    const reponse = await ask('');
+    // Le refus est lu EN PREMIER (ADR-061) : « non » ne tombe jamais dans la
+    // branche « oui » par contenance.
+    if (readConfirmation(reponse) !== 'CONFIRM') {
+      const refus = await runtime.file.refuser(demande.id);
+      stdout.write(
+        refus.ok
+          ? '  Abandonnée. Rien n’a été fait.\n'
+          : `  ${mark('FAILED')} ${refus.error.message}\n`,
+      );
+      continue;
+    }
+
+    /* ⚠ ON MARQUE AVANT D'EXÉCUTER, et c'est délibéré.
+
+       L'ordre inverse — exécuter puis marquer — laisserait, si le processus
+       meurt entre les deux, une intention TOUJOURS EN ATTENTE dont l'effet a
+       déjà eu lieu. Le prochain `/confirmer` la reproposerait, et
+       l'utilisateur l'exécuterait deux fois.
+
+       Dans cet ordre, une mort au même endroit laisse une intention marquée
+       confirmée sans effet : Jarvis n'a rien fait, et il ne prétend rien
+       avoir fait. C'est le même arbitrage que l'Undo Engine — on préfère
+       l'action manquante à l'action dupliquée.
+
+       La clé d'opération (ADR-030) protège de toute façon le rejeu côté
+       outil : c'est une ceinture de plus, pas la seule. */
+    const pris = await runtime.file.confirmer(demande.id);
+    if (!pris.ok) {
+      stdout.write(`  ${mark('FAILED')} ${pris.error.message}\n`);
+      continue;
+    }
+
+    const fait = await runtime.gateway.invoke({
+      toolId: pris.value.toolId,
+      input: pris.value.input,
+      /* Aucun `as` : la file rend déjà des `Provenance` validées par Zod à la
+         sortie de la base (ADR-016). Un `as` ici aurait rendu fiable, sans le
+         vérifier, ce sur quoi le Policy Gate durcit. */
+      parameterProvenance: pris.value.provenance,
+      // MÊME clé d'opération que la demande d'origine — ADR-030.
+      operationId: fromClient(pris.value.operationId),
+      actor: 'USER',
+      context: {
+        mode: 'NORMAL',
+        cloudEnabled: runtime.cloudEnabled,
+        proactive: false,
+        /* L'humain vient de dire oui, ici, devant la machine, sur CETTE cible.
+           C'est la seule chose que la file ne pouvait pas fournir. */
+        userConfirmed: true,
+        surface: 'LOCALE',
+      },
+    });
+
+    if (!fait.ok) {
+      stdout.write(`  ${mark('FAILED')} ${fait.error.message}\n`);
+      continue;
+    }
+    stdout.write(`  ${mark(fait.value.status)} ${fait.value.verification.detail}\n`);
+  }
+}
+
 async function showDiagnostic(runtime: Runtime): Promise<void> {
   const report = await diagnosticReport(runtime);
   if (!report.ok) {
@@ -289,6 +396,19 @@ function show(reply: AssistantReply): void {
 
     case 'DENIED':
       stdout.write(`  Refusé : ${reply.reason}\n`);
+      return;
+
+    case 'EN_ATTENTE':
+      /* ADR-099. Rien n'a été exécuté, et la phrase le dit d'abord — avant de
+         dire ce qui est possible ensuite. L'ordre compte : « c'est en file »
+         lu vite ressemble à « c'est fait ». */
+      stdout.write(
+        `  Rien n'a été fait. Préparé et mis en attente : ${reply.resume}\n`,
+      );
+      stdout.write(
+        `  Tape « /confirmer » sur cette machine — il te reste `
+          + `${String(reply.minutesRestantes)} min.\n`,
+      );
       return;
 
     case 'ERROR':
@@ -438,6 +558,14 @@ async function main(): Promise<void> {
            Elle est reconnue en toutes lettres autant que par la commande : le
            scénario du document est écrit en français, pas en slash. */
         await annulerDerniere(runtime.value, async (q: string) => {
+          const answer = await nextLine(`\n  ${q}\n  > `);
+          // Fin d'entrée pendant une confirmation : ce n'est pas un oui.
+          return answer ?? '';
+        });
+        continue;
+      }
+      if (line === '/confirmer' || line === '/attente') {
+        await confirmerEnAttente(runtime.value, async (q: string) => {
           const answer = await nextLine(`\n  ${q}\n  > `);
           // Fin d'entrée pendant une confirmation : ce n'est pas un oui.
           return answer ?? '';

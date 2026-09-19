@@ -909,6 +909,16 @@ export function createToolGateway(deps: {
         jarvisError('POLICY_DENIED', policy.reasons.join(' '), {
           tool: def.id,
           autonomy: policy.effectiveAutonomy,
+          /* LE MOTIF REMONTE — ADR-099, et il remonte SEULEMENT s'il existe.
+
+             L'appelant en a besoin pour distinguer un refus RÉPARABLE (la même
+             demande passerait devant la machine) d'un refus définitif. Le lire
+             dans `message` reviendrait à faire dépendre une décision de
+             sécurité d'une phrase française.
+
+             Un refus sans motif — Cedar, L0, RED en égression — n'en porte
+             aucun ici, et la file d'attente ne le voit jamais. */
+          ...(policy.motif === undefined ? {} : { motif: policy.motif }),
         }),
       );
     }

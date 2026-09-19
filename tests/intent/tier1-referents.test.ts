@@ -147,6 +147,10 @@ function assistantAvec(
       resolveMention: () => Promise.resolve(ok(resolution)),
       resolveAnaphora: () => Promise.resolve(ok(resolution)),
     },
+    /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+       NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+       surface y reste donc un refus, comme avant ADR-099. */
+    file: null,
     temps: TEMPS_FIGE,
     tier1: createTier1({ model: modele(reponseModele), outils: () => OUTILS }),
   };

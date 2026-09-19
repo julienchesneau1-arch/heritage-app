@@ -124,6 +124,16 @@ export function createPolicyGate(evaluator: PolicyEvaluator): PolicyGate {
         return ok({
           decision: 'DENY',
           effectiveAutonomy: level,
+          /* LE MOTIF, LISIBLE PAR DU CODE — ADR-099.
+
+             C'est le SEUL refus de ce fichier qui en porte un, et la raison
+             est étroite : c'est le seul qui soit RÉPARABLE. La même demande,
+             faite devant la machine, passerait.
+
+             Un `forbid` Cedar, un L0, une donnée RED en égression : aucun ne
+             doit pouvoir devenir « à confirmer plus tard ». Ils restent sans
+             motif, donc la file d'attente ne les voit jamais. */
+          motif: 'SURFACE_DISTANTE',
           reasons: [
             ...reasons,
             `Action de niveau ${level} demandée depuis une surface distante : `

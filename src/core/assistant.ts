@@ -31,6 +31,7 @@ import {
   GenreDesigne,
   type DesignationResolver,
 } from './context/designation.js';
+import type { FileDeConfirmations } from './confirmation/file.js';
 import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
 import type { Mode, Surface, VerificationStatus } from './types/domain.js';
@@ -71,6 +72,19 @@ export type AssistantReply =
       readonly missing: string;
     }
   | { readonly kind: 'DENIED'; readonly reason: string }
+  | {
+      /**
+       * MIS EN FILE — ADR-099. Rien n'a été exécuté, et rien n'est autorisé.
+       *
+       * Le téléphone a demandé une action irréversible. Elle est enregistrée
+       * comme une INTENTION ; c'est la machine qui la rejouera, Policy Gate
+       * compris, si quelqu'un l'approuve devant elle.
+       */
+      readonly kind: 'EN_ATTENTE';
+      readonly resume: string;
+      readonly minutesRestantes: number;
+      readonly reason: string;
+    }
   | { readonly kind: 'ERROR'; readonly message: string };
 
 export interface SayOptions {
@@ -160,6 +174,18 @@ export interface AssistantDeps {
    * avec un double qui le fournit.
    */
   readonly designation: DesignationResolver;
+  /**
+   * LA FILE D'ATTENTE DE CONFIRMATIONS — ADR-099, ou `null`.
+   *
+   * `null` est un état NORMAL et déclaré : un appelant qui ne sert aucune
+   * surface distante n'a pas de file à tenir, et le champ est REQUIS pour que
+   * son absence soit un choix écrit plutôt qu'un oubli.
+   *
+   * Avec `null`, une action L3/L4 venue d'une surface distante reste
+   * simplement REFUSÉE — le comportement d'avant ADR-099. La file ajoute un
+   * chemin ; elle n'en retire aucun.
+   */
+  readonly file: FileDeConfirmations | null;
   /**
    * Le résolveur de dates — ADR-077.
    *
@@ -539,6 +565,55 @@ export function createAssistant(deps: AssistantDeps): Assistant {
             };
           }
           if (result.error.kind === 'POLICY_DENIED') {
+            /* ⚠ MISE EN FILE — ADR-099, ET LA CONDITION EST TOUT LE SUJET.
+
+               On ne met en file QUE les refus portant
+               `motif: 'SURFACE_DISTANTE'` — c'est-à-dire les refus RÉPARABLES,
+               ceux que la même demande faite devant la machine passerait.
+
+               Un `forbid` Cedar, un `L0`, une donnée `RED` en égression
+               n'ont aucun motif : ils restent `DENIED`, définitivement. Sans
+               cette condition, la file deviendrait un contournement de
+               politique — il suffirait de demander depuis le téléphone pour
+               obtenir « à confirmer plus tard » ce qui est interdit.
+
+               Et la distinction se fait sur un CHAMP TYPÉ. La faire sur
+               `message` ferait dépendre une décision de sécurité d'une phrase
+               française, qu'une reformulation changerait en silence.
+
+               ⚠ ENFIN : MISE EN FILE ≠ AUTORISATION. La ligne enregistrée est
+               une intention. La confirmation rejouera la chaîne COMPLÈTE,
+               Policy Gate compris, sur la surface locale. */
+            const motif = result.error.details?.['motif'];
+            if (motif === 'SURFACE_DISTANTE' && deps.file !== null) {
+              const quoi = Object.values(lisible);
+              const resume =
+                quoi.length > 0
+                  ? `${proposal.toolId} — ${quoi.join(', ')}`
+                  : proposal.toolId;
+
+              const mis = await deps.file.mettreEnFile({
+                /* `OperationIdentity` est une chaîne MARQUÉE (ADR-030). Elle
+                   traverse la frontière de la base comme du texte, et c'est
+                   `fromClient()` qui la remarquera au retour — jamais un
+                   `as` ici. */
+                operationId: String(operationId),
+                toolId: proposal.toolId,
+                input: { ...input },
+                provenance: { ...proposal.parameterProvenance },
+                resume,
+                demandeeDe: options.surface,
+              });
+              if (!mis.ok) return { kind: 'ERROR', message: mis.error.message };
+
+              return {
+                kind: 'EN_ATTENTE',
+                resume: mis.value.resume,
+                minutesRestantes: mis.value.minutesRestantes,
+                reason: result.error.message,
+              };
+            }
+
             return { kind: 'DENIED', reason: result.error.message };
           }
 

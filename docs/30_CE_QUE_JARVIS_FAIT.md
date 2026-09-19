@@ -216,6 +216,40 @@ Commandes : `/audit` · `/annule` · `/inbox` · `/diagnostic` · `/aide` · `/q
 
 ---
 
+### Depuis l'iPhone — les 21, dont 3 en deux temps
+
+`pnpm jarvis:web` affiche un lien à ouvrir sur le téléphone, connecté au même
+Wi-Fi. **Partager → Sur l'écran d'accueil** en fait une icône plein écran.
+
+**Dix-huit capacités répondent directement.** Les trois suppressions
+définitives passent par une file d'attente, et la raison est structurelle :
+
+> Une confirmation renvoyée par le même canal que la demande ne prouve rien.
+> Qui détient le jeton pourrait se confirmer à lui-même.
+
+```text
+téléphone  « supprime la note du carreleur »
+           → « Rien n'a été fait — préparé : … »
+           → 30 minutes pour décider
+
+Mac        « /confirmer »
+           → « Demandé depuis le téléphone · expire dans 29 min »
+           → oui  →  ✓ Effacement vérifié : note … absente
+           → non  →  « Abandonnée. Rien n'a été fait. »
+```
+
+```text
+jeton détenu           → droit de METTRE EN FILE
+présence à la machine  → droit d'EXÉCUTER
+```
+
+⚠ **Une ligne de cette file n'autorise rien.** La confirmation rejoue la chaîne
+complète — Policy Gate compris. Une action qu'une politique interdit sera
+refusée de nouveau, file ou pas. Et seuls les refus de *surface* peuvent y
+entrer : un interdit reste un interdit.
+
+---
+
 ## 4. Ce qui se passe entre ta phrase et la réponse
 
 Huit étapes. Aucune n'est sautable.
@@ -318,7 +352,7 @@ Et `pnpm secrets:scan` balaye **l'arbre de travail et l'historique git**.
 | **Envoyer un email / un message** | aucun outil d'envoi. C'est la capacité qui manque le plus. |
 | **Contrôler la maison** | aucun outil. |
 | **La météo** | aucun outil. |
-| **L'application iOS** | aucun répertoire. La passerelle web en tient lieu. |
+| **L'application iOS native** | aucun répertoire. La passerelle web en tient lieu, et les 21 capacités y répondent — trois en deux temps (§3). |
 | **Le Model Router** | aucun fichier ne contient « router ». |
 | **Installer une mise à jour** | la couche qui **décide** existe ; celle qui **exécute** non. Conséquence saine : **toute mise à jour est refusée aujourd'hui**. |
 
@@ -450,7 +484,7 @@ délibérément privilégié le second.
 | Outils écrits | **22** |
 | Outils atteignables en parlant | **21** |
 | Tests | le compte vit dans `docs/28` et se vérifie en lançant `pnpm test` — le figer ici garantirait qu'il se périme |
-| Décisions d'architecture | **98**, chacune avec sa condition de révision |
+| Décisions d'architecture | **99**, chacune avec sa condition de révision |
 | Documents de spécification | **30** |
 | Zones d'ombre recensées | **45**, chacune avec son état |
 | Modules hors circuit | **9**, chacun avec sa condition de levée |

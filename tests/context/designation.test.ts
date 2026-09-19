@@ -25,7 +25,6 @@ import { databaseAvailable, ownerDb } from '../helpers/db.js';
 import {
   createDesignationResolver,
   libelleSur,
-  type DesignationResolver,
 } from '../../src/core/context/designation.js';
 import { DataCategory } from '../../src/core/types/domain.js';
 import { err, jarvisError } from '../../src/core/types/result.js';

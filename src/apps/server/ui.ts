@@ -337,6 +337,16 @@ ${capacitesInjectees()}
       return;
     }
     if (reply.kind === 'DENIED') { node.appendChild(el('div', null, 'Refusé : ' + reply.reason)); return; }
+    /* ADR-099 — mis en file. « Rien n'a été fait » vient EN PREMIER : sur un
+       écran de téléphone, « en attente » lu vite ressemble à « c'est fait ».
+       La même discipline que l'accusé de réception vocal (ADR-074), qui porte
+       sur la RÉCEPTION et jamais sur l'effet. */
+    if (reply.kind === 'EN_ATTENTE') {
+      node.appendChild(el('div', null, 'Rien n’a été fait — préparé : ' + reply.resume));
+      node.appendChild(el('div', 'detail',
+        'À confirmer sur ton Mac avec « /confirmer » — ' + reply.minutesRestantes + ' min restantes.'));
+      return;
+    }
     node.appendChild(el('div', null, reply.message || 'Erreur.'));
   }
 

@@ -130,6 +130,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -165,6 +169,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -199,6 +207,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -238,6 +250,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -281,6 +297,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -321,6 +341,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -359,6 +383,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -397,6 +425,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -437,6 +469,10 @@ describe('Assistant', () => {
         resoudre: () =>
           Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
+      /* Aucune file : ces tests ne portent pas sur ADR-099, et `null` est l'état
+         NORMAL d'un appelant qui ne sert aucune surface distante. Un refus de
+         surface y reste donc un refus, comme avant ADR-099. */
+      file: null,
       temps: TEMPS_FIGE,
       tier1: null,
     });

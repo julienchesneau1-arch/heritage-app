@@ -8398,3 +8398,146 @@ facteur réel. Mais cela **contredit ADR-023**, qui a choisi une confirmation
 Renverser une décision ratifiée pour trois capacités sur vingt-et-une est un
 arbitrage de produit, pas une évidence technique. Il est donc exposé plutôt que
 pris. Voir `docs/26 §4.18`.
+
+---
+
+## ADR-099 — Le téléphone prépare, la machine confirme
+
+**Statut :** accepté · 19/09/2026 · **arbitré par Julien**
+**Contexte :** ADR-090, ADR-023, ADR-098, `docs/26 §4.18`
+**Renverse :** partiellement ADR-023
+
+### La question posée, et la réponse
+
+ADR-098 a mesuré : dix-huit capacités sur vingt-et-une répondent depuis
+l'iPhone. Les trois manquantes sont les suppressions définitives, refusées par
+ADR-090.
+
+L'arbitrage lui a été soumis parce qu'il **renverse une décision ratifiée**, et
+qu'un renversement pour trois capacités sur vingt-et-une n'est pas une évidence
+technique. Il a tranché pour la file.
+
+### Le mécanisme
+
+```text
+jeton détenu           → droit de METTRE EN FILE
+présence à la machine  → droit d'EXÉCUTER
+```
+
+C'est **exactement le second facteur qu'ADR-090 constatait manquant**. Un
+attaquant qui détient le jeton peut remplir la file ; il ne peut pas se tenir
+devant l'ordinateur de Julien.
+
+### ⚠ Ce qui rend la file sûre — et c'est plus important que ce qu'elle permet
+
+**Une ligne de la file n'est pas une autorisation.** C'est architectural, pas
+déclaratif :
+
+> `confirmer()` marque une ligne et rend son contenu. **Elle n'exécute rien, et
+> le module n'a aucun moyen d'exécuter quoi que ce soit** — il n'importe ni
+> passerelle ni outil, et un test le vérifie par l'absence.
+
+C'est l'appelant, **sur la surface locale**, qui rejoue `gateway.invoke` avec
+l'appel stocké. Le Policy Gate décide de nouveau, Cedar compris.
+
+Sans ce rejeu, la file serait un contournement : il suffirait d'y écrire une
+ligne pour obtenir demain ce qui est interdit aujourd'hui.
+
+### ⚠ Seuls les refus RÉPARABLES peuvent entrer
+
+Un `forbid` Cedar ne doit jamais devenir « à confirmer plus tard ».
+
+La distinction se fait sur un **champ typé** — `motif: 'SURFACE_DISTANTE'` —
+ajouté au `PolicyOutcome`. La faire sur le message ferait dépendre une décision
+de sécurité d'une phrase française, qu'une reformulation changerait en silence.
+
+Le champ est **volontairement pauvre** : une seule valeur, parce qu'un seul
+refus est réparable. Tout autre refus n'en porte aucun, et la file ne le voit
+jamais. Défaut fermé : ajouter un motif est un geste délibéré.
+
+### Ce qui est renversé d'ADR-023, et ce qui ne l'est pas
+
+ADR-023 : *« aucune session à stocker, donc aucune session à détourner »*. Le
+motif reste juste, et il ne s'applique pas ici :
+
+```text
+une SESSION porte une IDENTITÉ  — la détourner, c'est devenir quelqu'un
+une INTENTION porte un ACTE     — la détourner, c'est obtenir CET acte, et
+                                  seulement après qu'un humain l'a approuvé
+                                  devant la machine
+```
+
+Ce qui est renversé est plus étroit qu'il n'y paraît : la confirmation n'est
+plus *toujours* sans état. Elle l'est encore sur la surface locale ; elle
+devient différée quand la demande vient d'ailleurs.
+
+### On marque AVANT d'exécuter
+
+L'ordre inverse — exécuter puis marquer — laisserait, si le processus meurt
+entre les deux, une intention **toujours en attente dont l'effet a déjà eu
+lieu**. Le prochain `/confirmer` la reproposerait.
+
+Dans cet ordre, une mort au même endroit laisse une intention marquée confirmée
+**sans effet** : Jarvis n'a rien fait, et il ne prétend rien avoir fait. Même
+arbitrage que l'Undo Engine — on préfère l'action manquante à l'action
+dupliquée.
+
+### ⚠ Le défaut que seule l'exécution a trouvé
+
+```text
+{"kind":"ERROR","message":"query: permission denied for table
+                           confirmations_en_attente"}
+```
+
+**Les douze tests passaient.** Ils tournent avec le rôle *propriétaire* ; le
+produit tourne avec `jarvis_app`, qui n'a que ce qu'on lui accorde. Le `GRANT`
+manquait.
+
+> C'est le motif de ce dépôt sous une forme nouvelle : **une propriété vérifiée
+> par un chemin qui n'est pas celui du produit.** Lancer la passerelle pour de
+> vrai a coûté deux minutes et trouvé ce qu'aucun test n'aurait vu.
+
+Pas de `DELETE` dans le `GRANT` : une intention ne s'efface pas, elle se
+**résout**. La trace de ce qui a été demandé — et refusé — fait partie de ce que
+`/audit` doit pouvoir raconter.
+
+### Une frontière qui a fait son travail
+
+`EXTRACT(EPOCH …) / 60` rend un `numeric`, que le pilote PostgreSQL remet en
+JavaScript sous forme de **chaîne** — il refuse de perdre des chiffres en
+silence. Zod a rejeté la ligne, ce qui est exactement son rôle : le défaut est
+mort à la frontière plutôt que d'afficher « il te reste [object] minutes ».
+
+Corrigé **côté base** (`::double precision`) et non côté client : une conversion
+en TypeScript serait un second endroit où le type se décide.
+
+### Vérifié en exécution
+
+```text
+téléphone  « supprime la note du carreleur »
+           → EN_ATTENTE, rien n'est exécuté, 29 min pour décider
+
+Mac        « /confirmer »
+           → « Demandé depuis le téléphone · expire dans 29 min »
+           → oui  →  ✓ Effacement vérifié : note … absente
+           → non  →  « Abandonnée. Rien n'a été fait. »
+```
+
+**Les vingt-et-une capacités sont atteignables depuis l'iPhone**, dont trois en
+deux temps.
+
+### Ce que ça coûte, et qui est écrit plutôt que caché
+
+- **Trente minutes est un choix**, pas un calcul. Ce qui est établi, c'est
+  qu'un délai doit exister.
+- **Le résumé s'affiche à un troisième endroit** — terminal, téléphone, file.
+  Chacun est un endroit où une future modification pourrait oublier la
+  redaction de `libelleSur`.
+- **Rien ne limite le nombre d'intentions en attente.** Un attaquant qui détient
+  le jeton ne peut rien exécuter, mais il peut noyer l'écran de `/confirmer` —
+  et un utilisateur habitué à approuver finirait par approuver vite.
+
+### Condition de révision
+
+Le premier usage réel. Et le jour où une file trop longue apparaît : ce sera le
+signe qu'il faut un plafond, pas un délai plus court.
