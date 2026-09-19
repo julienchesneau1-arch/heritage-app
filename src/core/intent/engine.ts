@@ -75,7 +75,26 @@ export type EspeceDeReferent =
    * confirmation affiche l'heure de fin retenue avant toute écriture.
    */
   | 'TEMPORAL:FIN_PAR_DEFAUT'
-  | `DESIGNATION:${GenreDesigne}`;
+  | `DESIGNATION:${GenreDesigne}`
+  /**
+   * Une POSITION dans la dernière liste montrée — « la première » — ADR-107.
+   *
+   * ⚠ DISTINCTE DE `DESIGNATION`, ET LA DIFFÉRENCE EST LA SOURCE.
+   *
+   * Une désignation se résout contre la BASE : « la note du carreleur » existe
+   * indépendamment de ce que Jarvis vient d'afficher. Un ordinal se résout
+   * contre L'ÉCRAN : « la première » n'a de sens que par rapport à une liste
+   * qui vient d'être montrée, dans cette conversation.
+   *
+   * Les fondre aurait fait chercher « première » comme un titre de tâche —
+   * c'est d'ailleurs ce qui se passait, et ce que le banc mesurait sous
+   * `REFERENCE 0/8`.
+   *
+   * Le genre attendu voyage avec l'espèce, pour la raison d'ADR-096 : sans
+   * lui, « supprime la deuxième » s'appliquerait à n'importe quel dernier
+   * affichage, et supprimerait autre chose que ce que l'utilisateur désignait.
+   */
+  | `ORDINAL:${GenreDesigne}`;
 
 export type IntentProposal =
   | {
@@ -769,6 +788,58 @@ const RULES: readonly Rule[] = [
    * qui déclarait la suppression « pas encore construite ». Une capacité niée
    * est aussi absente qu'une capacité manquante (ADR-075).
    * ====================================================================== */
+
+  /* ======================================================================
+     LES ORDINAUX — « la première », « le dernier » — ADR-107
+     ======================================================================
+
+     ⚠ CES RÈGLES PRÉCÈDENT LEURS JUMELLES « DÉSIGNÉES », ET L'ORDRE EST LA
+     CORRECTION.
+
+     Sans elles, « marque la première comme faite » tombait sur
+     `task_complete_designee`, qui cherchait une tâche INTITULÉE « première ».
+     Elle ne la trouvait pas, Jarvis demandait — poliment, et à côté. C'est
+     exactement ce que le banc de fluidité comptait sous `REFERENCE 0/8`.
+
+     Le fragment de position est capturé tel quel ; `litUnOrdinal` le lira, et
+     l'Assistant le confrontera au dernier affichage. Le moteur, lui, reste une
+     fonction PURE du texte (ADR-073). */
+  {
+    id: 'task_complete_ordinal',
+    exemple: '« marque la première comme faite »',
+    pattern:
+      /^(?:termine|marque|coche|valide)\s+(?:la|le|l'|l’)?\s*(premi[èe]re?|deuxi[èe]me|seconde?|troisi[èe]me|quatri[èe]me|cinqui[èe]me|derni[èe]re?|\d{1,2}\s*(?:er|re|e|[èe]me)?)\s*(?:comme\s+(?:faite?|termin[ée]e?)|de\s+la\s+liste)?\s*[?.!]*$/iu,
+    build(match) {
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'task_complete',
+        input: { taskId: clean(match[1] ?? '') },
+        parameterProvenance: { taskId: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: { taskId: 'ORDINAL:TASK' },
+      };
+    },
+  },
+  {
+    id: 'task_cancel_ordinal',
+    exemple: '« supprime la deuxième »',
+    pattern:
+      /^(?:annule|supprime|retire|enl[èe]ve)\s+(?:la|le|l'|l’)?\s*(premi[èe]re?|deuxi[èe]me|seconde?|troisi[èe]me|quatri[èe]me|cinqui[èe]me|derni[èe]re?|\d{1,2}\s*(?:er|re|e|[èe]me)?)\s*(?:de\s+la\s+liste)?\s*[?.!]*$/iu,
+    build(match) {
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'task_cancel',
+        input: { taskId: clean(match[1] ?? '') },
+        parameterProvenance: { taskId: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: { taskId: 'ORDINAL:TASK' },
+      };
+    },
+  },
 
   /* --- Tâches : terminer -------------------------------------------------- */
   {

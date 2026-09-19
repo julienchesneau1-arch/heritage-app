@@ -317,7 +317,7 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
     await db.close();
   });
 
-  it('LA FLUIDITÉ, EN CHIFFRES — 14 tours sur 30 aboutissent', () => {
+  it('LA FLUIDITÉ, EN CHIFFRES — 15 tours sur 30 aboutissent', () => {
     /* ⚠ LE CHIFFRE QUI RÉPOND À « PEUT-ON DISCUTER AVEC JARVIS ? », ET IL
        N'ÉTAIT COMPTÉ NULLE PART.
 
@@ -332,16 +332,18 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
                                     entière de ce banc. Le tour qui manquait
                                     n'était pas une capacité absente, c'était
                                     une formulation que personne n'emploie.
-         REFERENCE          0/8    « il », « la première », « ça » — RIEN
+         REFERENCE          1/8    ⚠ « la première » se résout (ADR-107) ;
+                                    « il », « le suivant », « ça » — toujours RIEN
          TEMPOREL           1/4
          DESAMBIGUISATION   1/2
          CONTRADICTION      1/2
          SUPPRESSION        0/2
          COMPARAISON        0/1
          ─────────────────────────
-         TOTAL             14/30   47 %
+         TOTAL             15/30   50 %
 
-       **`REFERENCE` à 0/8 est le chiffre décisif.** Huit tours sur trente —
+       **`REFERENCE` est le chiffre décisif**, et il est passé de 0 à 1 sur
+       huit avec ADR-107 — la première fois qu'il bouge. Huit tours sur trente —
        plus d'un quart d'une vraie conversation — désignent une chose sans la
        renommer. C'est ce qui fait qu'une conversation est une conversation, et
        non une suite d'ordres.
@@ -385,12 +387,19 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
       parAptitude.set(r.turn.aptitude, e);
     }
 
-    expect(parAptitude.get('REFERENCE')?.agi, 'aucun référent ne se résout').toBe(0);
+    /* ⚠ 0 → 1 AVEC ADR-107, et c'est le premier mouvement de cette ligne
+       depuis que le banc existe.
+
+       « Marque la première comme faite » se résout contre la liste que Jarvis
+       vient de MONTRER. Les sept autres désignent par anaphore — « il », « le
+       suivant », « ça » — et butent toujours sur la RECONNAISSANCE, pas sur
+       la résolution. Le verrou décrit plus bas n'a pas bougé. */
+    expect(parAptitude.get('REFERENCE')?.agi, 'un seul référent se résout').toBe(1);
     expect(parAptitude.get('REFERENCE')?.total).toBe(8);
     expect(parAptitude.get('ACTION')?.agi).toBe(11);
 
     const agi = results.filter((r) => r.reply.kind === 'DONE').length;
-    expect(agi).toBe(14);
+    expect(agi).toBe(15);
     expect(results).toHaveLength(30);
   });
 
@@ -448,14 +457,31 @@ describe.skipIf(skip)('RED TEAM — 30 tours de conversation', () => {
   it('PROPRIÉTÉ CONSERVÉE — aucun tour contextuel n\'invente une action inattendue', () => {
     // Le point positif : ne pas comprendre est traité comme ne pas comprendre.
     // Aucun « Décale-le à vendredi » ne crée une tâche « le à vendredi ».
-    // Les deux seules exceptions sont documentées juste au-dessus.
+
+    /* ⚠ UNE EXCEPTION NOMMÉE, ET ELLE N'EST PAS UNE INVENTION — ADR-107.
+
+       « Marque la première comme faite » aboutit désormais sur
+       `task_complete`. Ce test l'aurait compté comme une action inventée, et
+       il aurait eu tort : la référence a été RÉSOLUE — contre la liste que
+       Jarvis venait de montrer — et non devinée.
+
+       La nommer plutôt que d'élargir le prédicat est la différence entre « on
+       sait pourquoi » et « ça passe ». Le jour où un autre tour contextuel
+       aboutira, il faudra revenir ici et dire pourquoi. */
+    const REFERENCE_RESOLUE = new Set(['Marque la première comme faite']);
+
     const inventions = results.filter(
       (r) =>
         r.turn.aptitude !== 'ACTION' &&
         r.reply.kind === 'DONE' &&
         r.reply.toolId !== 'memory_search' &&
-        true,
+        !REFERENCE_RESOLUE.has(r.turn.phrase),
     );
     expect(inventions.map((r) => r.turn.phrase)).toEqual([]);
+
+    /* CONTRÔLE — l'exception EXISTE vraiment. Sans lui, la liste ci-dessus
+       resterait vide dans un Jarvis où plus aucun ordinal ne se résout. */
+    const resolue = results.find((r) => REFERENCE_RESOLUE.has(r.turn.phrase));
+    expect(resolue?.reply.kind, 'l’ordinal doit aboutir').toBe('DONE');
   });
 });

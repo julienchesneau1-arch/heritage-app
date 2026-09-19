@@ -102,6 +102,8 @@ function assistantAvec(modePrive: ModePrive, calls: ToolCall[] = []) {
     arret: arretDouble(),
     undo: undoDouble(),
     modePrive,
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
     intent: createIntentEngine(),
     gateway: {
       register: () => ok(undefined),

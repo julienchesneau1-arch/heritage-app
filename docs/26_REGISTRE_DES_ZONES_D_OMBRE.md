@@ -1630,19 +1630,28 @@ document qui promet le produit.
 
 ---
 
-### 4.13 La fluidité conversationnelle — 43 %, et le verrou est la RECONNAISSANCE
+### 4.13 La fluidité conversationnelle — 50 %, et le verrou est la RECONNAISSANCE
 
 **Mesuré, pas estimé** (ADR-080). Trente tours d'une conversation réaliste :
 
 ```text
-TOTAL             13/30    43 %   aboutissent
-REFERENCE          0/8      0 %   ← le chiffre décisif
-ERREURS TECHNIQUES 0/30            les 17 refus sont FORMULÉS
+TOTAL             15/30    50 %   aboutissent
+REFERENCE          1/8     13 %   ← le chiffre décisif
+ACTION            11/11   100 %   la seule aptitude complète
+ERREURS TECHNIQUES 0/30            les refus sont FORMULÉS
 ```
 
 Plus d'un quart d'une vraie conversation désigne une chose **sans la renommer**.
-C'est ce qui distingue une conversation d'une suite d'ordres, et Jarvis n'en
-traite aucun cas.
+C'est ce qui distingue une conversation d'une suite d'ordres.
+
+> ⚠ **`REFERENCE` A BOUGÉ POUR LA PREMIÈRE FOIS — ADR-107.** « Marque la
+> première comme faite » se résout contre la liste que Jarvis vient de MONTRER.
+> Une sur huit : c'est peu, et c'est la preuve que la ligne n'est pas immobile
+> par nature.
+>
+> Les sept autres désignent par ANAPHORE — « il », « le suivant », « ça » — et
+> butent toujours sur ce que dit le titre de cette section. Un ordinal se
+> résout contre l'écran ; une anaphore demande de comprendre la phrase.
 
 **La cause n'est pas celle qu'on croit.** `resolveAnaphora` existe et fonctionne
 (ADR-073). Il tourne à vide faute de MATIÈRE : il lit `mentioned_entity_ids`, et
@@ -1712,7 +1721,7 @@ phrase, mais par ce qui a été dit avant.
 > zéro token d'historique.
 >
 > **Le chiffre, lui, n'a pas bougé** — et ne peut pas avoir bougé : aucun modèle
-> n'a tourné. Les 43 % restent la dernière mesure réelle. Un quatrième inconnu
+> n'a tourné. Les 50 % restent la dernière mesure réelle. Un quatrième inconnu
 > s'ajoute même aux trois d'ADR-082 : *un 8B pose-t-il la marque de renvoi, ou
 > l'ignore-t-il ?* C'est pourquoi `referents` est **optionnel**, et pourquoi un
 > test fige le comportement sans marque.

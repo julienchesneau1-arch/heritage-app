@@ -189,6 +189,8 @@ cherche dans mes documents …          rechercher dans les fichiers
 fais-moi un point                     briefing du jour
 comment vas-tu                        état du système
 
+marque la première comme faite        ⚠ une POSITION dans la dernière liste
+supprime la deuxième                  ⚠ idem — pas un titre, un rang
 termine la tâche …                    marquer une tâche terminée
 annule la tâche …                     annuler une tâche
 annule le rappel …                    annuler un rappel

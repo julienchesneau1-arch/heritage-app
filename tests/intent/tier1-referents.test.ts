@@ -140,6 +140,8 @@ function assistantAvec(
     // ADR-105 — même règle : un assemblage qui ne peut pas défaire est diminué.
     undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
     intent: TIER0_MUET,
     gateway: passerelle(calls),
     setGuardConfirmed: () => undefined,

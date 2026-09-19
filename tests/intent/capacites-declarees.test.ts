@@ -40,6 +40,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { sansCommentaires } from '../helpers/source.js';
 import { capacitesParlees, createIntentEngine } from '../../src/core/intent/engine.js';
 
 const SOURCE = readFileSync('src/core/intent/engine.ts', 'utf8');
@@ -259,9 +260,18 @@ describe('Jarvis ne ment pas sur son propre catalogue', () => {
        c'est-à-dire un message qui recopie. Le test l'a trouvée : la question de
        portée citait trois capacités en toutes lettres. Elle les DÉRIVE
        désormais par identifiant de règle. */
+    /* ⚠ LES COMMENTAIRES SONT RETIRÉS D'ABORD — ADR-107, et c'est la
+       CINQUIÈME fois qu'une garde textuelle mord la prose qui l'explique
+       (ADR-096, ADR-098, ADR-102, ADR-105).
+
+       Ici le défaut serait particulièrement bête : expliquer POURQUOI une
+       règle existe oblige à citer la phrase qu'elle reconnaît, et cette
+       citation compterait comme un message qui recopie. On dépouille donc
+       avant de compter — le dépouilleur a son propre contrôle négatif. */
+    const nu = sansCommentaires(SOURCE);
     for (const capacite of capacites) {
-      const total = SOURCE.split(capacite).length - 1;
-      const declarations = SOURCE.split(`exemple: '${capacite}'`).length - 1;
+      const total = nu.split(capacite).length - 1;
+      const declarations = nu.split(`exemple: '${capacite}'`).length - 1;
       expect(
         total,
         `« ${capacite} » : ${String(total)} occurrences pour ${String(declarations)} déclarations — un message la recopie`,

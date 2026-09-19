@@ -9592,3 +9592,140 @@ n'a pas bougé d'un pouce, et c'est bien lui qui compte.
 Le premier fournisseur cloud branché. C'est lui qui donnera au mode privé
 quelque chose de substantiel à refuser — aujourd'hui il refuse surtout
 `web_search`, qui n'a pas d'adaptateur.
+
+---
+
+## ADR-107 — « Marque la première comme faite »
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** `docs/05 §A2`, ADR-073, ADR-096, ADR-063, ADR-100, ADR-105
+
+### 1. Le chiffre qui n'avait jamais bougé
+
+Le banc de fluidité mesure trente tours d'une vraie conversation. Une ligne n'a
+jamais changé depuis sa création :
+
+```text
+REFERENCE   0/8   « il », « la première », « ça » — RIEN
+```
+
+Huit tours sur trente — **plus d'un quart d'une conversation réelle** —
+désignent une chose sans la renommer. C'est ce qui distingue une conversation
+d'une suite d'ordres, et c'était le verrou le plus coûteux du produit.
+
+Il passe à **1/8**. C'est peu, et c'est la première fois.
+
+### 2. La cause n'était pas la résolution — c'était l'ORDRE des règles
+
+`resolveAnaphora` existe depuis ADR-073. Ce qui manquait était en amont :
+
+> « Marque la première comme faite » tombait sur `task_complete_designee`, qui
+> cherchait une tâche **intitulée** « première ». Elle ne la trouvait pas,
+> Jarvis demandait — poliment, et à côté.
+
+Deux règles ordinales précèdent désormais leurs jumelles désignées. L'ordre
+**est** la correction, et un test tient les deux sens : un ordinal ne doit pas
+devenir une désignation, et une cible nommée ne doit pas devenir un ordinal.
+
+### 3. Jarvis se rappelle de ce qu'il a MONTRÉ
+
+Une liste affichée ne laissait aucune trace : la sortie d'un outil vivait le
+temps d'une réponse, puis disparaissait. « La première » n'avait rien contre
+quoi se résoudre.
+
+```text
+ORDINAL      se résout contre L'ÉCRAN — ce que Jarvis vient de montrer
+DESIGNATION  se résout contre LA BASE — « la note du carreleur » existe
+             indépendamment de ce qui est affiché
+```
+
+⚠ **Ce n'est pas un second registre des données** (ADR-041). La table
+`dernier_affichage` enregistre un **événement de présentation** — *à cet
+instant, dans cette conversation, ces identités ont été montrées dans cet
+ordre*. C'est un fait dont il n'existe aucune autre trace.
+
+Et elle dit ce qui a été **montré**, jamais ce qui **existe** : une tâche
+affichée il y a dix minutes a pu être terminée depuis. L'outil visé refait son
+contrôle, le Policy Gate refait le sien.
+
+**Une seule ligne par session**, parce que « la première » désigne la dernière
+liste vue. Garder un historique inviterait à résoudre un ordinal contre un
+affichage que l'utilisateur ne regarde plus. Et une liste **vide efface**
+l'affichage précédent — sinon « la première » continuerait de désigner ce qui
+n'est plus à l'écran.
+
+### 4. ⚠ Le genre est ce qui rend l'ordinal sûr
+
+« Supprime la deuxième » après une liste de tâches et après une recherche en
+mémoire ne désignent pas la même chose. Sans vérification, l'ordinal
+s'appliquerait à n'importe quel dernier affichage — **et l'utilisateur verrait
+disparaître autre chose que ce qu'il croyait désigner.**
+
+La règle déclare le genre qu'elle attend ; s'il ne correspond pas, on
+**demande**. On ne convertit pas. C'est `docs/05 §A2` mot pour mot : *« interdit :
+deviner si deux interprétations ont un impact différent »*.
+
+Le vocabulaire des genres est **celui de `GenreDesigne`** (ADR-096), pas un
+second. Une seconde énumération de « sortes de choses qu'on peut désigner »
+aurait divergé, et la divergence se serait lue à l'endroit le plus coûteux.
+
+### 5. Trois façons d'échouer, trois questions
+
+```text
+rien n'a été montré         → « je ne t'ai montré aucune liste récemment »
+le genre ne correspond pas  → « la dernière liste n'est pas une liste de tâches »
+la position n'existe pas    → « je ne t'ai montré que 2 éléments »
+```
+
+Aucune ne remplit la position par défaut. « La première » quand rien n'a été
+montré n'est pas « la première tâche de la base » : c'est une question.
+
+⚠ Et **les questions parlent français**. Une phrase qui dirait `TASK`
+apprendrait à l'utilisateur le vocabulaire interne du système ; la table
+d'étiquettes est exhaustive, donc un genre ajouté demain provoque une erreur de
+compilation plutôt qu'un mot anglais dans une phrase française.
+
+### 6. ⚠ Un sabotage NON détecté, et ce qu'il a révélé
+
+En neutralisant la vérification de genre, **les quarante-cinq tests restaient
+verts**.
+
+La cause : mon test « mauvais genre » passait par un double qui rendait
+`MAUVAIS_GENRE` directement — la vraie garde n'était jamais exercée. Et le test
+sur la boucle réelle cherchait un terme qui ne trouvait **rien** : l'affichage
+était vide, la réponse `RIEN_MONTRE`, et le genre encore une fois hors jeu.
+
+> Deux tests qui décrivaient la bonne propriété et ne l'éprouvaient pas.
+
+Corrigé en faisant TROUVER la recherche mémoire. Le sabotage rougit désormais —
+sans la garde, la question devient « je ne t'ai montré que 1 élément », c'est-à-
+dire qu'on serait à un élément près d'avoir supprimé une tâche que l'utilisateur
+ne regardait pas.
+
+L'autre sabotage — un index décalé d'un — était détecté dès le premier essai,
+par le test qui vérifie que la tâche terminée est celle affichée **en tête**,
+lue depuis la sortie réelle de l'outil plutôt qu'écrite en dur.
+
+### 7. Le dépouilleur, pour la cinquième fois
+
+La garde « chaque exemple n'apparaît que dans une déclaration » a mordu le
+commentaire qui explique pourquoi les règles ordinales existent — expliquer une
+règle oblige à citer la phrase qu'elle reconnaît. `sansCommentaires` s'applique
+maintenant là aussi (ADR-096, ADR-098, ADR-102, ADR-105, ADR-107).
+
+### Ce que cette ADR ne résout pas
+
+- **Sept références sur huit restent hors de portée.** « il », « le suivant »,
+  « ça » dans les formulations du banc butent toujours sur la RECONNAISSANCE.
+  La levée passe par un modèle local (ADR-082), pas par des règles de plus.
+- **Seules les tâches sont adressables par position.** `memory_search` énumère
+  bien des mémoires, mais aucune règle ordinale ne les vise : « supprime la
+  deuxième » sur une mémoire est `L4` et mérite sa propre passe.
+- **`calendar_read` n'énumère pas.** Ses événements ne sont pas un
+  `GenreDesigne` — c'est la dernière ligne hors surface parlée, et elle dépend
+  d'un compte Google.
+
+### Condition de révision
+
+Le premier modèle local branché. C'est lui qui dira si les ordinaux restent
+utiles — ou si la reconnaissance générale les rend superflus.

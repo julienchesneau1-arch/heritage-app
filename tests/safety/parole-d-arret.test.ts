@@ -106,6 +106,8 @@ function assistantAvec(arret: ControleDArret, calls: ToolCall[]) {
     arret,
     undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
     intent: createIntentEngine(),
     gateway: passerelleQuiCompte(calls),
     setGuardConfirmed: () => undefined,
@@ -217,6 +219,8 @@ describe('⚠ l’arrêt court-circuite TOUT — `docs/05 §C2`', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: { propose },
       gateway: passerelleQuiCompte([]),
       setGuardConfirmed: () => undefined,

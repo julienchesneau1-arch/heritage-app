@@ -116,6 +116,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf({ kind: 'CLARIFY', question: 'Quoi retenir ?', understood: '' }),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -154,6 +156,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf({
         kind: 'UNSUPPORTED',
         understood: 'un envoi de message',
@@ -199,6 +203,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation([]),
       setGuardConfirmed: () => undefined,
@@ -245,6 +251,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -295,6 +303,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -335,6 +345,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -380,6 +392,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -424,6 +438,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -472,6 +488,8 @@ describe('Assistant', () => {
       arret: arretDouble(),
       undo: undoDouble(),
     modePrive: modePriveDouble(),
+    // ADR-107 — sans mémoire d'affichage, un ordinal DEMANDE. C'est le défaut.
+    affichage: null,
       intent: intentOf({ ...TOOL_CALL, toolId: 'memory_add', userConfirms: true }),
       gateway: {
         register: () => ok(undefined),

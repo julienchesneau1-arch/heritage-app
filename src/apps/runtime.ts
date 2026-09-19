@@ -19,6 +19,7 @@ import { createLedger, type Ledger } from '../core/ledger/ledger.js';
 import { createEmergencyHalt } from '../core/safety/halt.js';
 import { createControleDArret, type ControleDArret } from '../core/safety/controle.js';
 import { createModePrive, type ModePrive } from '../core/privacy/mode-prive.js';
+import { createMemoireDAffichage } from '../core/context/affichage.js';
 import { digestPayload } from '../core/ledger/event.js';
 import { createPolicyGate } from '../core/policy/gate.js';
 import { createMemoryGuard } from '../core/memory/guard.js';
@@ -251,6 +252,9 @@ export function buildRuntime(
       undo,
       // ADR-106 — « passe en mode privé » atteint enfin `docs/03 §7`.
       modePrive,
+      /* ADR-107 — « marque la première comme faite ». Jarvis se rappelle
+         désormais de ce qu'il vient de MONTRER, et un ordinal s'y résout. */
+      affichage: createMemoireDAffichage(db),
       // ADR-077 : les dates sont calculées PAR LA BASE, jamais par le processus.
       temps: createResolveurTemporel(db),
       /* LE `TIER 1`, SI ET SEULEMENT SI UN MODÈLE LOCAL EST CONFIGURÉ — ADR-082.

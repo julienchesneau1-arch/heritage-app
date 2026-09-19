@@ -39,6 +39,9 @@ import { estUneParoleDArret } from './safety/parole-d-arret.js';
 import { estUneDemandeDAnnulation } from './undo/parole.js';
 import { estUnPassageEnModePrive } from './privacy/parole.js';
 import type { ModePrive } from './privacy/mode-prive.js';
+import type { MemoireDAffichage } from './context/affichage.js';
+import { litUnOrdinal } from './context/ordinal.js';
+import { enumerationDe } from './tools/enumeration.js';
 import type { UndoEngine, UndoOutcome } from './undo/engine.js';
 import type { Result } from './types/result.js';
 import type { Mode, Surface, VerificationStatus } from './types/domain.js';
@@ -290,6 +293,15 @@ export interface AssistantDeps {
    * l'atteindre — un champ optionnel aurait laissé ce trou se reformer.
    */
   readonly modePrive: ModePrive;
+  /**
+   * LA MÉMOIRE DU DERNIER AFFICHAGE — ADR-107.
+   *
+   * `null` est un état NORMAL et déclaré : un appelant sans session n'a pas
+   * d'écran à se rappeler. Avec `null`, un ordinal produit une QUESTION — le
+   * comportement d'avant ADR-107. Le champ est REQUIS pour que son absence
+   * soit un choix écrit plutôt qu'un oubli.
+   */
+  readonly affichage: MemoireDAffichage | null;
 }
 
 /**
@@ -459,6 +471,25 @@ async function versReponseDAnnulation(
   return { kind: 'ERROR', message: fait.error.message };
 }
 
+/**
+ * Le nom FRANÇAIS d'un genre — ADR-107.
+ *
+ * ⚠ Écrit en table exhaustive plutôt qu'en `toLowerCase()` : `MEMORY` donnerait
+ * « memory », et une question posée à l'utilisateur ne doit pas lui apprendre
+ * le vocabulaire interne du système. Un genre ajouté demain provoque une
+ * erreur de compilation ici, pas un mot anglais dans une phrase française.
+ */
+const ETIQUETTE: Readonly<Record<GenreDesigne, string>> = {
+  TASK: 'tâches',
+  NOTE: 'notes',
+  MEMORY: 'mémoires',
+  REMINDER: 'rappels',
+};
+
+function etiquette(genre: GenreDesigne): string {
+  return ETIQUETTE[genre];
+}
+
 export function createAssistant(deps: AssistantDeps): Assistant {
   return {
     async say(text: string, options: SayOptions): Promise<AssistantReply> {
@@ -586,12 +617,107 @@ export function createAssistant(deps: AssistantDeps): Assistant {
       const finParDefaut = Object.entries(proposal.referents)
         .filter(([, genre]) => genre === 'TEMPORAL:FIN_PAR_DEFAUT')
         .map(([cle]) => cle);
+      const ordinaux = Object.entries(proposal.referents)
+        .flatMap(([cle, genre]) =>
+          genre.startsWith('ORDINAL:')
+            ? [[cle, genre.slice('ORDINAL:'.length)] as const]
+            : [],
+        );
       const designations = Object.entries(proposal.referents)
         .flatMap(([cle, genre]) =>
           genre.startsWith('DESIGNATION:')
             ? [[cle, genre.slice('DESIGNATION:'.length)] as const]
             : [],
         );
+
+      /* CE QUE L'UTILISATEUR LIRA, par clé de paramètre.
+
+         ⚠ DÉCLARÉ ICI, ET PLUS BAS AUTREFOIS. Les ordinaux le remplissent
+         désormais, et ils se résolvent avant les dates : une confirmation qui
+         afficherait un UUID au lieu du libellé montré serait un oui donné sur
+         une chaîne hexadécimale (ADR-063). */
+      const lisible: Record<string, string> = {};
+
+      /* ⚠ LES ORDINAUX SE RÉSOLVENT CONTRE L'ÉCRAN, PAS CONTRE LA BASE — ADR-107.
+
+         Et les quatre issues suivent l'interdit de `docs/05 §A2` : une seule
+         agit, les trois autres DEMANDENT. Aucune ne remplit la position par
+         défaut — « la première » quand rien n'a été montré n'est pas « la
+         première tâche de la base », c'est une question. */
+      for (const [cle, genreBrut] of ordinaux) {
+        /* ⚠ `typeof`, PAS `String(...)`. Un `String()` sur une valeur qui
+           n'est pas une chaîne rendrait « [object Object] », que
+           `litUnOrdinal` refuserait — la bonne réponse pour la mauvaise
+           raison, et un message incompréhensible. Une entrée d'un autre type
+           est un défaut d'appelant, et il se dit. */
+        const valeur = input[cle];
+        if (typeof valeur !== 'string') {
+          return { kind: 'ERROR', message: `position illisible pour « ${cle} »` };
+        }
+        const position = litUnOrdinal(valeur);
+        if (position === null) {
+          return {
+            kind: 'CLARIFY',
+            question: `Quelle position ? Je n’ai pas lu « ${valeur} » comme un rang.`,
+          };
+        }
+
+        if (options.sessionId === undefined || deps.affichage === null) {
+          /* Sans conversation, il n'y a pas d'écran — donc pas de « première ».
+             Deviner reviendrait à inventer ce que l'utilisateur regardait. */
+          return {
+            kind: 'CLARIFY',
+            question:
+              'À quoi fais-tu référence ? Je n’ai rien affiché dans cette conversation.',
+          };
+        }
+
+        const lu = GenreDesigne.safeParse(genreBrut);
+        if (!lu.success) {
+          return { kind: 'ERROR', message: `genre de référent inconnu : ${genreBrut}` };
+        }
+
+        const trouve = await deps.affichage.resoudre(
+          options.sessionId,
+          position,
+          lu.data,
+        );
+        if (!trouve.ok) return { kind: 'ERROR', message: trouve.error.message };
+
+        if (trouve.value.kind === 'RIEN_MONTRE') {
+          return {
+            kind: 'CLARIFY',
+            question:
+              'Je ne t’ai montré aucune liste récemment — demande-moi « mes tâches », '
+              + 'puis dis-moi laquelle.',
+          };
+        }
+        if (trouve.value.kind === 'MAUVAIS_GENRE') {
+          /* ⚠ ON NE CONVERTIT PAS. La dernière liste n'est pas du genre
+             demandé : appliquer quand même l'ordinal agirait sur autre chose
+             que ce que l'utilisateur désignait — une action réelle, sur la
+             mauvaise cible. */
+          return {
+            kind: 'CLARIFY',
+            question:
+              `La dernière liste que je t’ai montrée n’est pas une liste de `
+              + `${etiquette(trouve.value.attendu)}. Redemande-la, puis dis-moi laquelle.`,
+          };
+        }
+        if (trouve.value.kind === 'HORS_LISTE') {
+          return {
+            kind: 'CLARIFY',
+            question:
+              `Je ne t’ai montré que ${String(trouve.value.taille)} `
+              + `${trouve.value.taille > 1 ? 'éléments' : 'élément'} — quelle position ?`,
+          };
+        }
+
+        input = { ...input, [cle]: trouve.value.element.id };
+        /* Ce qui sera AFFICHÉ dans la confirmation : le libellé montré, jamais
+           l'identifiant (ADR-063). */
+        lisible[cle] = trouve.value.element.libelle;
+      }
 
       if (anaphores.length > 0) {
         if (options.sessionId === undefined) {
@@ -635,7 +761,6 @@ export function createAssistant(deps: AssistantDeps): Assistant {
          Deux appels déterministes d'une fonction pure ne peuvent pas diverger :
          ce n'est pas un second registre, c'est le même calcul refait pour rien
          — et « pour rien » coûte quelques microsecondes. */
-      const lisible: Record<string, string> = {};
       for (const cle of temporels) {
         const brut = input[cle];
         if (typeof brut !== 'string') {
@@ -978,6 +1103,21 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           quand.length > 0
             ? `${result.value.verification.detail}\n  J’ai retenu : ${quand.join(', ')}.`
             : result.value.verification.detail;
+
+        /* ⚠ ON RETIENT CE QU'ON VIENT DE MONTRER — ADR-107.
+
+           C'est la moitié qui manquait à « marque la première comme faite » :
+           une liste affichée ne laissait aucune trace, donc « la première »
+           n'avait rien contre quoi se résoudre.
+
+           ⚠ ET L'ÉCHEC D'ÉCRITURE NE FAIT PAS ÉCHOUER L'ACTION. L'outil a
+           abouti et il est vérifié ; refuser de le dire parce qu'on n'a pas su
+           mémoriser l'affichage transformerait une commodité de conversation
+           en condition de succès. Au pire, le tour suivant DEMANDERA. */
+        if (options.sessionId !== undefined && deps.affichage !== null) {
+          const montres = enumerationDe(proposal.toolId, result.value.output);
+          await deps.affichage.retenir(options.sessionId, proposal.toolId, montres);
+        }
 
         return {
           kind: 'DONE',
