@@ -17,6 +17,7 @@ import type { IntentEngine, IntentProposal } from '../../src/core/intent/engine.
 import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/gateway.js';
 
 import { arretDouble } from '../helpers/arret.js';
+import { undoDouble } from '../helpers/undo.js';
 function intentOf(proposal: IntentProposal): IntentEngine {
   return { propose: () => proposal };
 }
@@ -112,6 +113,7 @@ describe('Assistant', () => {
     const calls: ToolCall[] = [];
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf({ kind: 'CLARIFY', question: 'Quoi retenir ?', understood: '' }),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -148,6 +150,7 @@ describe('Assistant', () => {
   it('dit ce qui manque plutôt que « je n\'ai pas compris »', async () => {
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf({
         kind: 'UNSUPPORTED',
         understood: 'un envoi de message',
@@ -191,6 +194,7 @@ describe('Assistant', () => {
     // ne protège de rien face à une injection qui a modifié ces valeurs.
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation([]),
       setGuardConfirmed: () => undefined,
@@ -235,6 +239,7 @@ describe('Assistant', () => {
     const calls: ToolCall[] = [];
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -283,6 +288,7 @@ describe('Assistant', () => {
     const calls: ToolCall[] = [];
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -321,6 +327,7 @@ describe('Assistant', () => {
     const states: boolean[] = [];
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -364,6 +371,7 @@ describe('Assistant', () => {
     const states: boolean[] = [];
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -406,6 +414,7 @@ describe('Assistant', () => {
   it('rapporte un refus de politique comme un refus, pas comme une erreur', async () => {
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -452,6 +461,7 @@ describe('Assistant', () => {
     const states: boolean[] = [];
     const assistant = createAssistant({
       arret: arretDouble(),
+      undo: undoDouble(),
       intent: intentOf({ ...TOOL_CALL, toolId: 'memory_add', userConfirms: true }),
       gateway: {
         register: () => ok(undefined),

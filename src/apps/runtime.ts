@@ -135,6 +135,7 @@ export function buildRuntime(
      instances lisent et écrivent la même ligne. */
   const arret = createControleDArret(createEmergencyHalt(db), ledger);
 
+
   const vault = createEnvSecretVault();
 
   const gateway = createToolGateway({
@@ -144,6 +145,15 @@ export function buildRuntime(
     ledger,
     verifier: createVerificationEngine(),
   });
+
+  /* CONSTRUIT AVANT L'ASSISTANT — ADR-105.
+
+     Il était fabriqué en ligne dans l'objet rendu, donc atteignable seulement
+     par `runtime.undo`, donc par le seul CLI. Le hisser ici lui donne DEUX
+     lecteurs — l'Assistant et le runtime — à partir d'UNE construction. Deux
+     constructions auraient donné deux moteurs sur la même base : rien de
+     faux, mais deux endroits où brancher les futures dépendances. */
+  const undo = createUndoEngine({ snapshots: createSnapshotStore(db), gateway });
 
   // La confirmation utilisateur est une propriété de la CONVERSATION : elle est
   // pilotée par la boucle, jamais devinée par un outil.
@@ -204,6 +214,10 @@ export function buildRuntime(
       file: createFileDeConfirmations(db),
       // ADR-104 — « Jarvis, stop » atteint enfin le bouton rouge.
       arret,
+      /* ADR-105 — « annule la dernière action » n'était atteignable que
+         depuis le CLI. Le moteur était branché à une seule surface, ce qui
+         est la même chose qu'une capacité absente vu du téléphone. */
+      undo,
       // ADR-077 : les dates sont calculées PAR LA BASE, jamais par le processus.
       temps: createResolveurTemporel(db),
       /* LE `TIER 1`, SI ET SEULEMENT SI UN MODÈLE LOCAL EST CONFIGURÉ — ADR-082.
@@ -219,7 +233,7 @@ export function buildRuntime(
          corriger, et le laisserait sans assistant du tout. */
       tier1: tier1Depuis(modeleLocal, gateway),
     }),
-    undo: createUndoEngine({ snapshots: createSnapshotStore(db), gateway }),
+    undo,
     file: createFileDeConfirmations(db),
     embeddingsAvailable: false,
     cloudEnabled: options.cloudEnabled ?? false,

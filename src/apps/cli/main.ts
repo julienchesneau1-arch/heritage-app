@@ -137,67 +137,18 @@ async function showInbox(runtime: Runtime): Promise<void> {
   }
 }
 
-/**
- * « Annule la dernière action. » — `docs/09 §2.1`, ADR-066.
- *
- * TROIS TEMPS, ET L'ORDRE EST LE SUJET : montrer, demander, agir.
- *
- * Annuler passe par le Policy Gate comme toute action. `memory_add` est `L2` ;
- * son inverse `memory_forget` est `L4`. **Défaire coûte donc plus cher que
- * faire**, et c'est l'humain qui paie la différence — pas le moteur en se
- * confirmant lui-même.
- */
-async function annulerDerniere(
-  runtime: Runtime,
-  ask: (question: string) => Promise<string>,
-): Promise<void> {
-  const apercu = await runtime.undo.previewLast();
-  if (!apercu.ok) {
-    stdout.write(`  Annulation indisponible : ${apercu.error.message}\n`);
-    return;
-  }
-  if (apercu.value === null) {
-    stdout.write('  Rien à annuler.\n');
-    return;
-  }
+/* ⚠ `annulerDerniere` A ÉTÉ SUPPRIMÉE D'ICI — ADR-105.
 
-  // Un empêchement se dit AVANT la question : demander un accord pour une
-  // action qu'on sait refusée fait perdre le temps de l'utilisateur et use la
-  // confirmation.
-  if (apercu.value.empechement !== null) {
-    stdout.write(`  Impossible d'annuler : ${apercu.value.empechement}.\n`);
-    return;
-  }
+   Elle portait tout le scénario `docs/09 §2.1` : aperçu, question, exécution.
+   C'était un SECOND registre du même fait — la première copie étant
+   l'Assistant, qui ne le portait pas encore. Le résultat était mesurable :
 
-  const quoi =
-    `${apercu.value.resource.kind} ${apercu.value.resource.id} ` +
-    `(par ${apercu.value.inverseToolId ?? '?'})`;
-  stdout.write(
-    `\n${confirmationPrompt('Annuler la dernière action ?', { cible: quoi })}\n`,
-  );
+       CLI        « annule la dernière action »  →  marchait
+       say()      la même phrase                  →  « capacité absente »
+       téléphone  rien du tout
 
-  const reponse = await ask('');
-  // Le refus est lu EN PREMIER (ADR-061) : « non » ne doit jamais tomber dans
-  // la branche « oui » par contenance.
-  if (readConfirmation(reponse) !== 'CONFIRM') {
-    stdout.write("  Annulation abandonnée. Rien n'a été défait.\n");
-    return;
-  }
-
-  const fait = await runtime.undo.undoLast({
-    mode: 'NORMAL',
-    cloudEnabled: runtime.cloudEnabled,
-    proactive: false,
-    // L'humain vient de dire oui, ici, sur cette cible précise.
-    userConfirmed: true,
-    surface: 'LOCALE',
-  });
-  if (!fait.ok) {
-    stdout.write(`  ${mark('FAILED')} ${fait.error.message}\n`);
-    return;
-  }
-  stdout.write(`  ${mark(fait.value.status)} ${fait.value.detail}\n`);
-}
+   Le scénario vit désormais dans `src/core/assistant.ts`, comme tout le reste,
+   et cette interface se contente d'afficher. */
 
 /**
  * LES INTENTIONS PRÉPARÉES AILLEURS — ADR-099.
@@ -273,6 +224,38 @@ async function confirmerEnAttente(
     const pris = await runtime.file.confirmer(demande.id);
     if (!pris.ok) {
       stdout.write(`  ${mark('FAILED')} ${pris.error.message}\n`);
+      continue;
+    }
+
+    /* ⚠ ON REND L'INTENTION À SON PROPRIÉTAIRE — ADR-105.
+
+       La file ne sait pas exécuter, et c'est ce qui la rend sûre. Elle sait
+       désormais à QUI rendre ce qu'elle garde :
+
+           OUTIL       → gateway.invoke      (le propriétaire est l'outil)
+           ANNULATION  → undo.undoOperation  (le propriétaire est l'Undo Engine)
+
+       Ce n'est pas un second chemin de rejeu : `undoOperation` appelle
+       `gateway.invoke` en interne, donc le Policy Gate est traversé
+       exactement une fois dans les deux cas. Ce qui change est la
+       COMPTABILITÉ — `undoLast` marque aussi la capture annulée, et la file
+       ne saurait pas le faire. Sans ce geste, la capture resterait annulable
+       et l'utilisateur se la verrait reproposer. */
+    if (pris.value.genre === 'ANNULATION') {
+      const defait = await runtime.undo.undoOperation(pris.value.operationId, {
+        mode: 'NORMAL',
+        cloudEnabled: runtime.cloudEnabled,
+        proactive: false,
+        // L'humain vient de dire oui, ici, devant la machine, sur CETTE cible.
+        userConfirmed: true,
+        surface: 'LOCALE',
+      });
+      stdout.write(
+        defait.ok
+          ? `  ${mark(defait.value.status)} Annulé — ${defait.value.resource.kind} `
+            + `${defait.value.resource.id}\n`
+          : `  ${mark('FAILED')} ${defait.error.message}\n`,
+      );
       continue;
     }
 
@@ -361,6 +344,15 @@ function show(reply: AssistantReply): void {
         `  Tape « /confirmer » sur cette machine — il te reste `
           + `${String(reply.minutesRestantes)} min.\n`,
       );
+      return;
+
+    case 'ANNULE':
+      /* ⚠ ON NOMME CE QUI A ÉTÉ DÉFAIT, et le statut vient du Verification
+         Engine. « C'est annulé » sans vérification serait le succès non
+         vérifié que `CLAUDE.md` interdit — et sur une annulation, croire à
+         tort que l'état est revenu en arrière est pire qu'ailleurs. */
+      stdout.write(`  ${mark(reply.status)} Annulé — ${reply.cible}\n`);
+      stdout.write(`  ${reply.detail}\n`);
       return;
 
     case 'ARRET':
@@ -555,15 +547,24 @@ async function main(): Promise<void> {
         await showAudit(runtime.value);
         continue;
       }
-      if (line === '/annule' || /^annule la derni[eè]re action/iu.test(line)) {
-        /* « Annule la dernière action. » est la formulation de `docs/09 §2.1`.
-           Elle est reconnue en toutes lettres autant que par la commande : le
-           scénario du document est écrit en français, pas en slash. */
-        await annulerDerniere(runtime.value, async (q: string) => {
-          const answer = await nextLine(`\n  ${q}\n  > `);
-          // Fin d'entrée pendant une confirmation : ce n'est pas un oui.
-          return answer ?? '';
-        });
+      if (line === '/annule') {
+        /* ⚠ LA COMMANDE N'EST QU'UN RACCOURCI — ADR-105.
+
+           Elle portait sa PROPRE reconnaissance (`/^annule la derni[eè]re
+           action/iu`) et sa propre chaîne aperçu → question → exécution. Le
+           résultat mesuré sur le banc des trente actions : la phrase marchait
+           dans le CLI et rendait « capacité absente » par `assistant.say()`,
+           donc depuis le téléphone.
+
+           Elle traverse désormais la MÊME boucle que tout le reste. Une
+           surface ne décide de rien ; elle affiche ce que l'Assistant a
+           décidé. */
+        await handleText(
+          runtime.value,
+          session.value.id,
+          'annule la dernière action',
+          async (q: string) => (await nextLine(`\n  ${q}\n  > `)) ?? '',
+        );
         continue;
       }
       if (line === '/confirmer' || line === '/attente') {

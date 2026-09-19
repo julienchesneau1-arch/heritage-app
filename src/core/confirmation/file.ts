@@ -81,8 +81,38 @@ import type { Db } from '../db/client.js';
  */
 export const MINUTES_AVANT_EXPIRATION = 30;
 
+/**
+ * CE QUE LA FILE PORTE — ADR-105.
+ *
+ * ⚠ LA FILE NE GAGNE AUCUN POUVOIR D'EXÉCUTION EN GAGNANT CE CHAMP. Elle ne
+ * sait toujours rien exécuter ; elle sait désormais **à qui rendre** ce
+ * qu'elle garde.
+ *
+ * ```text
+ * OUTIL       l'appelant rejoue gateway.invoke
+ * ANNULATION  l'appelant rejoue undo.undoOperation
+ * ```
+ *
+ * L'autre option était de donner à ce module une étape « marquer la capture
+ * annulée » après exécution. C'est précisément ce qu'on refuse : sa sûreté
+ * vient de ce qu'il n'a **aucun moyen** d'exécuter quoi que ce soit, et un
+ * test le vérifie par l'absence d'import.
+ */
+export const GenreDIntention = z.enum(['OUTIL', 'ANNULATION']);
+export type GenreDIntention = z.infer<typeof GenreDIntention>;
+
 export const DemandeEnAttente = z.object({
+  /**
+   * ⚠ POUR UNE `ANNULATION`, C'EST L'OPÉRATION À DÉFAIRE.
+   *
+   * Et c'est ce qui rend la confirmation différée sûre : la file porte une
+   * opération **nommée**, jamais « la dernière ». « La dernière » change avec
+   * le temps — entre la demande sur le téléphone et la confirmation devant la
+   * machine, une autre action peut avoir eu lieu, et on défferait alors autre
+   * chose que ce qui a été montré à l'écran.
+   */
   operationId: z.string().min(1),
+  genre: GenreDIntention,
   toolId: z.string().min(1),
   input: z.record(z.string(), z.unknown()),
   /**
@@ -112,6 +142,7 @@ export interface EnAttente extends DemandeEnAttente {
 const Ligne = z.object({
   id: z.string().min(1),
   operation_id: z.string().min(1),
+  genre: GenreDIntention,
   tool_id: z.string().min(1),
   input: z.record(z.string(), z.unknown()),
   provenance: z.record(z.string(), Provenance),
@@ -161,7 +192,7 @@ export interface FileDeConfirmations {
    corrections étaient possibles — accepter une chaîne et la convertir en
    TypeScript, ou demander à la base le type qu'on veut. On demande à la base :
    une conversion côté client serait un second endroit où le type se décide. */
-const COLONNES = `id::text AS id, operation_id, tool_id, input, provenance,
+const COLONNES = `id::text AS id, operation_id, genre, tool_id, input, provenance,
        resume, demandee_de,
        GREATEST(0, EXTRACT(EPOCH FROM (expires_at - clock_timestamp())) / 60)
          ::double precision AS minutes_restantes`;
@@ -176,6 +207,7 @@ function versEnAttente(brut: unknown): Result<EnAttente> {
   return ok({
     id: lu.data.id,
     operationId: lu.data.operation_id,
+    genre: lu.data.genre,
     toolId: lu.data.tool_id,
     input: lu.data.input,
     provenance: lu.data.provenance,
@@ -200,13 +232,14 @@ export function createFileDeConfirmations(db: Db): FileDeConfirmations {
          n'est pas celle qui la relira. */
       const insere = await db.query(
         `INSERT INTO confirmations_en_attente
-           (operation_id, tool_id, input, provenance, resume, demandee_de, expires_at)
-         VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6,
-                 clock_timestamp() + make_interval(mins => $7::int))
+           (operation_id, genre, tool_id, input, provenance, resume, demandee_de, expires_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7,
+                 clock_timestamp() + make_interval(mins => $8::int))
          ON CONFLICT (operation_id) DO NOTHING
          RETURNING ${COLONNES}`,
         [
           valide.data.operationId,
+          valide.data.genre,
           valide.data.toolId,
           JSON.stringify(valide.data.input),
           JSON.stringify(valide.data.provenance),

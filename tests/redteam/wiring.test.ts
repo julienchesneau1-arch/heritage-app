@@ -415,18 +415,34 @@ describe('RED TEAM — code mort en production', () => {
        même à plus grande échelle — un Undo Engine complet, éprouvé, et qu'aucune
        commande n'appelle.
 
-       On vérifie donc les deux bouts : le runtime l'EXPOSE, et le CLI l'APPELLE.
-       Un test qui ne regarderait que le premier laisserait passer exactement le
-       sabotage qui a rendu la ligne ci-dessus verte à tort. */
+       On vérifie donc les deux bouts : le runtime l'EXPOSE, et une surface
+       l'ATTEINT. Un test qui ne regarderait que le premier laisserait passer
+       exactement le sabotage qui a rendu la ligne ci-dessus verte à tort.
+
+       ⚠ CE TEST A CHANGÉ DE BOUT — ADR-105, et le changement EST l'ADR.
+
+       Il vérifiait que le CLI appelle `previewLast()` et `undoLast()`. C'était
+       vrai, et c'était précisément le défaut : le moteur n'était atteint que
+       par LE CLI. Depuis `assistant.say()` — donc depuis le téléphone — la
+       même phrase rendait « capacité absente ».
+
+       Un moteur branché à une seule surface est, vu des autres, un moteur
+       absent. On vérifie donc qu'il est atteint là où TOUTES les surfaces
+       passent : l'Assistant. */
     const runtime = readFileSync(join(ROOT, 'src/apps/runtime.ts'), 'utf8');
     expect(runtime).toContain('createUndoEngine(');
+    expect(runtime, 'l’Assistant doit le recevoir').toContain('undo,');
 
+    const assistant = readFileSync(join(ROOT, 'src/core/assistant.ts'), 'utf8');
+    expect(assistant).toContain('deps.undo.previewLast()');
+    expect(assistant).toContain('deps.undo.undoOperation(');
+
+    // Et la capacité est ANNONCÉE sur les deux surfaces : une capacité que
+    // l'interface ne cite pas n'existe que pour qui a lu le code (ADR-094).
     const cli = readFileSync(join(ROOT, 'src/apps/cli/main.ts'), 'utf8');
-    expect(cli).toContain('runtime.undo.previewLast()');
-    expect(cli).toContain('runtime.undo.undoLast(');
-    // Et la commande est ANNONCÉE : une capacité que l'aide ne cite pas
-    // n'existe que pour qui a lu le code.
     expect(cli).toContain('/annule');
+    const ui = readFileSync(join(ROOT, 'src/apps/server/ui.ts'), 'utf8');
+    expect(ui).toContain('data-phrase="annule la dernière action"');
   });
 
   it('la boucle réelle RÉSOUT les référents — et le moteur reste pur', () => {

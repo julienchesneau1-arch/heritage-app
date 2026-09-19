@@ -13,6 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { sansCommentaires } from '../helpers/source.js';
 import { databaseAvailable, ownerDb } from '../helpers/db.js';
 import {
   createFileDeConfirmations,
@@ -120,10 +121,49 @@ describe('le module de file n’a aucun moyen d’exécuter', () => {
        surface locale. Le jour où ce module importerait la passerelle, il
        pourrait exécuter ce qu'il a lui-même enregistré, et la séparation qui
        rend la file sûre disparaîtrait. */
-    const src = readFileSync('src/core/confirmation/file.ts', 'utf8');
-    for (const interdit of ['tools/gateway', 'ToolGateway', 'invoke(']) {
+    /* ⚠ LA LISTE S'EST ALLONGÉE AVEC ADR-105, et c'est le point de cette ADR.
+
+       La file a gagné un champ `genre` — elle sait désormais à QUI rendre ce
+       qu'elle garde. La tentation était de lui faire porter l'étape
+       manquante : « exécuter l'outil inverse, PUIS marquer la capture
+       annulée ». Ce serait lui donner un geste d'exécution, c'est-à-dire
+       détruire la propriété que ce test tient.
+
+       Elle ne connaît donc pas davantage l'Undo Engine que la passerelle. */
+    /* ⚠ LES COMMENTAIRES SONT RETIRÉS D'ABORD — ADR-105, et c'est la
+       QUATRIÈME fois qu'une garde textuelle mord la prose qui l'explique.
+       Le dépouilleur est partagé, avec son propre contrôle négatif : trois
+       copies auraient fini par diverger. */
+    const src = sansCommentaires(
+      readFileSync('src/core/confirmation/file.ts', 'utf8'),
+    );
+    for (const interdit of [
+      'tools/gateway',
+      'ToolGateway',
+      'invoke(',
+      'undo/engine',
+      'UndoEngine',
+      'undoOperation',
+      'markUndone',
+    ]) {
       expect(src, `la file ne doit pas connaître « ${interdit} »`).not.toContain(interdit);
     }
+  });
+
+  it('⚠ et le GENRE est un champ TYPÉ, pas une chaîne libre — ADR-105', () => {
+    /* Même discipline que `motif: 'SURFACE_DISTANTE'` (ADR-099) : une décision
+       de routage qui se lirait sur du texte libre serait changée en silence par
+       une faute de frappe, et l'intention partirait au mauvais propriétaire.
+
+       La base le refuse aussi — `CHECK (genre IN ('OUTIL','ANNULATION'))` —
+       parce qu'un schéma Zod ne protège que ce qui passe par lui. */
+    const src = readFileSync('src/core/confirmation/file.ts', 'utf8');
+    expect(src).toContain("z.enum(['OUTIL', 'ANNULATION'])");
+    const migration = readFileSync(
+      'infrastructure/db/migrations/0016_file_genre.up.sql',
+      'utf8',
+    );
+    expect(migration).toContain("CHECK (genre IN ('OUTIL', 'ANNULATION'))");
   });
 
   it('le confirmateur, lui, REJOUE la chaîne — sur la surface LOCALE', () => {
@@ -134,6 +174,12 @@ describe('le module de file n’a aucun moyen d’exécuter', () => {
     expect(cli).toContain('runtime.gateway.invoke');
     expect(cli).toContain("surface: 'LOCALE'");
     expect(cli).toContain('/confirmer');
+    /* ADR-105 — et le SECOND propriétaire existe lui aussi. Sans cette ligne,
+       une intention d'annulation partirait par `gateway.invoke` : l'outil
+       inverse s'exécuterait, la capture resterait annulable, et Jarvis
+       reproposerait d'annuler ce qui l'a déjà été. */
+    expect(cli).toContain('runtime.undo.undoOperation');
+    expect(cli).toContain("genre === 'ANNULATION'");
   });
 });
 
@@ -155,6 +201,8 @@ describe.runIf(enabled)('la file, sur la base', () => {
 
   const demandeType = (cle: string) => ({
     operationId: cle,
+    // ADR-105 — un appel d'outil ordinaire, rejoué par `gateway.invoke`.
+    genre: 'OUTIL' as const,
     toolId: 'note_delete',
     input: { noteId: '00000000-0000-0000-0000-000000000001' },
     provenance: { noteId: 'USER' as const },

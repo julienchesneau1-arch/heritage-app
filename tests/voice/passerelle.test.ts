@@ -22,6 +22,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
+import { sansCommentaires } from '../helpers/source.js';
 import {
   creerPasserelleAudio,
   licenceEstPermissive,
@@ -106,9 +107,6 @@ function config(sur: Partial<ConfigVoix> = {}): ConfigVoix {
   };
 }
 
-function sansCommentaires(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
-}
 
 /* ====================================================================== *
  * 1. LA PORTE DE SORTIE — changer de moteur par CONFIGURATION SEULE

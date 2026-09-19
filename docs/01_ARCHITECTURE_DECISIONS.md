@@ -9262,3 +9262,165 @@ travail qu'on lui demande.
 La première sortie continue — voix ou flux. C'est elle qui rendra
 « interrompre » différent de « ne plus rien commencer », et qui dira si
 `EngageResult` doit porter un troisième compteur.
+
+---
+
+## ADR-105 — La file rend l'intention à son propriétaire
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** `docs/26 §4.20`, `docs/09 §2.1`, ADR-066, ADR-099, ADR-063, ADR-104
+**Étend :** ADR-099
+
+### 1. L'arbitrage que `docs/26 §4.20` laissait ouvert
+
+« Annule la dernière action » marchait dans le CLI et rendait « capacité
+absente » partout ailleurs. La voie naturelle était la file d'ADR-099 — mais le
+rejeu s'arrêtait à mi-chemin, parce qu'`undoLast` fait **deux** choses :
+
+```text
+1. gateway.invoke(appel inverse)     ← ce que la file sait rejouer
+2. snapshots.markUndone(capture)     ← ce qu'elle ne sait pas faire
+```
+
+Deux issues étaient possibles. **On retient B, et le refus de A est le cœur de
+cette ADR.**
+
+| | |
+|---|---|
+| **A.** la file porte une étape « marquer la capture » | ⚠ **refusée** |
+| **B.** `/confirmer` rend l'intention à son propriétaire | ✅ retenue |
+
+A donnerait à la file un geste d'**exécution**. Or sa sûreté ne vient pas d'une
+promesse : elle vient de ce qu'elle **n'a aucun moyen** d'exécuter quoi que ce
+soit — un test le tient par l'absence d'import. Lui donner ce geste, c'est la
+transformer en moteur, et une ligne de file redeviendrait ce qu'ADR-099
+interdisait : une autorisation.
+
+### 2. B n'est PAS un second chemin de rejeu — et c'était l'objection
+
+Formulé en « `/confirmer` appelle tantôt la passerelle, tantôt l'Undo Engine »,
+B ressemble à un contournement. Formulé correctement, il n'en est pas un :
+
+> `/confirmer` ne rejoue pas *un appel d'outil*. Il rejoue **une intention**, et
+> une intention a un **propriétaire**.
+
+```text
+OUTIL       → gateway.invoke         le propriétaire est l'outil
+ANNULATION  → undo.undoOperation     le propriétaire est l'Undo Engine
+```
+
+**Le Policy Gate est traversé exactement une fois dans les deux cas** :
+`undoOperation` appelle `gateway.invoke` en interne. Rien n'est contourné ; ce
+qui change est la **comptabilité**, que seul le propriétaire sait tenir.
+
+Le genre est un **champ typé** — `z.enum`, plus un `CHECK` en base. Même
+discipline que `motif: 'SURFACE_DISTANTE'` (ADR-099) : une décision de routage
+qui se lirait sur du texte libre partirait au mauvais propriétaire à la
+première faute de frappe.
+
+### 3. ⚠⚠ Ce qui est défait est l'opération NOMMÉE, jamais « la dernière »
+
+C'est la propriété la moins évidente et la plus importante. Entre la question
+et le oui, **le monde bouge** — c'est même le cas *normal* quand la demande
+vient du téléphone et que le oui est donné devant le Mac, plus tard :
+
+```text
+t0   « annule »        → « annuler la note du carreleur ? »
+t1   une autre action a lieu
+t2   « oui »           → si on relisait « la dernière », on défferait
+                          AUTRE CHOSE que ce qui a été montré
+```
+
+La confirmation ne relit donc **aucun** aperçu : elle rejoue l'identité qu'elle
+a reçue, par `undoOperation(id)`. Un sabotage l'éprouve — en rétablissant la
+relecture, le test défait `op-toute-fraiche` au lieu d'`op-ancienne`.
+
+C'est aussi ce que la migration inscrit dans la base : pour une `ANNULATION`,
+`operation_id` désigne **l'opération à défaire**. L'identité de l'annulation,
+elle, reste dérivée (`forUndo`), donc stable : un rejeu ne peut pas produire un
+second effet.
+
+### 4. La phrase quitte le CLI
+
+`src/apps/cli/main.ts` portait `/^annule la derni[eè]re action/iu` **et** toute
+la chaîne aperçu → question → exécution. C'était un second registre du scénario
+`docs/09 §2.1`, et le résultat était mesurable sur le banc des trente actions.
+
+Elle vit désormais dans `src/core/undo/parole.ts`, l'Assistant l'orchestre, et
+`/annule` n'est plus qu'un raccourci de frappe qui traverse la même boucle.
+**Une surface ne décide de rien.**
+
+La garde est celle d'ADR-104, et elle porte ici un risque plus concret :
+
+```text
+annule · annule ça · annule la dernière action       → ANNULATION
+annule la tâche du plombier · annule le rappel de…   → l'outil nommé
+```
+
+⚠ **Et le sens de l'erreur est INVERSE de celui de l'arrêt d'urgence.** Là-bas,
+en cas de doute on arrête, parce qu'arrêter ne casse rien. Ici, en cas de doute
+on **ne défait rien** : mieux vaut demander que défaire la mauvaise chose.
+
+### 5. Le téléphone, et ce qu'il n'obtient pas
+
+Un bouton l'annonce (ADR-094), et il **écrit la phrase** dans la boucle
+ordinaire — aucune route dédiée, aucun pouvoir que la parole ne donne pas déjà.
+Le Policy Gate décide comme pour n'importe quelle phrase, mise en file
+comprise.
+
+⚠ **On ne devine pas le refus.** L'Assistant tente, et c'est le Gate qui
+tranche — anticiper « distante donc en file » porterait une seconde décision de
+politique, et le jour où elle divergerait de Cedar, aucune des deux ne ferait
+autorité (ADR-041). Un test le prouve en sens inverse : la même surface
+distante, avec un moteur qui réussit, **exécute**.
+
+Vérifié en exécution, pas seulement en test :
+
+```text
+téléphone  « note … »                        → note créée
+téléphone  « annule la dernière action »     → EN ATTENTE (L4, surface distante)
+Mac        /confirmer → oui                  → ✓ Annulé — note 68f3a286…
+téléphone  « annule la dernière action »     → propose une AUTRE note
+```
+
+La dernière ligne est celle qui compte : la capture a bien été **marquée**.
+C'est exactement ce que l'option A aurait cassé.
+
+### 6. Ce que l'usage a corrigé, encore une fois
+
+La première rédaction posait l'identifiant d'opération dans la question :
+
+```text
+annuler : c639cf86-65fe-4e5f-abce-9a34fec61bb4
+```
+
+ADR-063 dit qu'on ne confirme pas ce qu'on n'a pas vu. Un oui donné sur une
+chaîne hexadécimale n'est pas un consentement, c'est un réflexe. La question
+nomme désormais la chose et l'outil qui la défera — trouvé en **utilisant**
+Jarvis, pas en le relisant.
+
+### 7. Le dépouilleur de commentaires, consolidé
+
+La garde « la file ne connaît pas l'Undo Engine » a mordu la prose qui
+l'explique. **Quatrième fois** (ADR-096, ADR-098, ADR-102). Deux copies de
+`sansCommentaires` existaient déjà ; la troisième allait naître.
+
+Elle vit maintenant dans `tests/helpers/source.ts`, avec son propre contrôle
+négatif — et ce contrôle n'est pas décoratif : si le dépouilleur rendait du
+vide, **trois** gardes de sécurité deviendraient vertes d'un coup, sans qu'un
+seul test ne rougisse.
+
+### Ce que cette ADR ne résout pas
+
+- **`task_complete` reste non annulable.** Sa capture est un `STATE_RESTORE`, et
+  aucun outil de restauration n'est enregistré. Jarvis le **nomme** au lieu de
+  demander un oui inutile — mais la capacité manque toujours
+  (`docs/26 §4.10`).
+- **La file ne porte que deux genres.** Un troisième — une action composée, par
+  exemple — reposerait la même question, et il faudra y répondre par un
+  propriétaire, jamais par une étape d'exécution de plus dans la file.
+
+### Condition de révision
+
+Le premier genre supplémentaire. Et le premier usage réel où trente minutes
+d'expiration s'avèrent trop courtes pour aller du téléphone au bureau.

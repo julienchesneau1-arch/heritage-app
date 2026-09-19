@@ -36,6 +36,7 @@ import type { Resolution } from '../../src/core/context/resolver.js';
 import type { RegisteredTool } from '../../src/core/tools/contract.js';
 import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/gateway.js';
 import { arretDouble } from '../helpers/arret.js';
+import { undoDouble } from '../helpers/undo.js';
 
 const OUTILS = [
   {
@@ -135,6 +136,8 @@ function assistantAvec(
   const deps: AssistantDeps = {
     // ADR-104 — requis et non nullable : un assemblage inarrêtable n'existe pas.
     arret: arretDouble(),
+    // ADR-105 — même règle : un assemblage qui ne peut pas défaire est diminué.
+    undo: undoDouble(),
     intent: TIER0_MUET,
     gateway: passerelle(calls),
     setGuardConfirmed: () => undefined,

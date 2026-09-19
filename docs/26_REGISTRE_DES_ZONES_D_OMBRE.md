@@ -1723,7 +1723,7 @@ trente tours sont un **échantillon**, pas une cible.
 
 ---
 
-### 4.20 « Annule » n'atteint pas le téléphone — et la file ne sait pas le porter
+### 4.20 « Annule » n'atteignait pas le téléphone — **LEVÉE** (ADR-105)
 
 **Ouverte par ADR-104**, en cherchant la prochaine capacité présente mais
 inatteignable. C'est **exactement la forme du défaut qu'ADR-104 vient de
@@ -1769,18 +1769,30 @@ fausse et un utilisateur perdu.
 | **A.** La file porte une étape « marquer la capture » après exécution | donne une seconde responsabilité à un module tenu, depuis ADR-099, **incapable d'exécuter quoi que ce soit** — et c'est cette incapacité qui le rend sûr |
 | **B.** `/confirmer` route les entrées d'annulation vers `undo.undoOperation` | ouvre un **second chemin de rejeu** dans le système, là où il n'y en a qu'un aujourd'hui |
 
-#### ⚠ Pourquoi la décision n'est pas prise ici
+#### LEVÉE — ADR-105 tranche pour **B**, et le refus de A est le sujet
 
-ADR-099 porte la mention **« arbitré par Julien »** : la file est née d'un
-renversement de décision ratifiée qu'il a tranché lui-même. Élargir ce qu'elle
-sait faire, ou lui ajouter un chemin de rejeu, modifie la forme de cet
-arbitrage — pas son application.
+A donnerait à la file un geste d'**exécution**. Sa sûreté ne vient pas d'une
+promesse : elle vient de ce qu'elle n'a **aucun moyen** d'exécuter quoi que ce
+soit, et un test le tient par l'absence d'import. Lui donner ce geste, c'est la
+transformer en moteur.
 
-> Un doute exposé coûte moins cher qu'une décision implicite enterrée dans le
-> code. `CLAUDE.md`.
+Et B n'est pas un second chemin de rejeu, une fois formulé correctement :
 
-**Condition de levée :** l'arbitrage A ou B, puis le câblage. Le reste —
-reconnaissance de la phrase, aperçu, file — est du travail ordinaire.
+> `/confirmer` ne rejoue pas *un appel d'outil*. Il rejoue **une intention**, et
+> une intention a un **propriétaire**.
+
+Le Policy Gate est traversé exactement une fois dans les deux cas —
+`undoOperation` appelle `gateway.invoke` en interne. Ce qui change est la
+comptabilité, que seul le propriétaire sait tenir.
+
+⚠ **Et la file porte une opération NOMMÉE, jamais « la dernière ».** Entre la
+demande sur le téléphone et le oui devant le Mac, une autre action peut avoir
+eu lieu : relire « la dernière » au moment du oui défferait autre chose que ce
+qui a été montré. Un sabotage l'éprouve.
+
+Vérifié en exécution : téléphone → file → `/confirmer` → annulation vérifiée,
+et la capture est bien **marquée** — la deuxième demande propose une autre
+note. C'est exactement ce que l'option A aurait cassé.
 
 ---
 

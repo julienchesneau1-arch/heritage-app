@@ -21,7 +21,7 @@
  * redérive la proposition, et on l'exécute confirmée. Aucune session à stocker,
  * donc aucune session à détourner.
  */
-import { mint, type OperationIdentity } from './tools/identity.js';
+import { fromClient, mint, type OperationIdentity } from './tools/identity.js';
 import type { IntentEngine } from './intent/engine.js';
 import { reconnaitre } from './temps/expression.js';
 import type { ResolveurTemporel } from './temps/resolution.js';
@@ -36,6 +36,9 @@ import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
 import type { ControleDArret } from './safety/controle.js';
 import { estUneParoleDArret } from './safety/parole-d-arret.js';
+import { estUneDemandeDAnnulation } from './undo/parole.js';
+import type { UndoEngine, UndoOutcome } from './undo/engine.js';
+import type { Result } from './types/result.js';
 import type { Mode, Surface, VerificationStatus } from './types/domain.js';
 
 export type AssistantReply =
@@ -86,6 +89,23 @@ export type AssistantReply =
       readonly resume: string;
       readonly minutesRestantes: number;
       readonly reason: string;
+    }
+  | {
+      /**
+       * LA DERNIÈRE ACTION A ÉTÉ DÉFAITE — `docs/09 §2.1`, ADR-105.
+       *
+       * Pas un `DONE` : un `DONE` porte l'outil que l'utilisateur a demandé,
+       * et ici il en a demandé **l'inverse d'un autre**. Afficher
+       * « ✓ note_create » après une annulation serait exactement à l'envers.
+       *
+       * `status` vient du Verification Engine, jamais d'ici : une annulation
+       * non vérifiée n'est pas une annulation (`CLAUDE.md`, règle 3).
+       */
+      readonly kind: 'ANNULE';
+      readonly status: VerificationStatus;
+      readonly detail: string;
+      /** Ce qui a été remis en état, pour que la phrase soit concrète. */
+      readonly cible: string;
     }
   | {
       /**
@@ -234,6 +254,18 @@ export interface AssistantDeps {
    * câblé à rien — c'est-à-dire exactement l'état que cette ADR corrige.
    */
   readonly arret: ControleDArret;
+  /**
+   * LE MOTEUR D'ANNULATION — ADR-105, `docs/09 §2.1`.
+   *
+   * ⚠ REQUIS ET NON NULLABLE, pour la raison exacte d'`arret`. « Annule la
+   * dernière action » est une promesse de `QUICKSTART` et du pack ; un
+   * assemblage qui ne peut pas défaire n'est pas un assemblage normal, c'est
+   * un assemblage diminué — et un champ optionnel est un champ qu'on oublie.
+   *
+   * Il vivait jusqu'ici UNIQUEMENT dans le CLI, ce qui revenait au même : la
+   * capacité existait, et une seule surface l'atteignait.
+   */
+  readonly undo: UndoEngine;
 }
 
 /**
@@ -244,6 +276,164 @@ export interface AssistantDeps {
  * connecté, où l'on verra si une heure est la bonne valeur pour Julien.
  */
 export const DUREE_PAR_DEFAUT_MINUTES = 60;
+
+/**
+ * « Annule la dernière action. » — ADR-105.
+ *
+ * ⚠⚠ CE QUI EST DÉFAIT EST UNE OPÉRATION **NOMMÉE**, JAMAIS « LA DERNIÈRE ».
+ *
+ * C'est la propriété qui rend la confirmation sûre, et elle n'est pas
+ * évidente. Entre la question et la réponse, le monde bouge :
+ *
+ * ```text
+ * t0   « annule »                    → « annuler la note du carreleur ? »
+ * t1   (une autre action a lieu, ou le téléphone attend le passage au Mac)
+ * t2   « oui »                       → si on relisait « la dernière », on
+ *                                      défferait AUTRE CHOSE que ce qui a
+ *                                      été montré à l'écran
+ * ```
+ *
+ * On ne confirme pas ce qu'on n'a pas vu (ADR-063). La question porte donc
+ * l'identité de l'opération visée, et la confirmation la rejoue **telle
+ * quelle** : `undoOperation(id)`, jamais `undoLast()`.
+ *
+ * ⚠ ET LA MISE EN FILE SUIT LE MÊME CHEMIN QUE TOUT LE RESTE — ADR-099.
+ * On n'anticipe pas le refus : on tente, et c'est le Policy Gate qui tranche.
+ * Anticiper reviendrait à porter une seconde décision de politique dans
+ * l'Assistant, et le jour où les deux divergeraient, aucune ne ferait
+ * autorité (ADR-041).
+ */
+async function annuler(
+  deps: AssistantDeps,
+  options: SayOptions,
+): Promise<AssistantReply> {
+  const confirm = options.confirm === true;
+  const contexte = {
+    mode: options.mode ?? 'NORMAL',
+    cloudEnabled: deps.cloudEnabled,
+    proactive: false,
+    userConfirmed: confirm,
+    /* ADR-090 — transmise telle quelle. L'inverse d'un outil est souvent PLUS
+       strict que lui (`memory_add` est L2, son inverse L4) : une annulation
+       demandée à distance est exactement le cas que la règle vise. */
+    surface: options.surface,
+  } as const;
+
+  /* CHEMIN DE CONFIRMATION : l'identité est celle qu'on a MONTRÉE. Aucun
+     aperçu n'est relu ici — le relire rouvrirait la fenêtre décrite ci-dessus. */
+  const vise =
+    confirm && options.operationId !== undefined ? String(options.operationId) : null;
+
+  if (vise !== null) {
+    const fait = await deps.undo.undoOperation(vise, contexte);
+    return versReponseDAnnulation(fait, vise, vise, deps, options);
+  }
+
+  const apercu = await deps.undo.previewLast();
+  if (!apercu.ok) return { kind: 'ERROR', message: apercu.error.message };
+
+  if (apercu.value === null) {
+    /* « Rien à annuler » est une RÉPONSE, pas une erreur. C'est aussi la
+       seule information utile : l'utilisateur croyait avoir fait quelque
+       chose. */
+    return {
+      kind: 'CLARIFY',
+      question: 'Je n’ai rien à annuler — aucune action récente n’est défaisable.',
+    };
+  }
+
+  if (apercu.value.empechement !== null) {
+    /* UN EMPÊCHEMENT SE DIT AVANT LA QUESTION. Demander un accord pour une
+       action qu'on sait refusée fait perdre du temps ET use la confirmation :
+       quelqu'un qui voit ses « oui » ne rien produire finit par les donner
+       sans lire. */
+    return {
+      kind: 'UNSUPPORTED',
+      understood: 'que tu veux annuler la dernière action',
+      missing: `la possibilité de la défaire : ${apercu.value.empechement}.`,
+    };
+  }
+
+  /* ⚠ CE QUE L'UTILISATEUR LIRA — ADR-063 : « on ne confirme pas ce qu'on n'a
+     pas vu ». La première rédaction posait l'identifiant d'opération dans la
+     question :
+
+         annuler : c639cf86-65fe-4e5f-abce-9a34fec61bb4
+
+     C'est un oui donné sur une chaîne hexadécimale. La question doit nommer la
+     CHOSE — « note », « tâche » — et l'outil qui la défera. */
+  const libelle =
+    `${apercu.value.resource.kind} ${apercu.value.resource.id}`
+    + ` (par ${apercu.value.inverseToolId ?? 'un outil inverse'})`;
+
+  const fait = await deps.undo.undoOperation(apercu.value.operationId, contexte);
+  return versReponseDAnnulation(fait, apercu.value.operationId, libelle, deps, options);
+}
+
+async function versReponseDAnnulation(
+  fait: Result<UndoOutcome>,
+  operationVisee: string,
+  /** Ce que l'utilisateur LIRA. Jamais un identifiant seul (ADR-063). */
+  libelle: string,
+  deps: AssistantDeps,
+  options: SayOptions,
+): Promise<AssistantReply> {
+  if (fait.ok) {
+    return {
+      kind: 'ANNULE',
+      /* Le statut vient du Verification Engine, au travers de l'Undo Engine.
+         Aucune ligne de ce fichier ne le fabrique — une annulation non
+         vérifiée n'est pas une annulation. */
+      status: fait.value.status,
+      detail: fait.value.detail,
+      cible: `${fait.value.resource.kind} ${fait.value.resource.id}`,
+    };
+  }
+
+  if (fait.error.kind === 'CONFIRMATION_REQUIRED') {
+    return {
+      kind: 'CONFIRM',
+      /* ⚠ L'IDENTITÉ RENDUE EST CELLE DE L'OPÉRATION À DÉFAIRE. C'est elle
+         qui reviendra au tour suivant, et c'est elle qui sera défaite — pas
+         « la dernière » telle qu'elle sera à ce moment-là. */
+      operationId: fromClient(operationVisee),
+      reason: fait.error.message,
+      values: { annuler: libelle },
+    };
+  }
+
+  if (fait.error.kind === 'POLICY_DENIED') {
+    const motif = fait.error.details?.['motif'];
+    if (motif === 'SURFACE_DISTANTE' && deps.file !== null) {
+      const mis = await deps.file.mettreEnFile({
+        operationId: operationVisee,
+        /* LE GENRE EST CE QUI PERMET DE LA RENDRE À SON PROPRIÉTAIRE.
+           `undoLast` fait deux choses — invoquer l'outil inverse, puis marquer
+           la capture annulée. La file ne sait rejouer que la première ; c'est
+           l'Undo Engine qui possède les deux, et `/confirmer` la lui rend. */
+        genre: 'ANNULATION',
+        /* Informatif : ce qui sera réellement exécuté. La file ne s'en sert
+           pas pour décider — le genre le fait — mais `/audit` et l'écran de
+           confirmation doivent pouvoir le nommer. */
+        toolId: 'undo',
+        input: {},
+        provenance: {},
+        resume: `annuler — ${libelle}`,
+        demandeeDe: options.surface,
+      });
+      if (!mis.ok) return { kind: 'ERROR', message: mis.error.message };
+      return {
+        kind: 'EN_ATTENTE',
+        resume: mis.value.resume,
+        minutesRestantes: mis.value.minutesRestantes,
+        reason: fait.error.message,
+      };
+    }
+    return { kind: 'DENIED', reason: fait.error.message };
+  }
+
+  return { kind: 'ERROR', message: fait.error.message };
+}
 
 export function createAssistant(deps: AssistantDeps): Assistant {
   return {
@@ -270,6 +460,18 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           enVol: arrete.value.enVol,
           journalMuet: arrete.value.journalMuet,
         };
+      }
+
+      /* ANNULER LA DERNIÈRE ACTION — `docs/09 §2.1`, ADR-105.
+
+         Placé après l'arrêt d'urgence et avant le `Tier 0`, comme lui : ce
+         n'est pas un appel d'outil que l'utilisateur formule, c'est une
+         demande SUR l'historique. Le moteur d'intention produit des
+         propositions d'outil ; celle-ci n'en est pas une, et lui inventer un
+         `toolId` reviendrait à choisir l'outil inverse à la place de l'Undo
+         Engine, qui seul sait lequel c'est. */
+      if (estUneDemandeDAnnulation(text)) {
+        return annuler(deps, options);
       }
 
       /* L'ORDRE EST UNE PROPRIÉTÉ — ADR-081.
@@ -654,6 +856,10 @@ export function createAssistant(deps: AssistantDeps): Assistant {
                    `fromClient()` qui la remarquera au retour — jamais un
                    `as` ici. */
                 operationId: String(operationId),
+                /* ADR-105 — un appel d'outil ordinaire : `/confirmer` le
+                   rejouera par `gateway.invoke`. Le genre n'est PAS un détail
+                   d'affichage : c'est lui qui dit à qui rendre l'intention. */
+                genre: 'OUTIL',
                 toolId: proposal.toolId,
                 input: { ...input },
                 provenance: { ...proposal.parameterProvenance },

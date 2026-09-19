@@ -105,6 +105,12 @@ export const HTML = `<!doctype html>
   <button data-cmd="/audit" type="button">Qu'as-tu fait aujourd'hui&nbsp;?</button>
   <button data-cmd="/inbox" type="button">Mémoires en attente</button>
   <button data-cmd="/attente" type="button">À confirmer sur le Mac</button>
+  <!-- ⚠ UNE PHRASE, PAS UNE COMMANDE — ADR-105.
+       Ce bouton n'appelle aucune route dédiée : il ÉCRIT « annule la dernière
+       action » dans la boucle ordinaire. Le téléphone n'obtient donc aucun
+       pouvoir que la parole ne donne pas déjà, et le Policy Gate décide comme
+       pour n'importe quelle phrase — mise en file comprise. -->
+  <button data-phrase="annule la dernière action" type="button">Annuler la dernière action</button>
   <button data-cmd="/diagnostic" type="button">Diagnostic</button>
   <button data-cmd="/aide" type="button">Ce que je sais faire</button>
   <button id="forget" type="button" class="danger">Oublier ce jeton</button>
@@ -349,6 +355,14 @@ ${capacitesInjectees()}
        « reprendre » sur cette page et aucune route qui la serve : lever se
        fait devant la machine, comme confirmer (ADR-101). Voir n'est pas
        pouvoir ; arrêter n'est pas repartir. */
+    /* ADR-105 — l'annulation a abouti. On NOMME ce qui a été défait : « c'est
+       annulé » sans dire quoi laisse l'utilisateur vérifier lui-même, ce qui
+       est exactement ce qu'une annulation devait lui éviter. */
+    if (reply.kind === 'ANNULE') {
+      node.appendChild(el('div', null, 'Annulé — ' + reply.cible));
+      node.appendChild(el('div', 'detail', reply.detail));
+      return;
+    }
     if (reply.kind === 'ARRET') {
       /* ⚠ « NOUVELLE » N'EST PAS UN MOT DE REMPLISSAGE. Mesuré en utilisant
          Jarvis : après un arrêt, « mes tâches » répond encore — ADR-057 laisse
@@ -444,6 +458,17 @@ ${capacitesInjectees()}
   sheet.onclick = (event) => { if (event.target === sheet) sheet.close(); };
   sheet.querySelectorAll('[data-cmd]').forEach(b => {
     b.onclick = () => { sheet.close(); push(el('div', 'turn user', b.dataset.cmd)); command(b.dataset.cmd); };
+  });
+  /* Les boutons de PHRASE traversent la boucle ordinaire — ADR-105. Ils ne
+     sont qu'un raccourci de frappe, et aucune capacité ne leur est réservée. */
+  sheet.querySelectorAll('[data-phrase]').forEach(b => {
+    b.onclick = async () => {
+      sheet.close();
+      const text = b.dataset.phrase;
+      push(el('div', 'turn user', text));
+      try { renderReply(await api('/api/say', { text }), text); }
+      catch (e) { jarvis().appendChild(el('div', 'detail', e.message)); }
+    };
   });
   document.getElementById('forget').onclick = () => {
     localStorage.removeItem('jarvis_token');

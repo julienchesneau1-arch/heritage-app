@@ -16,6 +16,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { sansCommentaires } from '../helpers/source.js';
 import {
   Capacite,
   router,
@@ -45,11 +46,6 @@ import { mayEgress } from '../../src/core/privacy/classify.js';
  * ⚠ ET ELLE NE S'AFFAIBLIT PAS : un contrôle négatif, plus bas, vérifie que le
  * dépouillement laisse toujours passer un nom de produit écrit dans du code.
  */
-function sansCommentaires(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/^\s*\/\/.*$/gm, ' ');
-}
 
 const LOCAL: CandidatDeRoutage = {
   id: 'moteur-local',
