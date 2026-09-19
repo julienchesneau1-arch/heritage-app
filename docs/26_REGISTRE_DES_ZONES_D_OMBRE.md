@@ -1706,6 +1706,71 @@ trente tours sont un **échantillon**, pas une cible.
 
 ---
 
+### 4.19 Les lunettes : le refus de parler suppose un écran
+
+**Ouverte par ADR-101**, en préparant la surface portée plutôt qu'en la
+construisant.
+
+#### Ce qui est DÉJÀ prêt, et qui est l'essentiel
+
+Des lunettes sont, au sens de la sécurité, **une surface distante avec de la
+voix**. Les deux moitiés sont déjà tranchées :
+
+| | |
+|---|---|
+| Le canal | ADR-090 + ADR-099 — L3/L4 refusés, mis en file, confirmés devant la machine |
+| Le micro | ADR-093 R1/R2 — rien avant le mot d'activation, témoin dérivé de l'état |
+| La parole | ADR-093 — le plafond dépend de qui a choisi le moment |
+
+Et depuis ADR-101, la règle de surface est écrite en **défaut fermé** : une
+troisième valeur ajoutée à `Surface` hérite du régime distant, pas du régime
+local. Ajouter les lunettes restreindra par défaut.
+
+#### ⚠ Ce qui ne tient PAS, et personne ne l'avait vu
+
+`faconDeDire` rend trois réponses : `MOT_POUR_MOT`, `RESUME_ENCADRE`, `REFUS`.
+Et le `REFUS` a une signification précise, écrite dans ADR-093 :
+
+> Jarvis dit que l'information existe, **et l'affiche**.
+
+**Sur des lunettes, il n'y a pas d'écran où se rabattre.**
+
+Le plafond vocal a été conçu en supposant qu'un refus de *dire* n'était pas un
+refus de *donner* — l'information restait accessible autrement. Sur une surface
+portée, les deux se confondent :
+
+```text
+terminal / téléphone   « je ne le dis pas à voix haute »  → c'est à l'écran
+lunettes               « je ne le dis pas à voix haute »  → tu ne l'auras pas
+```
+
+Un rappel proactif plafonné à `PERSONAL` devient donc, sur des lunettes,
+**« tu as un rappel » et rien de plus, sans moyen d'en savoir davantage.**
+
+#### Les trois issues, et aucune n'est évidente
+
+1. **Assumer.** Les lunettes lisent moins que le téléphone, et c'est la
+   contrepartie d'un appareil qui parle dans une pièce.
+2. **Un geste de proximité.** Porter la main à la branche, ou un appui long,
+   vaudrait « je suis seul » et lèverait le plafond d'un cran. C'est un second
+   facteur *physique*, dans l'esprit d'ADR-099 — mais il atteste de l'intention,
+   pas de la solitude.
+3. **Renvoyer vers l'écran.** Les lunettes disent « c'est sur ton téléphone ».
+   Honnête, et cela fait perdre la moitié de l'intérêt d'un appareil porté.
+
+**Condition de levée** : une décision de Julien, et elle ne se prend pas avant
+d'avoir porté l'appareil. La troisième option est la seule qui ne demande aucune
+confiance nouvelle ; les deux autres demandent de décider ce que « être seul »
+veut dire pour un système qui ne peut pas le savoir.
+
+#### Ce qui reste absent, et qui n'est pas un détail
+
+**Il n'y a aucune ligne de code audio.** Toute cette section décrit une
+architecture prête à recevoir une capacité qui n'existe pas. La Phase 5 est à
+0 %, et aucun arbitrage ne la remplace.
+
+---
+
 ### 4.18 Trois capacités inatteignables depuis le téléphone — LEVÉE (ADR-099)
 
 > **↻ LEVÉE le 19/09/2026.** Julien a tranché pour la file d'attente. Le

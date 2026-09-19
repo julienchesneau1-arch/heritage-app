@@ -25,6 +25,7 @@
  * Et la passerelle peut être exposée hors loopback (`JARVIS_WEB_HOST`).
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { createPolicyGate } from '../../src/core/policy/gate.js';
 import type { PolicyEvaluator } from '../../src/core/policy/evaluator.js';
 import { ok } from '../../src/core/types/result.js';
@@ -175,6 +176,29 @@ describe('la règle se combine avec les durcissements existants', () => {
   it('L0 reste refusé d\'où qu\'il vienne — rien ne précède l\'interdit', () => {
     expect(verdict({ niveau: 'L0', surface: 'LOCALE' }).decision).toBe('DENY');
     expect(verdict({ niveau: 'L0', surface: 'DISTANTE' }).decision).toBe('DENY');
+  });
+
+  it('⚠ la règle est écrite en DÉFAUT FERMÉ — ADR-101, et c’est pour les lunettes', () => {
+    /* LE DÉFAUT LATENT QUE CETTE FORME FERME.
+
+       `surface === 'DISTANTE'` est juste tant que `Surface` n'a que deux
+       valeurs. Le jour où une troisième apparaît — des lunettes, une montre,
+       une enceinte — elle ne matcherait pas, et hériterait donc du régime
+       LOCAL, c'est-à-dire du plus permissif.
+
+       Une surface portée sur le visage obtiendrait ainsi le droit de confirmer
+       une suppression définitive, sans qu'aucune règle n'ait été modifiée et
+       sans que personne n'ait rien décidé.
+
+       On ne peut pas éprouver une valeur qui n'existe pas dans l'énumération —
+       Zod la refuse à la frontière. On éprouve donc la FORME de la règle, qui
+       est ce qui rend l'ajout futur sûr. */
+    const source = readFileSync('src/core/policy/gate.ts', 'utf8');
+    expect(
+      source,
+      'la règle doit refuser tout ce qui n’est pas LOCALE, pas seulement DISTANTE',
+    ).toContain("req.context.surface !== 'LOCALE'");
+    expect(source).not.toContain("req.context.surface === 'DISTANTE'");
   });
 
   it('la surface est REQUISE — une demande sans elle est refusée à la frontière', () => {

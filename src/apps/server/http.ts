@@ -27,7 +27,12 @@ import { fromClient } from '../../core/tools/identity.js';
 import { z } from 'zod';
 import { HTML, CSS, JS } from './ui.js';
 import { bearerToken, tokenMatches, type AuthLimiter } from './auth.js';
-import { auditReport, diagnosticReport, inboxReport } from '../reports.js';
+import {
+  attenteReport,
+  auditReport,
+  diagnosticReport,
+  inboxReport,
+} from '../reports.js';
 import { estUneLecture, lignesDeSortie } from '../render-sortie.js';
 import type { Runtime } from '../runtime.js';
 
@@ -211,6 +216,13 @@ export function createHandler(deps: HandlerDeps) {
     }
     if (request.path === '/api/inbox') {
       const report = await inboxReport(runtime);
+      return report.ok ? json(200, report.value) : json(500, { message: report.error.message });
+    }
+    if (request.path === '/api/attente') {
+      /* ADR-101 — LECTURE SEULE. Aucun `POST` ne confirme depuis ici : la
+         confirmation vit sur la surface locale, et c'est la raison d'être
+         entière d'ADR-090. Voir n'est pas pouvoir. */
+      const report = await attenteReport(runtime);
       return report.ok ? json(200, report.value) : json(500, { message: report.error.message });
     }
     if (request.path === '/api/diagnostic') {

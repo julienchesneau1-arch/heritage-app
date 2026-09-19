@@ -104,6 +104,7 @@ export const HTML = `<!doctype html>
 <dialog id="sheet">
   <button data-cmd="/audit" type="button">Qu'as-tu fait aujourd'hui&nbsp;?</button>
   <button data-cmd="/inbox" type="button">Mémoires en attente</button>
+  <button data-cmd="/attente" type="button">À confirmer sur le Mac</button>
   <button data-cmd="/diagnostic" type="button">Diagnostic</button>
   <button data-cmd="/aide" type="button">Ce que je sais faire</button>
   <button id="forget" type="button" class="danger">Oublier ce jeton</button>
@@ -376,6 +377,19 @@ ${capacitesInjectees()}
           'Embeddings ' + (r.embeddings ? 'disponibles' : 'absents — voie sémantique indisponible'),
           'Cloud ' + (r.cloud ? 'activé' : 'désactivé'),
         ]);
+      } else if (cmd === '/attente') {
+        /* ADR-101 — LECTURE SEULE. Aucun bouton n'exécute d'ici : confirmer
+           reste l'affaire de la surface locale (ADR-090). On MONTRE ce qui
+           attend, pour que rien ne se perde entre le téléphone et le bureau. */
+        const r = await api('/api/attente');
+        if (!r.total) { renderReport('Rien n’attend ta confirmation.', []); }
+        else {
+          renderReport(
+            r.total + ' à confirmer sur ton Mac (tape « /confirmer ») :',
+            r.items.map(function (i) {
+              return i.resume + ' — ' + i.minutesRestantes + ' min restantes';
+            }));
+        }
       } else if (cmd === '/aide') {
         renderReport('Ce que je sais faire :', CAPACITES);
       }

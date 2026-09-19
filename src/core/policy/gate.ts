@@ -120,7 +120,21 @@ export function createPolicyGate(evaluator: PolicyEvaluator): PolicyGate {
          supprimer un événement, annuler une action se font depuis la machine.
          C'est exactement le contrat du pont iPhone de
          `sosoj92/jarvis-assistant-vocal`, dont cette règle est empruntée. */
-      if (req.context.surface === 'DISTANTE' && requiresConfirmation(level)) {
+      /* ⚠ `!== 'LOCALE'` ET NON `=== 'DISTANTE'` — ADR-101, défaut FERMÉ.
+
+         La forme d'origine testait l'égalité à `DISTANTE`. Elle est juste
+         aujourd'hui, parce que `Surface` n'a que deux valeurs. Elle devient
+         FAUSSE le jour où une troisième apparaît — des lunettes, une montre,
+         une enceinte : la nouvelle surface ne matcherait pas, et tomberait
+         donc dans le régime LOCAL, c'est-à-dire le plus permissif.
+
+         Une capacité future héritant du régime le plus permissif par défaut de
+         correspondance est exactement le motif que ce dépôt traque. Inversée,
+         la règle dit : **tout ce qui n'est pas la machine est distant, jusqu'à
+         ce que quelqu'un décide autrement.** Ajouter une surface devient alors
+         un geste qui RESTREINT par défaut, et qu'il faut délibérément
+         assouplir — l'inverse d'un oubli silencieux. */
+      if (req.context.surface !== 'LOCALE' && requiresConfirmation(level)) {
         return ok({
           decision: 'DENY',
           effectiveAutonomy: level,

@@ -100,6 +100,49 @@ export async function inboxReport(runtime: Runtime): Promise<Result<InboxReport>
   });
 }
 
+/**
+ * CE QUI ATTEND UNE CONFIRMATION — ADR-101.
+ *
+ * ⚠ LECTURE SEULE, ET C'EST TOUT LE SUJET.
+ *
+ * Le téléphone met en file (ADR-099), puis n'a aucun moyen de savoir ce qui
+ * attend. Il découvre au retour devant la machine — ou il oublie.
+ *
+ * Ce rapport lui montre la file. Il ne lui donne **aucun** moyen d'agir
+ * dessus : confirmer reste l'affaire de la surface locale, et c'est la raison
+ * d'être entière d'ADR-090. Voir n'est pas pouvoir.
+ *
+ * `resume` est déjà passé par `libelleSur` (ADR-096) : une mémoire dont le
+ * plancher dépasse `PERSONAL` y est nommée, jamais citée. La file est un
+ * troisième écran où ce résumé s'affiche, et il y arrive déjà rédigé.
+ */
+export interface AttenteReport {
+  readonly items: readonly {
+    readonly resume: string;
+    readonly demandeeDe: string;
+    readonly minutesRestantes: number;
+  }[];
+  readonly total: number;
+}
+
+export async function attenteReport(
+  runtime: Runtime,
+): Promise<Result<AttenteReport>> {
+  const file = await runtime.file.enAttente();
+  if (!file.ok) return file;
+  return ok({
+    /* L'IDENTIFIANT N'EST PAS RENDU. Il ne sert qu'à confirmer, et confirmer
+       ne se fait pas d'ici. Le donner au navigateur serait offrir la moitié
+       d'une capacité qu'on a décidé de ne pas lui donner. */
+    items: file.value.map((d) => ({
+      resume: d.resume,
+      demandeeDe: d.demandeeDe,
+      minutesRestantes: d.minutesRestantes,
+    })),
+    total: file.value.length,
+  });
+}
+
 export interface DiagnosticReport {
   readonly database: 'UP' | 'DOWN';
   readonly tools: number;

@@ -8650,3 +8650,95 @@ attend, et le message n'oriente vers rien.
 Documenté dans `QUICKSTART.md` plutôt que corrigé : régénérer les secrets est
 le bon comportement pour une installation ; c'est **l'existence d'un second
 clone** qui est l'exception.
+
+---
+
+## ADR-101 — Voir sa file sans pouvoir l'exécuter, et préparer le visage
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** ADR-090, ADR-093, ADR-099, `docs/26 §4.18` et `§4.19`
+
+### 1. Le téléphone voit sa file — et rien de plus
+
+Depuis ADR-099, le téléphone prépare une suppression définitive et la machine
+la confirme. Il n'avait **aucun moyen de savoir ce qui attendait** : il le
+découvrait devant le Mac, ou il oubliait.
+
+`GET /api/attente` la lui montre, et un bouton l'annonce — servir la route sans
+le bouton aurait été ADR-094 une fois de plus.
+
+#### ⚠ La tentation était d'aller un pas trop loin
+
+Montrer la file, puis mettre un bouton « confirmer » à côté. **Ce serait
+défaire ADR-090 par la porte de derrière** : la confirmation redeviendrait un
+second appel HTTP du même appelant, et le second facteur — être devant la
+machine — disparaîtrait sans qu'aucune ligne de sécurité ne soit modifiée.
+
+> **Voir n'est pas pouvoir.**
+
+La frontière est tenue par ce qui **n'existe pas**, comme pour `Secret` et
+`micro.ts` :
+
+```text
+aucune route d'écriture ne nomme la file
+aucun IDENTIFIANT n'est rendu au navigateur
+```
+
+Un résumé ne permet pas de confirmer ; un identifiant, si. Tant que le
+navigateur n'en reçoit aucun, il ne peut rien exécuter — **même si une route
+d'écriture apparaissait demain par accident.** Deux sabotages l'éprouvent.
+
+### 2. La règle de surface était ouverte par défaut
+
+```text
+avant  req.context.surface === 'DISTANTE' && requiresConfirmation(level)
+après  req.context.surface !== 'LOCALE'   && requiresConfirmation(level)
+```
+
+La première forme est **juste aujourd'hui**, parce que `Surface` n'a que deux
+valeurs. Elle devient fausse le jour où une troisième apparaît : des lunettes,
+une montre, une enceinte ne matcheraient pas `=== 'DISTANTE'` et hériteraient
+donc du régime **LOCAL**, c'est-à-dire du plus permissif.
+
+> Une surface portée sur le visage aurait obtenu le droit de confirmer une
+> suppression définitive, **sans qu'aucune règle n'ait été modifiée et sans que
+> personne n'ait rien décidé.**
+
+Inversée, la règle dit : *tout ce qui n'est pas la machine est distant, jusqu'à
+ce que quelqu'un décide autrement.* Ajouter une surface devient un geste qui
+**restreint** par défaut, et qu'il faut délibérément assouplir.
+
+On ne peut pas éprouver une valeur que Zod refuse à la frontière. Le test porte
+donc sur la **forme** de la règle — ce qui rend l'ajout futur sûr.
+
+### 3. Les lunettes : ce qui est prêt, et ce qui ne l'est pas
+
+Des lunettes sont, au sens de la sécurité, **une surface distante avec de la
+voix**. Les deux moitiés sont déjà tranchées : ADR-090/099 pour le canal,
+ADR-093 pour le micro et la parole.
+
+#### ⚠ Mais le refus de parler suppose un écran
+
+`faconDeDire` rend `REFUS`, et ADR-093 lui donne un sens précis : *Jarvis dit
+que l'information existe, **et l'affiche**.*
+
+**Sur des lunettes, il n'y a pas d'écran où se rabattre.**
+
+```text
+terminal / téléphone   « je ne le dis pas à voix haute »  → c'est à l'écran
+lunettes               « je ne le dis pas à voix haute »  → tu ne l'auras pas
+```
+
+Le plafond vocal a été conçu en supposant qu'un refus de *dire* n'était pas un
+refus de *donner*. Sur une surface portée, les deux se confondent — et un
+rappel proactif devient « tu as un rappel », sans moyen d'en savoir davantage.
+
+Trois issues, aucune évidente : assumer la restriction, inventer un geste de
+proximité qui atteste l'intention mais pas la solitude, ou renvoyer vers
+l'écran du téléphone. **C'est un arbitrage de produit**, et il ne se prend pas
+avant d'avoir porté l'appareil. `docs/26 §4.19`.
+
+#### Et il n'y a toujours aucune ligne de code audio
+
+Tout ce paragraphe décrit une architecture prête à recevoir une capacité qui
+n'existe pas. La Phase 5 est à 0 %, et aucun arbitrage ne la remplace.
