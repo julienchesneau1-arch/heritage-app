@@ -248,6 +248,43 @@ complète — Policy Gate compris. Une action qu'une politique interdit sera
 refusée de nouveau, file ou pas. Et seuls les refus de *surface* peuvent y
 entrer : un interdit reste un interdit.
 
+Le téléphone peut **voir** ce qui attend (bouton « À confirmer sur le Mac »),
+et rien de plus : aucun identifiant ne lui est transmis, donc il ne peut pas
+confirmer même si une route apparaissait par accident. **Voir n'est pas
+pouvoir.**
+
+---
+
+### Ce que tu vois d'un résultat
+
+Chacun des 21 outils affiche ce qu'il a trouvé — et il le dit **de la même
+façon sur le Mac et sur le téléphone**, parce que les lignes sont calculées une
+seule fois, côté serveur. Le navigateur ne décide rien.
+
+```text
+> fais-moi un point
+  ✓ Voici ce que j'ai trouvé.
+  Agenda : indisponible — aucun fournisseur d'agenda n'est configuré
+  Tâches :
+    • appeler le plombier
+  Rappels : rien.
+  ⚠ Briefing incomplet — une source n'a pas répondu.
+```
+
+Quatre choses que ce rendu dit et qu'il aurait pu taire :
+
+| | |
+|---|---|
+| Un **rappel** | *« rien ne sonne encore »* — un rappel apparaît dans le briefing, il ne déclenche aucune notification |
+| Un **oubli** | nomme les copies qui survivent ailleurs — « oublié » sans ça serait une fausse promesse |
+| Le **web** et les **fichiers** | marquent le contenu de tiers : Jarvis ne le reprend pas à son compte |
+| Le **briefing** | dit l'état de chaque section — une section indisponible affichée vide ferait croire à une journée libre |
+
+> **Jusqu'à ADR-100, sept outils sur vingt-et-un affichaient « ✓ C'est fait »
+> et jetaient leur résultat.** Ce n'était pas un mensonge — l'action avait eu
+> lieu. Mais tu ne pouvais pas distinguer « le briefing est vide » de « le
+> briefing ne s'affiche pas ».
+
 ---
 
 ## 4. Ce qui se passe entre ta phrase et la réponse
@@ -343,6 +380,32 @@ Et `pnpm secrets:scan` balaye **l'arbre de travail et l'historique git**.
 ---
 
 ## 6. Les limites — la partie que tu dois lire
+
+### 6.0 Les lunettes — ce qui est prêt, et le trou qui reste
+
+Des lunettes sont, au sens de la sécurité, **une surface distante avec de la
+voix**. Les deux moitiés sont déjà tranchées : le canal (file d'attente,
+confirmation devant la machine) et le micro (rien avant le mot d'activation,
+témoin qui ne peut pas mentir, plafond vocal selon qui a choisi le moment).
+
+Et la règle de surface est écrite en **défaut fermé** : une troisième valeur
+ajoutée hérite du régime *distant*, jamais du régime local. Ajouter les
+lunettes restreindra par défaut.
+
+> ⚠ **Mais le refus de parler suppose un écran.**
+>
+> ```text
+> terminal / téléphone   « je ne le dis pas à voix haute »  → c'est à l'écran
+> lunettes               « je ne le dis pas à voix haute »  → tu ne l'auras pas
+> ```
+>
+> Le plafond vocal a été conçu en supposant qu'un refus de *dire* n'était pas
+> un refus de *donner*. Sur un visage, les deux se confondent. Trois issues,
+> aucune évidente — et c'est un arbitrage qui ne se prend pas avant d'avoir
+> porté l'appareil. `docs/26 §4.19`.
+
+**Et il n'y a aucune ligne de code audio.** Tout ceci décrit une architecture
+prête à recevoir une capacité qui n'existe pas.
 
 ### 6.1 Ce qui n'existe pas du tout
 
