@@ -222,6 +222,30 @@ describe('RED TEAM — code mort en production', () => {
            est exactement la faute qu'il doit attraper. */
         'src/core/routing/router.ts',
 
+        /* ⚠ LA PASSERELLE AUDIO ET SON REGISTRE — ADR-103.
+
+           Et la question s'est posée honnêtement : il AURAIT été facile de les
+           brancher. `runtime.ts` sait construire un `EtatModeleLocal` ; il
+           saurait construire un `EtatPasserelleAudio`, et `system_status`
+           saurait afficher « voix : aucun moteur installé ».
+
+           On ne l'a pas fait, pour la raison qu'ADR-102 venait d'écrire une
+           ADR plus tôt. Brancher une passerelle audio sur une interface qui ne
+           peut ni entendre ni parler ferait descendre ce compteur en
+           produisant **l'apparence d'un pipeline**. Le compteur mesurerait
+           alors le branchement, pas l'usage — et c'est précisément sur la voix
+           qu'une apparence de capacité est dangereuse, parce qu'elle se
+           vérifie en parlant et que personne ne parlera.
+
+           ⚠ ET `registre.ts` EST VIDE, littéralement : deux tableaux sans
+           élément. Il entre quand même ici, parce que ce compteur mesure ce
+           qu'aucun point d'entrée n'atteint, pas ce qui est gros.
+
+           Condition de sortie, mécanique : le premier moteur enregistré. Ce
+           jour-là il faudra brancher les deux, et ce test le rappellera. */
+        'src/core/voice/passerelle.ts',
+        'src/providers/voice/registre.ts',
+
 
         /* ⚠ `src/core/intent/tier1.ts` A QUITTÉ CETTE LISTE — ADR-082.
 
@@ -316,8 +340,14 @@ describe('RED TEAM — code mort en production', () => {
        d'entrée dans cette liste, après « pas de payeur » (CostGate) et « pas
        de vérificateur » (Update Engine) : ici le module POURRAIT être branché,
        et ne l'est pas parce qu'arbitrer entre un seul candidat n'est pas
-       arbitrer. Sa condition de sortie est le premier fournisseur non local. */
-    expect(deadLogic).toHaveLength(10);
+       arbitrer. Sa condition de sortie est le premier fournisseur non local.
+
+       **À DOUZE avec ADR-103** : la passerelle audio et son registre. Même
+       motif que le routeur — branchables, non branchés — et il est ici plus
+       tranchant : brancher un pipeline audio sur une machine qui ne peut ni
+       entendre ni parler produirait l'APPARENCE d'une voix, qui ne se vérifie
+       qu'en parlant. Condition de sortie : le premier moteur enregistré. */
+    expect(deadLogic).toHaveLength(12);
     // Chacun est pourtant couvert par des tests : la couverture mesure le code
     // exécuté PAR LES TESTS, jamais le code exécuté par le produit.
   });

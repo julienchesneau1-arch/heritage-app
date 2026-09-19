@@ -20,7 +20,7 @@ seule façon honnête de répondre.
 
 ---
 
-## 1. Étendue fonctionnelle — **≈ 68 %**
+## 1. Étendue fonctionnelle — **≈ 69 %**
 
 Pondération par phase de `docs/02`. Les poids reflètent l'effort estimé, pas le
 nombre de cases à cocher.
@@ -33,10 +33,10 @@ nombre de cases à cocher.
 | 2 Outils et vérification | 15 % | **100 %** | 15,0 | `gate:phase2` ✅ |
 | 3 Les 10 outils restants | 12 % | **100 %** | 12,0 | **15 outils sur 15** (+`egress_review`, hors liste, en Phase 4). `web_search` livré (ADR-055) — et il met en circuit la séparation Privileged/Quarantined, hors circuit depuis ADR-004 |
 | 4 Confidentialité, coût, indépendance | 13 % | **85 %** | 11,1 | redaction ✅ · **Cost Engine ✅** (ADR-040) · **Data Firewall F1-F3 ✅** (ADR-050/051/052 — classification branchée, `docs/14 §6.4` passe, **console d'égression C4 ✅**) · **F4 écrite et NON appliquée** (ADR-053, `docs/29`) · **Model Router écrit, NON branché** (ADR-102) · ⚠ **« Benchmark Jarvis local » est un livrable de `docs/02` qu'aucune ligne de ce tableau n'avait jamais compté** — il est absent |
-| 5 Voix | 10 % | **0 %** | 0,0 | rien |
+| 5 Voix | 10 % | **15 %** | 1,5 | **Passerelle audio abstraite ✅** (ADR-103) — 1 livrable sur 6, et **la porte « pipeline substituable » de `docs/02` est franchie**. Les cinq autres livrables demandent du son : VAD, activation, STT, TTS, barge-in. ⚠ **Aucun moteur audio n'existe** — les deux registres sont vides, et un test l'exige |
 | 6 Interfaces | 13 % | **20 %** | 2,6 | passerelle web ✅ · **iOS ✗** |
 | 7 Update Engine et LAB/Twin | 10 % | **0 %** | 0,0 | rien (`docs/07` entier) |
-| **TOTAL** | 100 % | | **≈ 68 %** | |
+| **TOTAL** | 100 % | | **≈ 69 %** | |
 
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
@@ -70,9 +70,9 @@ elle n'est donc pas un dû.
 | Affirmation | Mesure |
 |---|---|
 | 15 outils sur 15 | `grep "id:" src/tools/*.ts` → `memory_add`, `memory_search`, `note_create`, `task_create`, `task_list`, `audit_query`, `task_complete`, `calendar_read`, `calendar_create`, `calendar_update`, `file_search`, `briefing_generate`, `reminder_create`, `system_status`, **`web_search`** (+ 7 hors liste : `egress_review` en Phase 4, **`memory_forget`, `note_delete`, `task_cancel`, `reminder_cancel`** avec l'Undo Engine, et **`entity_create`, `entity_delete`** avec le Context Engine sans modèle — ADR-071/072) |
-| Model Router écrit, non branché | `src/core/routing/router.ts` existe ; `wiring.test.ts` le compte parmi les **dix** modules qu'aucun point d'entrée n'atteint (ADR-102) |
+| Model Router écrit, non branché | `src/core/routing/router.ts` existe ; `wiring.test.ts` le compte parmi les **douze** modules qu'aucun point d'entrée n'atteint (ADR-102) |
 | Benchmark local absent | aucun fichier de `ops/` ne mesure un modèle local |
-| Voix absente | aucun module STT/TTS/VAD |
+| Aucun moteur audio | `REGISTRE_STT` et `REGISTRE_TTS` sont vides, et `passerelle.test.ts` l'asserte — un moteur ajouté fera rougir ce test (ADR-103). Ni VAD, ni activation, ni barge-in |
 | Update Engine absent | aucun module canary/rollback/twin |
 | iOS absent | aucun répertoire |
 
@@ -296,7 +296,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **102 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **103 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 FRANCHIE — et désormais VÉRIFIABLE** par `pnpm gate:phase3` (ADR-087). Elle était déclarée « COMPLÈTE (10/10) » **sans porte de sortie** : le chiffre comptait des outils écrits, pas les trois conditions de `docs/02`. La porte existe, elle passe — l'affirmation était juste, mais sans preuve ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **10/15 nommés en test** (67 %) — S11 y entre en Phase 7, et par le bon chemin : son exemption portait sa condition de fin (`absent: 'src/core/update'`), qui a rougi le jour où ce répertoire a existé. **Zéro exemption restante.** ⚠ Cette ligne a affiché « 7/15 » face à un tableau qui disait 9, dans le même document. Elle n'avait pas menti : elle était vraie à la date de sa mesure, et le travail a nommé deux invariants de plus sans qu'elle bouge. La ligne 62 est gardée par `coherence-des-chiffres.test.ts` ; celle-ci ne l'était par rien — c'est toute la différence (§2) |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. **Model Router écrit** (ADR-102), non branché pour un motif distinct : arbitrer entre un seul candidat n'est pas arbitrer. Le §11 — l'indépendance — est tenu par le type : le noyau ne nomme aucun modèle |
@@ -348,7 +348,8 @@ mesurer contre `docs/02` le fait donc disparaître.
 | ~~4. `Tier 1` — l'enveloppe de sûreté~~ | **ÉCRITE** — ADR-081. Chaque paramètre `MODEL_OUTPUT` → le Policy Gate force `L4` → confirmation sur la VALEUR. Schéma de frontière pauvre, `userConfirms` cloué à `false`, outil vérifié contre le catalogue réel. ⚠ **Aucun modèle branché** : `tier1: null`, quatrième module hors circuit, délibérément. |
 | **4. Un `ModelProvider` LOCAL** | le dernier verrou de la fluidité. L'enveloppe l'attend ; il n'y a plus qu'à écrire l'adaptateur (Ollama en référence, ADR-007) et à choisir un modèle. C'est ce qui fera passer les 43 % d'ADR-080. |
 | ~~3. Contrat du tour de parole~~ | **FAIT** — ADR-074. `ecouter()` est branché ; `accuseReception` est écrit et **déclaré sans appelant**, en attente d'une surface où l'attente existe. Le pipeline audio, lui, reste entier. |
-| **1. Audio Gateway abstrait** (Phase 5) | la seule moitié de la voix qui s'écrit et se PROUVE sans matériel : `docs/02` en fait une porte de sortie — « changer de moteur STT par configuration seule ». Les moteurs viendront après ; la substituabilité, elle, se cloue à froid. |
+| ~~1. Audio Gateway abstrait~~ (Phase 5) | **FAIT** — ADR-103. La porte « pipeline substituable » de `docs/02` est franchie, et R1 d'ADR-093 est devenue du code : `transcrire` refuse tout état de micro autre que `TRANSCRIT`. ⚠ **Non branché**, et aucun moteur n'existe. |
+| **1. Un moteur STT local** (Phase 5) | le verrou réel de la voix. `docs/02` veut « STT fonctionnel réseau coupé » ; la passerelle le refuse déjà s'il n'est pas local. Fiche `docs/04` obligatoire — un moteur audio est une dépendance, même livré en binaire. |
 | **2. Connecter un compte Google** | inchangé depuis ADR-078 : trois secrets au coffre, et deux appels réels à provoquer. C'est le seul verrou restant de `calendar_update`, dernier outil hors surface parlée. |
 | **3. Relire la migration `data_level`** | `docs/29`, ligne par ligne. C'est la seule migration du dépôt dont une erreur EXPOSE une donnée, et `docs/14 §5` exige une relecture humaine. Elle ferme les 15 % restants de la Phase 4 avec le benchmark local. |
 
@@ -366,15 +367,20 @@ entier.
 > donc lent » : la chaîne de Jarvis coûte **0,0046 ms** au Tier 0, contre des
 > centaines de millisecondes pour la transcription et la synthèse.
 >
-> Ce qui reste vrai : le **pipeline audio** (VAD, activation, STT, TTS,
-> barge-in, Audio Gateway) est un chantier entier et n'existe pas.
+> Ce qui restait vrai jusqu'à ADR-103 : le **pipeline audio** (VAD, activation,
+> STT, TTS, barge-in, Audio Gateway) était un chantier entier et n'existait pas.
+>
+> **Une sixième part existe désormais** — la passerelle abstraite, et avec elle
+> la porte de sortie « substituable ». Les cinq autres demandent du son, et
+> aucun moteur n'est installé : `REGISTRE_STT` et `REGISTRE_TTS` sont vides, et
+> un test l'exige plutôt que de l'espérer.
 
 ---
 
 ## 6. Le chiffre, en une ligne
 
 ```text
-ÉTENDUE FONCTIONNELLE   ≈ 68 %     ce que Jarvis sait faire
+ÉTENDUE FONCTIONNELLE   ≈ 69 %     ce que Jarvis sait faire
 PROFONDEUR DE PREUVE    ≈ 83 %     ce qu'on peut en démontrer
 ```
 

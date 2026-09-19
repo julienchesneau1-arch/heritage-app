@@ -15,6 +15,17 @@
     "url": "http://127.0.0.1:11434",
     "model": "mistral:7b"
   },
+  "voice": {
+    "enabled": false,
+    "stt": {
+      "moteur": "whisper-cpp",
+      "langue": "fr"
+    },
+    "tts": {
+      "moteur": "piper",
+      "voix": "fr_FR-siwis-medium"
+    }
+  },
   "privacy": {
     "startInPrivateMode": false,
     "externalTelemetry": false

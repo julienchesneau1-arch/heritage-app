@@ -8905,3 +8905,192 @@ fine.
 Le premier fournisseur non local. Il éprouvera d'un coup les trois points
 ci-dessus — et fera sortir ce module de la liste des orphelins, ou révélera
 qu'on l'a contourné.
+
+---
+
+## ADR-103 — La passerelle audio : prouver la substituabilité avant d'avoir un son
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** `docs/02` Phase 5, ADR-003, ADR-008, ADR-009, ADR-086, ADR-093, ADR-102
+
+### 1. La seule porte de la Phase 5 qui se franchit sans matériel
+
+`docs/02` demande six livrables pour la voix — VAD, activation, STT, TTS,
+barge-in, **Audio Gateway abstrait** — et trois portes de sortie. Deux exigent
+du son :
+
+```text
+[ ] Interruption perçue < 300 ms              il faut un flux
+[ ] STT fonctionnel réseau coupé              il faut un moteur
+[x] Le pipeline audio est SUBSTITUABLE        c'est une FORME
+    (test : changer de moteur STT par configuration seule)
+```
+
+La troisième est une propriété de forme, et une forme se cloue à froid. C'est le
+bon moment, et probablement le seul : **une fois qu'un moteur marche, personne
+ne casse l'assemblage qui marche pour vérifier qu'on pouvait en changer.**
+
+### 2. ⚠ Ce qui aurait détruit la porte de sortie sans qu'on le voie
+
+Le réflexe, en TypeScript, est une énumération :
+
+```ts
+const MoteurSTT = z.enum(['WHISPER_CPP', 'PARAKEET']);   // ⚠ NON
+```
+
+Agréable à écrire, validée par Zod, autocomplétée. Et elle rend la porte de
+sortie **fausse** : ajouter un moteur devient un changement de schéma, donc de
+code, donc plus « par configuration seule ». La phrase de `docs/02` serait
+restée écrite pendant que le mécanisme la contredisait — le motif que ce dépôt
+recense depuis quinze occurrences.
+
+Le noyau connaît donc un **identifiant**, qui est une chaîne. Un registre, dans
+`src/providers/`, sait ce qu'elle désigne. Deux tests tiennent la frontière :
+aucun nom de moteur dans `passerelle.ts`, aucun dans `config/schema.ts`.
+
+Ce qu'on perd : Zod n'attrape plus la faute de frappe. Ce qu'on gagne est
+meilleur — le registre refuse au démarrage **en nommant les moteurs installés** :
+
+```text
+z.enum      « invalid enum value »              dit que c'est faux
+registre    « moteur "wisper" inconnu.          montre ce qui est juste
+              Enregistrés : whisper-cpp. »
+```
+
+### 3. STT et TTS ont été séparés, parce que le pack les sépare
+
+`SpeechProvider` réunissait `transcribe` et `synthesize`. La réunion était
+fausse : le pack ratifie **deux produits, par deux décisions, pour deux
+raisons** — ADR-008 choisit Whisper pour le français, ADR-009 choisit Piper ou
+Kokoro pour la licence.
+
+Et `docs/02` dit « changer de moteur **STT** » — pas la paire. Tant que les deux
+vivaient dans une interface unique, cette phrase n'était pas exprimable dans le
+type : il fallait remplacer les deux moteurs pour en changer un.
+`TranscriptionProvider` et `SynthesisProvider` sont donc distincts, et
+`SpeechProvider` les étend tous les deux — un adaptateur qui sait faire les deux
+reste légitime.
+
+### 4. ⚠ R1 devient du code, comme `micro.ts` l'avait demandé
+
+ADR-093 avait écrit la règle et son propre aveu :
+
+> *« Le jour où le code audio existera, c'est cette fonction qui devra garder
+> l'écriture — et non un commentaire demandant de faire attention. »*
+
+`transcrire(etat, audio)` prend l'état du micro **en paramètre** et refuse tout
+ce qui n'est pas `TRANSCRIT`. Trois conséquences, dont la dernière est la
+raison de la forme :
+
+- Un appelant ne peut pas transcrire un tampon sans **affirmer** l'état.
+- `ECOUTE_MOT_CLE` est refusé comme `FERME` — c'est le seul état où l'erreur
+  serait invisible : l'appelant a de l'audio en main, il est techniquement
+  capable de le transcrire, et personne ne le verrait faire.
+- L'état n'est **pas mémorisé** dans la passerelle. Il n'existe qu'un registre
+  de « est-ce que ça écoute », celui dont le témoin est dérivé — sans quoi
+  ADR-041 se rejouerait sur le pire fait possible : *un micro ouvert avec la
+  lumière éteinte.*
+
+La garde ne pouvait pas être chez l'appelant : **l'appelant est précisément
+celui qui tient le tampon circulaire**, et qui serait tenté de le vider « juste
+pour voir ».
+
+### 5. La passerelle ne récite pas, et elle ne résume pas non plus
+
+`dire()` consulte `faconDeDire` et rend l'un de trois résultats. Le deuxième est
+le seul intéressant :
+
+| `faconDeDire` | ce que rend `dire()` | et le TTS ? |
+|---|---|---|
+| `MOT_POUR_MOT` | `PRONONCE` | appelé |
+| `RESUME_ENCADRE` | **`A_RESUMER`** | **jamais appelé** |
+| `REFUS` | `NON_PRONONCE` | **jamais appelé** |
+
+`plafond.ts` le disait de lui-même : *« elle décide de la FAÇON, pas du TEXTE »*.
+Une passerelle qui fabriquerait le résumé produirait du texte **sans passer par
+le Policy Gate**, et laisserait croire qu'un résumé « nettoie » un contenu
+hostile — l'erreur exacte que `docs/13` décrit. Elle rend donc une instruction à
+l'appelant, qui a un modèle et un Gate.
+
+Et un texte refusé n'est pas seulement tu : **il n'est pas envoyé à un moteur de
+synthèse**. Deux tests le vérifient par l'espion qui n'est jamais appelé.
+
+### 6. ADR-009 devient un mécanisme, pas une liste noire
+
+ADR-009 exclut XTTS v2 (CPML). La façon évidente de tenir cette décision était
+d'écrire `'XTTS'` dans une liste noire.
+
+> Une liste noire d'un nom protège contre ce nom-là. Elle ne dit rien du
+> prochain modèle sous licence non commerciale — celui qu'on intégrera sans y
+> penser, c'est-à-dire exactement « l'impasse silencieuse » qu'ADR-009 nomme.
+
+Un moteur **déclare** donc sa licence, et un moteur non permissif est refusé à
+l'assemblage — installé, nommé dans la configuration, fonctionnel, et refusé.
+`INDETERMINEE` est un refus, pas un défaut commode : sans cela, il suffirait de
+ne pas vérifier.
+
+Le prédicat est un **ensemble de licences permises**, pas une négation. Écrit
+`licence !== 'NON_COMMERCIALE'`, il serait ouvert par défaut — une licence
+ajoutée demain à l'énumération deviendrait permissive sans que personne ne
+l'ait décidé. C'est le défaut qu'ADR-101 a corrigé sur `Surface`, et il se
+reproduit partout où l'on teste ce qu'on refuse plutôt que ce qu'on accepte.
+
+### 7. Un STT non local est refusé au démarrage
+
+`docs/02` demande « STT fonctionnel réseau coupé ». Au-delà de la porte : un
+moteur distant ferait partir de la maison **chaque phrase captée**, y compris
+celles des tiers que `micro.ts` protège et qui n'ont rien demandé.
+
+Refusé au démarrage, pas signalé à l'usage — même geste qu'ADR-082 sur l'adresse
+du modèle local.
+
+⚠ Et la même réserve qu'ADR-082 : `local` est **déclaré**, pas vérifié
+(`docs/26 §4.9`). Ce que cette structure obtient n'est pas une garantie, c'est
+que la question soit posée par écrit à l'enregistrement. Un champ obligatoire ne
+se remplit pas par distraction.
+
+### 8. ⚠ Elle n'est branchée à rien — et cette fois la tentation était réelle
+
+`runtime.ts` sait construire un `EtatModeleLocal` ; il saurait construire un
+`EtatPasserelleAudio`, et `system_status` saurait afficher *« voix : aucun
+moteur installé »*. C'était faisable en une heure.
+
+C'est la raison qu'ADR-102 venait d'écrire :
+
+> Brancher une passerelle audio sur une interface qui ne peut ni entendre ni
+> parler ferait descendre le compteur d'orphelins en produisant **l'apparence
+> d'un pipeline**.
+
+Et l'apparence est plus dangereuse ici qu'ailleurs, parce qu'une capacité vocale
+ne se vérifie qu'en parlant — et que personne ne parlera. Le compteur monte donc
+de dix à **douze** (`wiring.test.ts`, `docs/26 §4.1`). Condition de sortie
+mécanique : le premier moteur enregistré.
+
+### 9. Les deux registres sont vides, et un test l'exige
+
+`REGISTRE_STT` et `REGISTRE_TTS` sont des tableaux sans élément, et
+`passerelle.test.ts` l'**asserte**. Ce test n'a pas l'air d'en être un ; il
+l'est : le jour où quelqu'un ajoutera un moteur, il rougira et obligera à
+revenir mettre à jour `docs/28` (Phase 5), `docs/26 §4.1`, et à remplir la fiche
+de `docs/04` — un moteur audio est une dépendance, même livré en binaire, même
+local.
+
+Sans lui, un moteur pourrait apparaître pendant que la documentation continue
+d'affirmer qu'il n'y en a aucun.
+
+### Ce que cette ADR ne prouve pas
+
+- **Jarvis ne transcrit rien.** Les moteurs de ces tests sont des doubles, et un
+  double ne dit rien de `whisper.cpp`. Ce qui est prouvé est plus étroit :
+  l'assemblage accepte qu'on change de moteur sans le toucher.
+- **Les deux autres portes de la Phase 5 restent fermées** — interruption
+  < 300 ms, STT hors réseau. Elles demandent du son.
+- **Le refus de parler suppose toujours un écran** (`docs/26 §4.19`).
+  `NON_PRONONCE` dit « je l'affiche plutôt que de le dire » ; une surface portée
+  n'a pas d'écran où se rabattre. L'arbitrage attend Julien, et il n'a pas
+  bougé.
+
+### Condition de révision
+
+Le premier moteur enregistré. Il éprouvera d'un coup la déclaration de licence,
+la déclaration `local`, et la porte de sortie — ou montrera qu'on l'a contournée.

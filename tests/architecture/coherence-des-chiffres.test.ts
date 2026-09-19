@@ -289,6 +289,7 @@ describe('les chiffres publiés sont-ils vrais, et les mêmes partout ?', () => 
        avait raison contre le registre, et rien ne le signalait. */
     const enLettres: Readonly<Record<string, number>> = {
       Trois: 3, Quatre: 4, Cinq: 5, Six: 6, Sept: 7, Huit: 8, Neuf: 9, Dix: 10,
+      Onze: 11, Douze: 12, Treize: 13, Quatorze: 14, Quinze: 15,
     };
     const m = /### 4\.1 (\w+) modules de logique hors circuit/.exec(ZONES);
     const mot = m?.[1];

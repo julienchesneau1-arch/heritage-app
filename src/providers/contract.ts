@@ -149,12 +149,39 @@ export interface TranscriptionResult {
   readonly durationMs: number;
 }
 
-export interface SpeechProvider extends Provider {
+/**
+ * ⚠ LA TRANSCRIPTION ET LA SYNTHÈSE SONT SÉPARÉES — ADR-103.
+ *
+ * Elles étaient réunies dans `SpeechProvider`, et la réunion était fausse : le
+ * pack ratifie **deux produits différents**, par deux décisions différentes et
+ * pour deux raisons différentes.
+ *
+ * ```text
+ * ADR-008   Whisper pour le STT   parce que l'utilisateur parle français
+ * ADR-009   Piper ou Kokoro TTS   parce que la licence exclut XTTS
+ * ```
+ *
+ * Et `docs/02` fait de la substituabilité une porte de sortie de la Phase 5 :
+ * *« changer de moteur STT par configuration seule »*. **Un moteur STT seul**
+ * — pas la paire. Tant que les deux vivaient dans une interface unique, cette
+ * phrase n'était pas exprimable dans le type : il fallait remplacer les deux.
+ */
+export interface TranscriptionProvider extends Provider {
   /** ADR-008 — Whisper par défaut, pour le français. */
   transcribe(request: TranscriptionRequest): Promise<Result<TranscriptionResult>>;
+}
+
+export interface SynthesisProvider extends Provider {
   /** ADR-009 — uniquement des modèles sous licence permissive. */
   synthesize(text: string, voice: string): Promise<Result<Uint8Array>>;
 }
+
+/**
+ * Un fournisseur qui sait faire les deux. Conservé : rien n'interdit à un
+ * adaptateur de servir les deux bouts, et le supprimer aurait cassé un contrat
+ * ratifié pour un gain nul.
+ */
+export interface SpeechProvider extends TranscriptionProvider, SynthesisProvider {}
 
 /* -------------------------------------------------------------------------- */
 /* Vision                                                                     */

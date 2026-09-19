@@ -66,6 +66,39 @@ export const PublicConfig = z.object({
     model: z.string().min(1),
   }),
 
+  /**
+   * LA VOIX — ADR-103.
+   *
+   * ⚠ `moteur` EST UNE CHAÎNE, PAS UNE ÉNUMÉRATION, et c'est délibéré.
+   *
+   * `docs/02` fait de la substituabilité une porte de sortie : *« changer de
+   * moteur STT par configuration seule »*. Un `z.enum(['WHISPER_CPP', …])` ici
+   * aurait rendu cette phrase fausse — ajouter un moteur serait devenu un
+   * changement de SCHÉMA, donc de code, donc plus « par configuration seule ».
+   *
+   * Ce qu'on perd : une faute de frappe n'est plus attrapée par Zod. Ce qu'on
+   * gagne : elle est attrapée au démarrage par le registre, qui refuse en
+   * NOMMANT les moteurs installés — un meilleur message que « invalid enum
+   * value », parce qu'il montre le bon nom au lieu de dire que celui-là est
+   * mauvais.
+   *
+   * `enabled: false` par défaut, comme `localModel` : Jarvis doit fonctionner
+   * sans aucun moteur audio installé, et c'est le cas aujourd'hui — il n'en
+   * existe aucun.
+   */
+  voice: z.object({
+    enabled: z.boolean(),
+    stt: z.object({
+      moteur: z.string().min(1),
+      /** ADR-008 — Whisper est le défaut PARCE QUE l'utilisateur parle français. */
+      langue: z.string().min(1),
+    }),
+    tts: z.object({
+      moteur: z.string().min(1),
+      voix: z.string().min(1),
+    }),
+  }),
+
   privacy: z.object({
     /** 03 §7 — mode privé actif au démarrage ? */
     startInPrivateMode: z.boolean(),
