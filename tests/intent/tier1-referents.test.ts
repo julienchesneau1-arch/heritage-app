@@ -35,6 +35,7 @@ import type { ModelProvider } from '../../src/providers/contract.js';
 import type { Resolution } from '../../src/core/context/resolver.js';
 import type { RegisteredTool } from '../../src/core/tools/contract.js';
 import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/gateway.js';
+import { arretDouble } from '../helpers/arret.js';
 
 const OUTILS = [
   {
@@ -132,6 +133,8 @@ function assistantAvec(
   calls: ToolCall[],
 ): ReturnType<typeof createAssistant> {
   const deps: AssistantDeps = {
+    // ADR-104 — requis et non nullable : un assemblage inarrêtable n'existe pas.
+    arret: arretDouble(),
     intent: TIER0_MUET,
     gateway: passerelle(calls),
     setGuardConfirmed: () => undefined,

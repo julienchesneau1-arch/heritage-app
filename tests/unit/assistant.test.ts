@@ -16,6 +16,7 @@ import { err, ok, jarvisError, type Result } from '../../src/core/types/result.j
 import type { IntentEngine, IntentProposal } from '../../src/core/intent/engine.js';
 import type { GatewayResult, ToolCall, ToolGateway } from '../../src/core/tools/gateway.js';
 
+import { arretDouble } from '../helpers/arret.js';
 function intentOf(proposal: IntentProposal): IntentEngine {
   return { propose: () => proposal };
 }
@@ -110,6 +111,7 @@ describe('Assistant', () => {
   it('relaie une demande de précision sans rien exécuter', async () => {
     const calls: ToolCall[] = [];
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf({ kind: 'CLARIFY', question: 'Quoi retenir ?', understood: '' }),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -145,6 +147,7 @@ describe('Assistant', () => {
 
   it('dit ce qui manque plutôt que « je n\'ai pas compris »', async () => {
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf({
         kind: 'UNSUPPORTED',
         understood: 'un envoi de message',
@@ -187,6 +190,7 @@ describe('Assistant', () => {
     // 03 §3 : une confirmation qui ne montre pas le destinataire et le montant
     // ne protège de rien face à une injection qui a modifié ces valeurs.
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation([]),
       setGuardConfirmed: () => undefined,
@@ -230,6 +234,7 @@ describe('Assistant', () => {
     // déterministe, il n'y a aucune session de confirmation à détourner.
     const calls: ToolCall[] = [];
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -277,6 +282,7 @@ describe('Assistant', () => {
   it('n\'exécute rien de plus que ce qui a été confirmé', async () => {
     const calls: ToolCall[] = [];
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: gatewayRequiringConfirmation(calls),
       setGuardConfirmed: () => undefined,
@@ -314,6 +320,7 @@ describe('Assistant', () => {
     // ponctuel en autorisation permanente.
     const states: boolean[] = [];
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -356,6 +363,7 @@ describe('Assistant', () => {
   it('remet la confirmation à zéro même si l\'outil lève', async () => {
     const states: boolean[] = [];
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -397,6 +405,7 @@ describe('Assistant', () => {
 
   it('rapporte un refus de politique comme un refus, pas comme une erreur', async () => {
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf(TOOL_CALL),
       gateway: {
         register: () => ok(undefined),
@@ -442,6 +451,7 @@ describe('Assistant', () => {
     // ajouterait de la friction sans rien protéger.
     const states: boolean[] = [];
     const assistant = createAssistant({
+      arret: arretDouble(),
       intent: intentOf({ ...TOOL_CALL, toolId: 'memory_add', userConfirms: true }),
       gateway: {
         register: () => ok(undefined),

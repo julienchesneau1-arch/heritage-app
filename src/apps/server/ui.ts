@@ -338,6 +338,36 @@ ${capacitesInjectees()}
         'À confirmer sur ton Mac avec « /confirmer » — ' + reply.minutesRestantes + ' min restantes.'));
       return;
     }
+    /* ⚠ ADR-104 — L'ARRÊT D'URGENCE EST ATTEIGNABLE DEPUIS LE TÉLÉPHONE, et
+       c'est une exception ASSUMÉE à ADR-090.
+
+       ADR-090 refuse les actions dangereuses venues d'un canal moins sûr.
+       Arrêter va dans le sens inverse : quelqu'un qui n'est pas devant sa
+       machine est exactement celui qui a le plus besoin de pouvoir dire stop.
+
+       ⚠ MAIS LA LEVÉE, ELLE, N'EST PAS ICI. Il n'existe aucun bouton
+       « reprendre » sur cette page et aucune route qui la serve : lever se
+       fait devant la machine, comme confirmer (ADR-101). Voir n'est pas
+       pouvoir ; arrêter n'est pas repartir. */
+    if (reply.kind === 'ARRET') {
+      /* ⚠ « NOUVELLE » N'EST PAS UN MOT DE REMPLISSAGE. Mesuré en utilisant
+         Jarvis : après un arrêt, « mes tâches » répond encore — ADR-057 laisse
+         passer les lectures locales, délibérément. La première version de cette
+         phrase disait « plus aucune action », ce qui promettait une protection
+         plus large que la vraie. */
+      node.appendChild(el('div', null, '⏹ ARRÊTÉ. Aucune action NOUVELLE ne passera.'));
+      node.appendChild(el('div', 'detail',
+        reply.annulees + ' action(s) en attente annulée(s).'));
+      node.appendChild(el('div', 'detail',
+        'Les lectures locales restent possibles — après un arrêt, on a besoin de voir.'));
+      if (reply.enVol > 0) {
+        node.appendChild(el('div', 'detail',
+          '⚠ ' + reply.enVol + ' action(s) étaient déjà parties : leur effet existe peut-être.'));
+      }
+      node.appendChild(el('div', 'note',
+        'Pour reprendre : « /reprendre <raison> » sur ton Mac.'));
+      return;
+    }
     node.appendChild(el('div', null, reply.message || 'Erreur.'));
   }
 

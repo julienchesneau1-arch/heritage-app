@@ -41,8 +41,14 @@ nombre de cases à cocher.
 Phase 8 est exclue du calcul : `docs/02` la conditionne à une preuve d'usage,
 elle n'est donc pas un dû.
 
-> ⚠ **CE TOTAL EST PASSÉ DE 65 À 68, ET SEULEMENT UN POINT VIENT DU TRAVAIL
-> FAIT.** Les deux autres corrigent une addition qui n'additionnait pas.
+> ⚠ **CE TOTAL EST PASSÉ DE 65 À 69, ET DEUX POINTS SEULEMENT VIENNENT DU
+> TRAVAIL FAIT.** Les deux autres corrigent une addition qui n'additionnait pas.
+>
+> ```text
+> +2   correction de la somme (ci-dessous)
+> +0,7 Phase 4 : le Model Router (ADR-102), moins le benchmark jamais compté
+> +1,5 Phase 5 : la passerelle audio substituable (ADR-103)
+> ```
 >
 > ```text
 > colonne Contribution, telle qu'elle était publiée
@@ -296,7 +302,7 @@ mesurer contre `docs/02` le fait donc disparaître.
 | # | Document | État |
 |---|---|---|
 | 00 | Master vision | **ratifiée**, non contredite |
-| 01 | ADR | **103 ADR**, chacune avec sa condition de révision |
+| 01 | ADR | **104 ADR**, chacune avec sa condition de révision |
 | 02 | Plan d'exécution | phases −1→2 franchies ; **Phase 3 FRANCHIE — et désormais VÉRIFIABLE** par `pnpm gate:phase3` (ADR-087). Elle était déclarée « COMPLÈTE (10/10) » **sans porte de sortie** : le chiffre comptait des outils écrits, pas les trois conditions de `docs/02`. La porte existe, elle passe — l'affirmation était juste, mais sans preuve ; 4→7 ouvertes |
 | 03 | Sécurité et confidentialité | invariants posés ; **10/15 nommés en test** (67 %) — S11 y entre en Phase 7, et par le bon chemin : son exemption portait sa condition de fin (`absent: 'src/core/update'`), qui a rougi le jour où ce répertoire a existé. **Zéro exemption restante.** ⚠ Cette ligne a affiché « 7/15 » face à un tableau qui disait 9, dans le même document. Elle n'avait pas menti : elle était vraie à la date de sa mesure, et le travail a nommé deux invariants de plus sans qu'elle bouge. La ligne 62 est gardée par `coherence-des-chiffres.test.ts` ; celle-ci ne l'était par rien — c'est toute la différence (§2) |
 | 04 | Dépendances et coût | **CostGate écrit et testé** (ADR-040) mais **sans appelant** — aucun fournisseur cloud ne l'appelle encore ; le 0 € reste donc tenu par absence de dépense, avec le mécanisme prêt AVANT le premier appel payant. `wiring.test.ts` signalera l'oubli de branchement. **Model Router écrit** (ADR-102), non branché pour un motif distinct : arbitrer entre un seul candidat n'est pas arbitrer. Le §11 — l'indépendance — est tenu par le type : le noyau ne nomme aucun modèle |
@@ -349,7 +355,9 @@ mesurer contre `docs/02` le fait donc disparaître.
 | **4. Un `ModelProvider` LOCAL** | le dernier verrou de la fluidité. L'enveloppe l'attend ; il n'y a plus qu'à écrire l'adaptateur (Ollama en référence, ADR-007) et à choisir un modèle. C'est ce qui fera passer les 43 % d'ADR-080. |
 | ~~3. Contrat du tour de parole~~ | **FAIT** — ADR-074. `ecouter()` est branché ; `accuseReception` est écrit et **déclaré sans appelant**, en attente d'une surface où l'attente existe. Le pipeline audio, lui, reste entier. |
 | ~~1. Audio Gateway abstrait~~ (Phase 5) | **FAIT** — ADR-103. La porte « pipeline substituable » de `docs/02` est franchie, et R1 d'ADR-093 est devenue du code : `transcrire` refuse tout état de micro autre que `TRANSCRIT`. ⚠ **Non branché**, et aucun moteur n'existe. |
-| **1. Un moteur STT local** (Phase 5) | le verrou réel de la voix. `docs/02` veut « STT fonctionnel réseau coupé » ; la passerelle le refuse déjà s'il n'est pas local. Fiche `docs/04` obligatoire — un moteur audio est une dépendance, même livré en binaire. |
+| ~~1. Câbler l'arrêt d'urgence~~ | **FAIT** — ADR-104. `docs/05 §C2` est le seul scénario doré `CRITIQUE` dont l'entrée est une phrase, et cette phrase n'atteignait **rien** : `halt.ts` existait depuis ADR-057, le Tool Gateway l'honorait, et `engage()` n'avait aucun appelant. ⚠ L'usage a aussi trouvé une phrase de MOI qui promettait plus que le mécanisme ne tient. |
+| **1. « Annule » depuis le téléphone** | même forme que le défaut ci-dessus, sur l'Undo Engine : le CLI reconnaît « annule la dernière action » (ADR-066), `assistant.say()` non — donc la passerelle web non plus. La capacité existe et le téléphone ne l'atteint pas. |
+| **2. Un moteur STT local** (Phase 5) | le verrou réel de la voix. `docs/02` veut « STT fonctionnel réseau coupé » ; la passerelle le refuse déjà s'il n'est pas local. Fiche `docs/04` obligatoire — un moteur audio est une dépendance, même livré en binaire. |
 | **2. Connecter un compte Google** | inchangé depuis ADR-078 : trois secrets au coffre, et deux appels réels à provoquer. C'est le seul verrou restant de `calendar_update`, dernier outil hors surface parlée. |
 | **3. Relire la migration `data_level`** | `docs/29`, ligne par ligne. C'est la seule migration du dépôt dont une erreur EXPOSE une donnée, et `docs/14 §5` exige une relecture humaine. Elle ferme les 15 % restants de la Phase 4 avec le benchmark local. |
 

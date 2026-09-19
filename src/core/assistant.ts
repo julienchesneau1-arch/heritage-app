@@ -34,6 +34,8 @@ import {
 import type { FileDeConfirmations } from './confirmation/file.js';
 import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
+import type { ControleDArret } from './safety/controle.js';
+import { estUneParoleDArret } from './safety/parole-d-arret.js';
 import type { Mode, Surface, VerificationStatus } from './types/domain.js';
 
 export type AssistantReply =
@@ -84,6 +86,24 @@ export type AssistantReply =
       readonly resume: string;
       readonly minutesRestantes: number;
       readonly reason: string;
+    }
+  | {
+      /**
+       * JARVIS EST ARRÊTÉ — `docs/05 §C2`, ADR-104.
+       *
+       * Ce n'est pas un `DONE` : un `DONE` porte un `toolId`, et l'arrêt
+       * d'urgence **n'est pas un outil** — il ne traverse pas le Policy Gate,
+       * précisément parce qu'une politique pourrait le refuser.
+       *
+       * `enVol` est le champ à ne jamais fondre dans `annulees`. C'est ce que
+       * l'arrêt n'a PAS pu défaire (`docs/26 §5`), et donc la seule chose que
+       * l'utilisateur doit savoir après avoir dit « stop ».
+       */
+      readonly kind: 'ARRET';
+      readonly annulees: number;
+      readonly enVol: number;
+      /** L'arrêt tient, mais le journal n'a pas pris l'événement. Dit, pas tu. */
+      readonly journalMuet: boolean;
     }
   | { readonly kind: 'ERROR'; readonly message: string };
 
@@ -202,6 +222,18 @@ export interface AssistantDeps {
    * champ est REQUIS pour que son absence soit un choix écrit, pas un oubli.
    */
   readonly tier1: Tier1 | null;
+  /**
+   * L'ARRÊT D'URGENCE — ADR-104, `docs/05 §C2`.
+   *
+   * ⚠ REQUIS ET NON NULLABLE, contrairement à `tier1` et à `file`.
+   *
+   * Ces deux-là ont un `null` légitime : un assemblage sans modèle local, ou
+   * sans surface distante, est un assemblage normal. **Un assemblage qu'on ne
+   * peut pas arrêter ne l'est pas.** Autoriser `null` ici reviendrait à
+   * permettre, par distraction, un Jarvis dont le bouton rouge ne serait
+   * câblé à rien — c'est-à-dire exactement l'état que cette ADR corrige.
+   */
+  readonly arret: ControleDArret;
 }
 
 /**
@@ -216,6 +248,30 @@ export const DUREE_PAR_DEFAUT_MINUTES = 60;
 export function createAssistant(deps: AssistantDeps): Assistant {
   return {
     async say(text: string, options: SayOptions): Promise<AssistantReply> {
+      /* ⚠ L'ARRÊT D'URGENCE PASSE AVANT TOUT LE RESTE — `docs/05 §C2`, ADR-104.
+
+         Avant le `Tier 0`, avant le `Tier 1`, avant le résolveur de référents,
+         avant le Policy Gate. `halt.ts` l'a tranché dès sa première ligne :
+         *« un arrêt d'urgence que la politique peut refuser n'est pas un arrêt
+         d'urgence »* — et le moment où l'on appuie sur le bouton est
+         précisément celui où le reste peut se comporter autrement qu'attendu.
+
+         ⚠ ET IL N'EST PAS RESTREINT PAR LA SURFACE, alors qu'ADR-090 restreint
+         tout le reste. Ce n'est pas un oubli : ADR-090 protège contre les
+         actions DANGEREUSES venues d'un canal moins sûr. Arrêter va dans le
+         sens inverse — et quelqu'un qui n'est pas devant sa machine est
+         exactement celui qui a le plus besoin de pouvoir dire stop. */
+      if (estUneParoleDArret(text)) {
+        const arrete = await deps.arret.engager(`demandé par l’utilisateur : « ${text} »`);
+        if (!arrete.ok) return { kind: 'ERROR', message: arrete.error.message };
+        return {
+          kind: 'ARRET',
+          annulees: arrete.value.annulees,
+          enVol: arrete.value.enVol,
+          journalMuet: arrete.value.journalMuet,
+        };
+      }
+
       /* L'ORDRE EST UNE PROPRIÉTÉ — ADR-081.
 
          `Tier 0` d'abord, toujours. Ses règles sont déterministes, gratuites,

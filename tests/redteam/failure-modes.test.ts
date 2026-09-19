@@ -317,12 +317,57 @@ describe.skipIf(skip)('RED TEAM — modes de défaillance', () => {
       if (/['"]CONFIRMED['"]/.test(readFileSync(file, 'utf8'))) offenders.push(relative);
     }
     expect(offenders).toEqual([
+      /* ⚠ L'ARRÊT D'URGENCE — ADR-104, et l'exception est NOMMÉE plutôt
+         qu'escamotée dans `allowed`.
+
+         `controle.ts` inscrit l'arrêt au journal avec `CONFIRMED`. Le mot est
+         là pour une raison qu'`halt.ts` a déjà écrite noir sur blanc à propos
+         du `FAILED` qu'il pose sur les opérations `PLANNED` :
+
+           > « C'est le seul endroit du dépôt où `FAILED` s'écrit sans
+           >  vérification, et il est légitime : l'absence d'effet est établie
+           >  par l'ÉTAT, pas par une observation du monde. »
+
+         Ici c'est la présence : la ligne `emergency_halt` est écrite par une
+         transaction COMMISE, et le Tool Gateway la lira au prochain appel.
+
+         ⚠ ET LA TENTATION ÉTAIT DE DÉPLACER LE FICHIER. Ce test ne balaie que
+         `src/core/` ; écrire la même ligne depuis `src/apps/` l'aurait rendu
+         vert sans rien changer au fond. Ce serait tricher avec la portée d'une
+         garde plutôt qu'avec sa règle — la même chose en pire.
+
+         Le test suivant est la contrepartie comportementale : un arrêt qui
+         ÉCHOUE n'inscrit rien du tout. */
+      'src/core/safety/controle.ts',
       // `outcome.ts` PROJETTE un statut global à partir de statuts par cible.
       // Il a donc légitimement besoin du mot — mais ce n'est pas une seconde
       // porte vers « c'est fait » : le test suivant vérifie qu'il ne peut pas
       // fabriquer un CONFIRMED sans preuve.
       'src/core/tools/outcome.ts',
     ]);
+  });
+
+  it('⚠ un arrêt qui ÉCHOUE n’inscrit RIEN au journal — ADR-104', () => {
+    /* LA CONTREPARTIE DE L'EXCEPTION CI-DESSUS.
+
+       `controle.ts` n'écrit son `CONFIRMED` qu'APRÈS un `halt.engage()` qui a
+       rendu `ok` — donc après une transaction commise. Le vérifier par la
+       forme du code plutôt que par un double : ce qui compte est l'ORDRE des
+       deux instructions, et un double passerait avec n'importe quel ordre. */
+    const src = readFileSync(
+      join(process.cwd(), 'src/core/safety/controle.ts'),
+      'utf8',
+    );
+    const corps = /async engager[\s\S]*?\n {4}\},/u.exec(src)?.[0] ?? '';
+    expect(corps, 'engager() introuvable').not.toBe('');
+
+    const garde = corps.indexOf('if (!engage.ok) return engage;');
+    const ecriture = corps.indexOf('inscrire(');
+    expect(garde, 'la garde d’échec doit exister').toBeGreaterThan(-1);
+    expect(ecriture, 'l’inscription doit exister').toBeGreaterThan(-1);
+    expect(garde, 'le journal est écrit APRÈS la garde, jamais avant').toBeLessThan(
+      ecriture,
+    );
   });
 
   it(

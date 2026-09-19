@@ -56,6 +56,8 @@ ${capacitesParlees()
 
     /audit          ce que j'ai fait, depuis le journal
     /annule         défaire la dernière action annulable
+    /reprendre <raison>
+                    lever un arrêt d'urgence — dis « arrête tout » pour l'engager
     /confirmer      exécuter ce qui a été préparé depuis le téléphone
     /inbox          les mémoires en attente de ta confirmation
     /diagnostic     état du système
@@ -361,6 +363,52 @@ function show(reply: AssistantReply): void {
       );
       return;
 
+    case 'ARRET':
+      /* ⚠ ADR-104 — ET L'ORDRE DES TROIS LIGNES EST LA PARTIE UTILE.
+
+         1. ce qui est VRAI maintenant : Jarvis est arrêté
+         2. ce que l'arrêt N'A PAS pu défaire — `docs/26 §5`
+         3. comment en sortir
+
+         Le deuxième point est celui qu'on serait tenté de taire. Une opération
+         déjà partie a peut-être produit son effet, et laisser croire que
+         « stop » a tout effacé serait le seul mensonge que cette réponse
+         puisse commettre. */
+      /* ⚠ « PLUS AUCUNE ACTION NE PASSERA » — J'AVAIS ÉCRIT ÇA, ET C'ÉTAIT FAUX.
+
+         Trouvé en UTILISANT Jarvis, pas en le relisant : après « arrête tout »,
+         « mes tâches » a répondu normalement. Le mécanisme n'a pas de défaut —
+         ADR-057 laisse délibérément passer les LECTURES LOCALES
+         (`L1 && !networkRequired`), parce qu'après avoir appuyé sur le bouton
+         on a PLUS besoin de comprendre, pas moins.
+
+         C'est donc la phrase qui mentait, et dans le sens le plus coûteux :
+         elle promettait une protection plus large que la vraie. Un utilisateur
+         qui croit que TOUT est bloqué ne s'étonnera pas de voir une lecture
+         aboutir — il en conclura que l'arrêt n'a pas marché, ou pire, il
+         supposera bloqué ce qui ne l'est pas. */
+      stdout.write('  ⏹ ARRÊTÉ. Aucune action NOUVELLE ne passera.\n');
+      stdout.write(
+        `  ${String(reply.annulees)} action(s) en attente annulée(s).\n`,
+      );
+      stdout.write(
+        '  Les lectures locales restent possibles — journal, tâches, état : '
+          + 'après un arrêt, on a besoin de voir.\n',
+      );
+      if (reply.enVol > 0) {
+        stdout.write(
+          `  ⚠ ${String(reply.enVol)} action(s) étaient DÉJÀ parties : `
+            + `leur effet existe peut-être, et l'arrêt ne les rattrape pas.\n`,
+        );
+      }
+      if (reply.journalMuet) {
+        stdout.write(
+          '  ⚠ L’arrêt tient, mais le journal n’a pas pris l’événement.\n',
+        );
+      }
+      stdout.write('  Pour reprendre : « /reprendre <raison> », sur cette machine.\n');
+      return;
+
     case 'ERROR':
       stdout.write(`  ${reply.message}\n`);
       return;
@@ -524,6 +572,34 @@ async function main(): Promise<void> {
           // Fin d'entrée pendant une confirmation : ce n'est pas un oui.
           return answer ?? '';
         });
+        continue;
+      }
+      if (line === '/reprendre' || line.startsWith('/reprendre ')) {
+        /* ⚠ LEVER UN ARRÊT EST UNE COMMANDE, PAS UNE PHRASE — ADR-104.
+
+           `halt.ts` pose la dissymétrie : engager va dans le sens sûr, lever
+           va dans le sens dangereux. Reconnaître « reprends » comme on
+           reconnaît « stop » les rendrait aussi faciles l'une que l'autre, et
+           une injection indirecte pourrait enchaîner les deux.
+
+           Trois gardes, et aucune n'est décorative :
+             — commande explicite, jamais une phrase ;
+             — RAISON obligatoire, tapée à la main ;
+             — surface LOCALE par construction — ce chemin n'existe que dans
+               le CLI, et la passerelle web ne l'expose pas (ADR-090/101). */
+        const raison = line.slice('/reprendre'.length).trim();
+        if (raison.length === 0) {
+          stdout.write(
+            '  Il faut une raison : « /reprendre j’ai vérifié, c’était une fausse alerte ».\n',
+          );
+          continue;
+        }
+        const leve = await runtime.value.arret.lever(raison);
+        stdout.write(
+          leve.ok
+            ? '  ▶ Arrêt levé. Jarvis peut de nouveau agir.\n'
+            : `  ${leve.error.message}\n`,
+        );
         continue;
       }
       if (line === '/inbox') {

@@ -16,6 +16,8 @@ import { join } from 'node:path';
 import { loadConfig } from '../core/config/load.js';
 import { createDb, type Db, type DbHealth } from '../core/db/client.js';
 import { createLedger, type Ledger } from '../core/ledger/ledger.js';
+import { createEmergencyHalt } from '../core/safety/halt.js';
+import { createControleDArret, type ControleDArret } from '../core/safety/controle.js';
 import { digestPayload } from '../core/ledger/event.js';
 import { createPolicyGate } from '../core/policy/gate.js';
 import { createMemoryGuard } from '../core/memory/guard.js';
@@ -55,6 +57,14 @@ export interface Runtime {
   readonly gateway: ToolGateway;
   readonly ledger: Ledger;
   readonly inbox: MemoryInbox;
+  /**
+   * L'arrêt d'urgence — ADR-104.
+   *
+   * Exposé au runtime pour la raison exacte qui y expose `undo` : un contrôle
+   * de dernier recours qu'aucune surface n'atteint est un module hors circuit,
+   * et c'est la dette que cette ADR paie.
+   */
+  readonly arret: ControleDArret;
   readonly sessions: SessionStore;
   readonly intent: IntentEngine;
   readonly assistant: Assistant;
@@ -112,6 +122,19 @@ export function buildRuntime(
   const inbox = createMemoryInbox(db);
   const ledger = createLedger(db);
 
+  /* L'ARRÊT D'URGENCE, CÂBLÉ — ADR-104, `docs/05 §C2`.
+
+     `createEmergencyHalt` existait depuis ADR-057 et le Tool Gateway
+     l'honorait déjà ; `engage()` n'avait simplement AUCUN appelant. Cette
+     ligne est celle qui manquait.
+
+     ⚠ DEUX INSTANCES, UN SEUL FAIT. Le Gateway construit la sienne en privé
+     (délibérément : une dépendance injectée serait remplaçable par une
+     doublure). Ce n'est pas un second registre au sens d'ADR-041 — l'état
+     n'est pas dans l'objet, il est dans la table `emergency_halt`. Les deux
+     instances lisent et écrivent la même ligne. */
+  const arret = createControleDArret(createEmergencyHalt(db), ledger);
+
   const vault = createEnvSecretVault();
 
   const gateway = createToolGateway({
@@ -165,6 +188,7 @@ export function buildRuntime(
     gateway,
     ledger,
     inbox,
+    arret,
     sessions: createSessionStore(db),
     intent: createIntentEngine(),
     assistant: createAssistant({
@@ -178,6 +202,8 @@ export function buildRuntime(
       designation: createDesignationResolver(db),
       // ADR-099 — le téléphone prépare, la machine confirme.
       file: createFileDeConfirmations(db),
+      // ADR-104 — « Jarvis, stop » atteint enfin le bouton rouge.
+      arret,
       // ADR-077 : les dates sont calculées PAR LA BASE, jamais par le processus.
       temps: createResolveurTemporel(db),
       /* LE `TIER 1`, SI ET SEULEMENT SI UN MODÈLE LOCAL EST CONFIGURÉ — ADR-082.

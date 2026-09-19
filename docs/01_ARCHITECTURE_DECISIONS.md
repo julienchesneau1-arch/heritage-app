@@ -9094,3 +9094,171 @@ d'affirmer qu'il n'y en a aucun.
 
 Le premier moteur enregistré. Il éprouvera d'un coup la déclaration de licence,
 la déclaration `local`, et la porte de sortie — ou montrera qu'on l'a contournée.
+
+---
+
+## ADR-104 — « Jarvis, stop » n'atteignait rien
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** `docs/05 §C2` (`CRITIQUE`), ADR-057, ADR-090, ADR-094, ADR-101
+
+### 1. Le seul scénario doré CRITIQUE dont l'entrée est une phrase
+
+```text
+docs/05 §C2 — Arrêt d'urgence   CRITIQUE
+  Entrée :  « Jarvis, stop. »
+  Attendu : sorties interrompues, actions en attente annulées,
+            actions externes bloquées, journal conservé.
+```
+
+`halt.ts` existe depuis ADR-057. Il est écrit, testé, et le Tool Gateway
+l'**honore** : arrêté, plus aucune action nouvelle ne passe. Mesuré en
+cherchant son appelant :
+
+> `engage()` n'en avait **aucun**. Ni dans le noyau, ni dans le CLI, ni dans la
+> passerelle web. Personne ne pouvait appuyer sur le bouton.
+
+Un arrêt d'urgence qu'aucune phrase n'atteint n'est pas un arrêt d'urgence :
+c'est un *mécanisme* d'arrêt d'urgence. ADR-094 avait nommé cette forme —
+*une capacité que l'interface ne montre pas est, du siège de l'utilisateur, une
+capacité absente* — et elle se trouvait ici sur le contrôle de dernier recours.
+
+### 2. La reconnaissance ne vit pas dans le moteur d'intention
+
+Le moteur produit des **propositions d'outil**, et une proposition traverse le
+Policy Gate. `halt.ts` l'a tranché dès sa première ligne :
+
+> *« Un arrêt d'urgence que la politique peut refuser n'est pas un arrêt
+> d'urgence »* — et le moment où l'on appuie sur le bouton est précisément
+> celui où la politique peut se comporter autrement qu'attendu.
+
+`estUneParoleDArret()` est donc une fonction **pure**, dans `src/core/safety/`,
+consultée par l'Assistant **avant tout le reste** : avant le `Tier 0`, avant le
+`Tier 1`, avant le résolveur de référents, avant le Gate. Un test vérifie que
+le `Tier 0` ne voit même pas la phrase — sinon une future règle « arrête … »
+pourrait la capturer, et l'arrêt redeviendrait un outil.
+
+### 3. ⚠ La garde qui compte est celle des faux positifs
+
+```text
+arrête tout · stop · jarvis stop · arrêt d'urgence   → ARRÊT
+arrête la tâche du plombier · arrête le minuteur     → l'outil ordinaire
+```
+
+Avaler « arrête la tâche du plombier » transformerait une annulation ordinaire
+en paralysie complète, et l'utilisateur ne comprendrait pas ce qui vient de se
+passer. **Un arrêt d'urgence ne prend aucun complément d'objet** — « tout » et
+« toi » sont les seuls admis, parce qu'ils ne désignent rien de particulier.
+Dix phrases négatives le tiennent.
+
+Et le sens de l'erreur est choisi : un faux positif arrête Jarvis — bruyant,
+visible, réparable. Un faux négatif le laisse agir quand on lui a dit de
+s'arrêter. **En cas de doute, on arrête.**
+
+### 4. ⚠ Il fonctionne depuis le téléphone — exception assumée à ADR-090
+
+ADR-090 refuse les actions dangereuses venues d'un canal moins sûr, et ADR-101
+en a tiré *« voir n'est pas pouvoir »*. L'arrêt va dans le sens **inverse** :
+
+> Quelqu'un qui n'est pas devant sa machine est exactement celui qui a le plus
+> besoin de pouvoir dire stop.
+
+**Mais la levée, elle, n'est pas sur le téléphone.** Il n'existe ni bouton
+« reprendre » ni route qui la serve, et trois tests le vérifient par l'absence.
+C'est la dissymétrie qu'`halt.ts` avait posée, portée jusqu'aux surfaces :
+
+```text
+ARRÊTER    phrase · n'importe quelle surface · aucune contrainte
+REPRENDRE  commande /reprendre · RAISON obligatoire · machine locale seulement
+```
+
+Reconnaître « reprends » comme on reconnaît « stop » les rendrait aussi faciles
+l'une que l'autre, et une injection indirecte pourrait enchaîner les deux.
+
+### 5. ⚠ J'ai écrit une phrase fausse, et c'est l'usage qui l'a trouvée
+
+La première version de l'affichage disait :
+
+> « ⏹ ARRÊTÉ. **Plus aucune action ne passera.** »
+
+Puis, en utilisant Jarvis plutôt qu'en le relisant :
+
+```text
+> arrête tout
+  ⏹ ARRÊTÉ. Plus aucune action ne passera.
+
+> mes tâches
+  ✓ Voici ce que j'ai trouvé.
+  • acheter du ciment          ← et la liste complète
+```
+
+**Le mécanisme n'a aucun défaut.** ADR-057 laisse délibérément passer les
+lectures locales (`L1 && !networkRequired`), et l'a argumenté : *« après un
+arrêt d'urgence on a PLUS besoin de comprendre, pas moins »*. `audit_query`,
+`system_status` et `egress_review` restent disponibles, ce qui est exactement
+ce qu'il faut.
+
+C'est **la phrase** qui mentait — et dans le sens le plus coûteux : elle
+promettait une protection **plus large** que la vraie. Un utilisateur qui croit
+que tout est bloqué suppose bloqué ce qui ne l'est pas.
+
+Ce qui manquait n'était pas le comportement, déjà juste : c'était le **lien**
+entre lui et ce que Jarvis affiche. Deux registres du même fait (ADR-041),
+l'un dans le Tool Gateway, l'autre dans une chaîne de caractères. Un test les
+attache désormais : il éprouve le blocage sur la boucle **réelle** — écriture
+refusée, lecture possible, levée, écriture de nouveau possible — puis exige que
+les deux surfaces le disent, et que la promesse trop large ne revienne pas.
+
+### 6. Le journal, et l'exception nommée
+
+`halt.ts` posait une obligation à son appelant : *« elle n'échappe pas au
+journal pour autant : l'appelant l'y inscrit »*. Tant qu'il n'y avait pas
+d'appelant, personne ne la portait. `controle.ts` la remplit, **à un seul
+endroit** — deux surfaces qui journaliseraient chacune de leur côté écriraient
+deux formats, puis l'une oublierait.
+
+⚠ **Et le journal n'est pas une condition de l'arrêt.** Si l'écriture échoue,
+l'arrêt **tient** et l'échec est dit (`journalMuet`). L'inverse — refuser
+d'arrêter parce qu'on n'a pas pu l'écrire — ferait dépendre le contrôle de
+dernier recours de la santé d'une table.
+
+L'événement porte `CONFIRMED`, ce qui a fait rougir la garde
+*« aucun module du noyau ne fabrique un CONFIRMED hors du Verification
+Engine »*. L'exception est **nommée dans la liste**, pas glissée dans
+l'ensemble `allowed`, et elle a sa contrepartie comportementale — un test
+vérifie que le journal est écrit **après** la garde d'échec, jamais avant. La
+justification est celle qu'`halt.ts` avait déjà écrite pour son propre
+`FAILED` : *l'état est établi par une transaction commise, pas par une
+observation du monde.*
+
+> ⚠ Et la tentation était de déplacer le fichier : cette garde ne balaie que
+> `src/core/`. Écrire la même ligne depuis `src/apps/` l'aurait rendue verte
+> sans rien changer au fond — tricher avec la **portée** d'une garde plutôt
+> qu'avec sa règle, ce qui est la même chose en pire.
+
+### 7. `arret` est requis et non nullable
+
+`tier1` et `file` ont un `null` légitime : un assemblage sans modèle local, ou
+sans surface distante, est normal. **Un assemblage qu'on ne peut pas arrêter ne
+l'est pas.** Le champ est donc requis et non nullable — le compilateur l'a
+rappelé à onze endroits le jour où il est apparu, ce qui est exactement le
+travail qu'on lui demande.
+
+### Ce que cette ADR ne résout pas
+
+- **`docs/05 §C2` n'est toujours pas franchi en entier.** « Sorties
+  interrompues » suppose des sorties en cours, c'est-à-dire de la voix ou un
+  flux — qui n'existent pas. Ce qui est tenu : actions en attente annulées,
+  actions nouvelles bloquées, journal conservé.
+- **Une requête déjà partie n'est pas rattrapable** (`docs/26 §5`). Le compte
+  est rendu séparément — `enVol` — précisément pour que l'utilisateur le sache
+  au lieu de croire que « stop » a tout effacé.
+- **« Annule la dernière action » reste hors de portée du téléphone.** Le CLI
+  la reconnaît depuis ADR-066 ; `assistant.say()` non, donc la passerelle web
+  non plus. Même forme que le défaut réparé ici, sur l'Undo Engine.
+
+### Condition de révision
+
+La première sortie continue — voix ou flux. C'est elle qui rendra
+« interrompre » différent de « ne plus rien commencer », et qui dira si
+`EngageResult` doit porter un troisième compteur.
