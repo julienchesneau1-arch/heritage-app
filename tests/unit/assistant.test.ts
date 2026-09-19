@@ -111,6 +111,14 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
+      },
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -138,6 +146,14 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
+      },
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -163,6 +179,14 @@ describe('Assistant', () => {
       resolver: {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
       tier1: null,
@@ -194,6 +218,14 @@ describe('Assistant', () => {
       resolver: {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
       tier1: null,
@@ -230,6 +262,14 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
+      },
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -262,6 +302,14 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
+      },
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -292,6 +340,14 @@ describe('Assistant', () => {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
       },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
+      },
       temps: TEMPS_FIGE,
       tier1: null,
     });
@@ -321,6 +377,14 @@ describe('Assistant', () => {
       resolver: {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
       tier1: null,
@@ -353,6 +417,14 @@ describe('Assistant', () => {
       resolver: {
         resolveMention: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
         resolveAnaphora: () => Promise.resolve(ok({ kind: 'NOT_FOUND' as const, mention: 'x' })),
+      },
+      /* Un double qui ne résout RIEN — même discipline que `resolver`
+         ci-dessus : ces tests ne portent pas sur la résolution, et un
+         référent non résolu doit produire une QUESTION, jamais une
+         supposition. */
+      designation: {
+        resoudre: () =>
+          Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
       },
       temps: TEMPS_FIGE,
       tier1: null,

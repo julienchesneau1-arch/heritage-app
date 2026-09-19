@@ -127,6 +127,13 @@ function assistantAvec(
     gateway: passerelle(calls),
     setGuardConfirmed: () => undefined,
     cloudEnabled: false,
+    /* Un double qui ne résout aucune désignation : ce fichier éprouve le
+       `Tier 1` et les ANAPHORES, pas ADR-096. Un référent non résolu doit
+       produire une QUESTION, jamais une supposition. */
+    designation: {
+      resoudre: () =>
+        Promise.resolve(ok({ kind: 'INTROUVABLE' as const, mention: 'x' })),
+    },
     resolver: {
       resolveMention: () => Promise.resolve(ok(resolution)),
       resolveAnaphora: () => Promise.resolve(ok(resolution)),

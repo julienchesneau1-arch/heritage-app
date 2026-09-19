@@ -85,6 +85,20 @@ const PHRASES: Readonly<Record<string, string>> = {
   /* ADR-077 — le verrou des DATES tombe, et c'est lui qui bloquait le cas
      d'usage réel de Julien : « je vais plus sur l'agenda que sur une liste ». */
   reminder_create: 'rappelle-moi jeudi d’appeler le médecin',
+  /* ADR-096 — LES HUIT DE LA DÉSIGNATION. Six exigeaient un identifiant
+     qu'une phrase ne porte pas ; deux n'avaient simplement aucune règle.
+
+     ⚠ Chacune de ces phrases NOMME sa cible. C'est la condition, et elle est
+     éprouvée à part : une phrase qui ne nomme rien (« efface ça ») doit
+     produire une QUESTION, jamais un appel — voir le test dédié plus bas. */
+  task_complete: 'termine la tâche café',
+  task_cancel: 'annule la tâche café',
+  reminder_cancel: 'annule le rappel du médecin',
+  note_delete: 'supprime la note du carreleur',
+  memory_forget: 'oublie que j’aime le café',
+  entity_delete: 'supprime la fiche de Camille Berthier',
+  audit_query: 'qu’as-tu fait aujourd’hui',
+  egress_review: 'qu’est-ce qui est sorti de la machine',
 };
 
 describe('la surface parlée de Jarvis', () => {
@@ -123,18 +137,17 @@ describe('la surface parlée de Jarvis', () => {
        et faire rougir la CI si le mouvement n'était pas voulu. Chaque entrée
        est une capacité que Jarvis POSSÈDE et que l'utilisateur ne peut pas
        demander. */
+    /* ⚠ HUIT LIGNES ONT QUITTÉ CETTE LISTE — ADR-096, et c'est la plus forte
+       baisse de son histoire. Elle est gardée comme trace : chacune disait
+       « exige un identifiant qu'une phrase ne porte pas », et c'était vrai.
+
+       Ce qui a changé n'est pas la phrase, c'est QUI résout. Le moteur reste
+       une fonction pure du texte ; l'Assistant interroge la base et DEMANDE
+       quand plusieurs lignes répondent. */
     expect(horsAtteinte).toEqual([
-      'audit_query', //     atteignable par `/audit` seulement
-      'calendar_create', // exige des dates ISO qu'une règle ne peut pas produire
+      'calendar_create', // exige des dates ISO ET un adaptateur branché
       'calendar_read', //   idem — et ADR-036/037 interdisent l'horloge du processus
       'calendar_update', // idem, plus un identifiant d'événement
-      'egress_review', //   revue d'égression, hors surface conversationnelle
-      'entity_delete', //   exige un identifiant qu'une phrase ne porte pas
-      'memory_forget', //   idem — atteignable par `/annule`
-      'note_delete', //     idem — atteignable par `/annule`
-      'reminder_cancel', // idem — atteignable par `/annule`
-      'task_cancel', //     exige un identifiant — atteignable par `/annule`
-      'task_complete', //   exige un identifiant de tâche
     ]);
 
     /* CE QUE CETTE LISTE DIT MAINTENANT, ET QU'ELLE NE DISAIT PAS.
@@ -142,17 +155,14 @@ describe('la surface parlée de Jarvis', () => {
        hors d'atteinte pour DEUX raisons nommées, et aucune ne se règle en
        écrivant une règle de plus.
 
-         un IDENTIFIANT qu'une phrase ne porte pas   7 outils
-         une DATE non encore câblée à l'outil        3 outils (agenda)
+         un IDENTIFIANT qu'une phrase ne porte pas   RÉSOLU — ADR-096
+         une DATE non encore câblée à l'outil        RÉSOLU — ADR-077
+         aucun ADAPTATEUR d'agenda branché           3 outils, et c'est tout
 
-       La première demande une résolution par désignation (« cette note »).
-
-       ⚠ LA SECONDE A CHANGÉ DE NATURE AVEC ADR-077. La résolution de dates
-       EXISTE désormais, et elle a débloqué `reminder_create`. Les trois outils
-       d'agenda restent hors d'atteinte pour une autre raison : aucun
-       adaptateur n'est branché, et leurs règles restent à écrire. Ce n'est plus
-       un verrou de conception, c'est du câblage. */
-    expect(atteignables).toHaveLength(11);
+       Les trois qui restent ne butent plus sur un verrou de conception. Il
+       leur manque un fournisseur d'agenda et les identifiants qui vont avec —
+       du câblage, et une décision qui n'appartient pas au code. */
+    expect(atteignables).toHaveLength(19);
     expect(enregistres).toHaveLength(22);
   });
 

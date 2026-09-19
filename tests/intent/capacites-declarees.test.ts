@@ -133,12 +133,33 @@ describe('Jarvis ne ment pas sur son propre catalogue', () => {
       expect(droite(agenda.understood)).toContain(droite('aucun agenda n’est connecté'));
     }
 
+    /* ⚠ « SUPPRESSION » A CHANGÉ DE NATURE — ADR-096, et pas de sens.
+
+       Cette assertion attendait `UNSUPPORTED` : les outils de suppression
+       existaient, mais aucune phrase ne les atteignait, faute d'identifiant.
+       Le résolveur de désignation le fournit — la capacité EXISTE désormais.
+
+       Ce qui reste vrai, et qui est tout l'objet du test : « supprime cette
+       note » ne nomme rien. Un pronom RENVOIE, il ne désigne pas. La réponse
+       n'est plus « je ne sais pas faire » mais « laquelle ? » — et elle dit
+       toujours le chemin qui marche sans aucun nom. */
     const suppression = moteur.propose('supprime cette note');
-    expect(suppression.kind).toBe('UNSUPPORTED');
-    if (suppression.kind === 'UNSUPPORTED') {
-      // On lui dit le chemin qui MARCHE, au lieu de lui dire que rien ne marche.
+    expect(suppression.kind).toBe('CLARIFY');
+    if (suppression.kind === 'CLARIFY') {
+      expect(suppression.question).toContain('/annule');
       expect(suppression.understood).toContain('/annule');
     }
+
+    /* ⚠ LE CAS QUI A RENDU CE MÉCANISME DANGEREUX AVANT D'ÊTRE GARDÉ.
+
+       Mesuré sur la première rédaction : « efface ça » produisait
+       `memory_forget { memoryId: "ça" }`. C'est le défaut d'ADR-073 — une
+       tâche intitulée « ça » — reproduit dans un outil L4 IRRÉVERSIBLE.
+
+       Si ce test rougit sur `TOOL_CALL`, une suppression peut de nouveau
+       s'appuyer sur un pronom. */
+    const pronom = moteur.propose('efface ça');
+    expect(pronom.kind, 'un pronom ne peut pas fonder une suppression').toBe('CLARIFY');
   });
 
   it('la PORTÉE reste à préciser — HIGH-4 n’est pas défait', () => {

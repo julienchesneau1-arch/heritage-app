@@ -381,7 +381,39 @@ describe('RED TEAM — code mort en production', () => {
 
     const intent = readFileSync(join(ROOT, 'src', 'core', 'intent', 'engine.ts'), 'utf8');
     expect(intent).not.toContain('resolver');
-    expect(intent).not.toContain('context/');
+
+    /* ⚠ CETTE ASSERTION A ÉTÉ AFFINÉE, PAS AFFAIBLIE — ADR-096.
+
+       Elle disait `not.toContain('context/')`. Un moteur qui importe le
+       résolveur n'est plus pur : l'assertion était juste, et elle a rougi dès
+       que le moteur a eu besoin du TYPE `GenreDesigne`.
+
+       La distinction n'est pas de la comptabilité de typage :
+
+       ```text
+       import type { GenreDesigne }   effacé à la compilation. Aucun code,
+                                      aucune entrée-sortie, aucun appel.
+       import { createDesignation… }  le moteur pourrait interroger la base.
+                                      C'est CE jour-là que propose() cesse
+                                      d'être une fonction du texte.
+       ```
+
+       On interdit donc le second, et on autorise le premier — ce qui rend la
+       propriété PLUS précise qu'avant : « le moteur ne peut pas interroger la
+       base » remplace « le moteur ne prononce pas le mot context ».
+
+       `verbatimModuleSyntax` est activé dans ce dépôt : un `import type` qui
+       serait en fait un import de valeur ne compilerait pas. Le compilateur
+       garde donc la moitié que ce test ne peut pas voir. */
+    const importsDeValeur = [...intent.matchAll(/^import\s+(?!type\b)[^;]*from\s+'[^']*context\/[^']*';/gm)];
+    expect(
+      importsDeValeur.map((m) => m[0]),
+      'le moteur d’intention ne doit importer AUCUNE valeur de context/',
+    ).toEqual([]);
+
+    // Contrôle : l'import de type, lui, existe bien — sinon l'assertion
+    // ci-dessus serait vraie pour la mauvaise raison.
+    expect(intent).toContain("import type { GenreDesigne }");
   });
 
   it('DÉMONSTRATION — 5 clés de configuration sur 16 n\'ont aucun effet', () => {

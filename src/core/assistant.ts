@@ -27,6 +27,10 @@ import { reconnaitre } from './temps/expression.js';
 import type { ResolveurTemporel } from './temps/resolution.js';
 import type { Tier1 } from './intent/tier1.js';
 import type { EntityResolver } from './context/resolver.js';
+import {
+  GenreDesigne,
+  type DesignationResolver,
+} from './context/designation.js';
 import { readConfirmables } from './tools/confirmation.js';
 import type { ToolGateway } from './tools/gateway.js';
 import type { Mode, Surface, VerificationStatus } from './types/domain.js';
@@ -148,6 +152,15 @@ export interface AssistantDeps {
    */
   readonly resolver: EntityResolver;
   /**
+   * LE RÉSOLVEUR DE DÉSIGNATIONS — ADR-096.
+   *
+   * REQUIS, pour la raison exacte qui rend `temps` requis : un champ optionnel
+   * est un champ qu'on oublie, et l'oublier ici ferait échouer « supprime la
+   * note du carreleur » en production pendant que tous les tests passeraient
+   * avec un double qui le fournit.
+   */
+  readonly designation: DesignationResolver;
+  /**
    * Le résolveur de dates — ADR-077.
    *
    * REQUIS, pas optionnel : un champ optionnel est un champ qu'on oublie, et
@@ -213,15 +226,24 @@ export function createAssistant(deps: AssistantDeps): Assistant {
          exactement ce qui distingue « résoudre » de « choisir à la place de
          quelqu'un ». */
       let input: Readonly<Record<string, unknown>> = proposal.input;
-      /* Les deux espèces de référent partagent une table (ADR-077) mais pas un
-         résolveur : l'une interroge le contexte de conversation, l'autre la
-         base. On les sépare ici, à un seul endroit. */
+      /* Les espèces de référent partagent une table (ADR-077) mais pas un
+         résolveur : chacune interroge une source différente. On les sépare
+         ici, à un seul endroit. */
       const anaphores = Object.entries(proposal.referents)
         .filter(([, genre]) => genre === 'ANAPHORA')
         .map(([cle]) => cle);
       const temporels = Object.entries(proposal.referents)
         .filter(([, genre]) => genre === 'TEMPORAL')
         .map(([cle]) => cle);
+      const mentions = Object.entries(proposal.referents)
+        .filter(([, genre]) => genre === 'MENTION')
+        .map(([cle]) => cle);
+      const designations = Object.entries(proposal.referents)
+        .flatMap(([cle, genre]) =>
+          genre.startsWith('DESIGNATION:')
+            ? [[cle, genre.slice('DESIGNATION:'.length)] as const]
+            : [],
+        );
 
       if (anaphores.length > 0) {
         if (options.sessionId === undefined) {
@@ -292,6 +314,92 @@ export function createAssistant(deps: AssistantDeps): Assistant {
            avant toute écriture, et peut corriger. Un défaut montré n'est pas
            un mensonge ; un défaut silencieux en serait un. */
         lisible[cle] = instant.value.humain;
+      }
+
+      /* RÉSOUDRE LES DÉSIGNATIONS — ADR-096.
+
+         « supprime la note du carreleur » : le moteur a porté le texte
+         « carreleur » dans `noteId` et l'a marqué. C'est ici qu'il devient un
+         identifiant — ou qu'une question est posée.
+
+         ⚠ LE MÊME INTERDIT QUE POUR LES DEUX AUTRES ESPÈCES, ET IL PÈSE PLUS
+         LOURD ICI. Quatre des six outils ouverts par ce mécanisme sont `L4`,
+         irréversibles. Un départage automatique entre deux notes effacerait
+         parfois la mauvaise, et personne ne le saurait jamais.
+
+         Trois issues, une seule agit : résolu → on substitue ; ambigu → on
+         demande, en NOMMANT les candidats ; introuvable → on le dit, sans
+         proposer de repli. */
+      for (const [cle, genre] of designations) {
+        const lu = GenreDesigne.safeParse(genre);
+        if (!lu.success) {
+          /* Un genre illisible est un défaut de règle, pas une ambiguïté de
+             l'utilisateur. On ne devine pas la table à interroger. */
+          return { kind: 'ERROR', message: `genre de désignation inconnu : ${genre}` };
+        }
+
+        const brut = input[cle];
+        if (typeof brut !== 'string' || brut.trim().length === 0) {
+          return {
+            kind: 'CLARIFY',
+            question: 'Laquelle exactement ? Je n’ai pas saisi ce que tu désignes.',
+          };
+        }
+
+        const trouve = await deps.designation.resoudre(lu.data, brut);
+        if (!trouve.ok) return { kind: 'ERROR', message: trouve.error.message };
+
+        if (trouve.value.kind === 'AMBIGU') {
+          return { kind: 'CLARIFY', question: trouve.value.question };
+        }
+        if (trouve.value.kind === 'INTROUVABLE') {
+          /* ON NE PROPOSE PAS DE REPLI. « Je n'ai pas trouvé, veux-tu que je
+             cherche ailleurs ? » relancerait l'utilisateur vers une action
+             qu'il n'a pas demandée — et sur un verbe de suppression, c'est la
+             dernière chose à faire. */
+          return {
+            kind: 'CLARIFY',
+            question: `Je ne trouve rien qui corresponde à « ${brut} ». Peux-tu le nommer autrement ?`,
+          };
+        }
+
+        /* La PROVENANCE ne change pas, et c'est délibéré — même choix que pour
+           `ANAPHORA` et `TEMPORAL`. L'identifiant vient de la base, donc du
+           noyau ; mais c'est l'utilisateur qui a désigné la ligne, et c'est sa
+           désignation que la confirmation L4 lui remontrera. Réétiqueter en
+           `SYSTEM` ferait perdre exactement cette information. */
+        input = { ...input, [cle]: trouve.value.cible.id };
+        lisible[cle] = trouve.value.cible.libelle;
+      }
+
+      /* RÉSOUDRE LES MENTIONS NOMINALES — ADR-096.
+
+         « supprime la fiche de Camille » passe par `EntityResolver`, qui
+         existait avant ce mécanisme et porte ce qu'un résolveur de désignation
+         n'a pas : les alias confirmés, et la preuve contextuelle de session.
+         Deux registres de « comment on retrouve une personne » auraient fini
+         par diverger (ADR-041). */
+      for (const cle of mentions) {
+        const brut = input[cle];
+        if (typeof brut !== 'string' || brut.trim().length === 0) {
+          return { kind: 'CLARIFY', question: 'De qui parles-tu ?' };
+        }
+
+        const trouve = await deps.resolver.resolveMention(brut, options.sessionId);
+        if (!trouve.ok) return { kind: 'ERROR', message: trouve.error.message };
+
+        if (trouve.value.kind === 'AMBIGUOUS') {
+          return { kind: 'CLARIFY', question: trouve.value.question };
+        }
+        if (trouve.value.kind === 'NOT_FOUND') {
+          return {
+            kind: 'CLARIFY',
+            question: `Je ne connais personne sous le nom « ${brut} ».`,
+          };
+        }
+
+        input = { ...input, [cle]: trouve.value.entity.id };
+        lisible[cle] = trouve.value.entity.displayName;
       }
 
       /* LE POINT DE FRAPPE UNIQUE — ADR-030.

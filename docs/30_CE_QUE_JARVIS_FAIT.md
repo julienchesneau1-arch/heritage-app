@@ -148,7 +148,7 @@ faire** : `memory_add` est `L2` (exécution directe), `memory_forget` est `L4`
 | `egress_review` | L1 | — | OTHER | — | Ce qui est parti : où, quelle classe, pourquoi |
 | `system_status` | L1 | — | OTHER | — | Intégrité du journal, opérations sans issue, modèle local |
 
-### ⚠ Le chiffre qui compte vraiment : **11 sur 22**
+### ⚠ Le chiffre qui compte vraiment : **19 sur 22**
 
 **Un outil écrit n'est pas un outil que tu peux déclencher.** C'est la distinction
 qu'aucun tableau d'avancement ne fait, et elle est mesurée par
@@ -156,13 +156,17 @@ qu'aucun tableau d'avancement ne fait, et elle est mesurée par
 
 | | Nombre | Lesquels |
 |---|---|---|
-| **Atteignables en parlant** | **11** | `memory_add` `memory_search` `note_create` `task_create` `task_list` `entity_create` `web_search` `file_search` `briefing_generate` `system_status` `reminder_create` |
-| Atteignables par commande | 1 | `audit_query` (`/audit`) |
-| Atteignables **seulement sur la dernière action** | 5 | `memory_forget` `note_delete` `task_cancel` `reminder_cancel` `entity_delete` — via `/annule` |
-| **Hors d'atteinte depuis le CLI** | **5** | `calendar_read` `calendar_create` `calendar_update` `task_complete` `egress_review` |
+| **Atteignables en parlant** | **19** | les 11 d'origine, plus `task_complete` `task_cancel` `reminder_cancel` `note_delete` `memory_forget` `entity_delete` `audit_query` `egress_review` |
+| **Hors d'atteinte depuis le CLI** | **3** | `calendar_read` `calendar_create` `calendar_update` |
 
-Les cinq derniers sont écrits, testés, conformes — et **aucune phrase ne les
-atteint**. Ce n'est pas un oubli, c'est mesuré et déclaré. Le détail est au §6.
+Les trois derniers sont écrits, testés, conformes — et **aucune phrase ne les
+atteint**. Ce n'est pas un oubli, c'est mesuré et déclaré : il leur manque un
+adaptateur d'agenda, ce qui n'est pas du code mais des identifiants. §6.2.
+
+> **Ce chiffre était de 11 sur 22 jusqu'à ADR-096.** Huit outils sont sortis de
+> l'ombre sans qu'aucun ne soit écrit : six exigeaient un identifiant qu'une
+> phrase ne porte pas, et deux n'avaient simplement aucune règle. Ce qui a
+> changé n'est pas la capacité — c'est **qui résout la désignation**.
 
 ### Les phrases qui marchent, mot pour mot
 
@@ -176,8 +180,17 @@ mes tâches                         lister les tâches ouvertes
 note …                             prendre une note
 cherche sur le web …               rechercher en ligne
 cherche dans mes documents …       rechercher dans les fichiers
-fais-moi un point                  briefing
+fais-moi un point                  briefing du jour
 comment vas-tu                     état du système
+
+termine la tâche …                 marquer une tâche terminée
+annule la tâche …                  annuler une tâche
+annule le rappel …                 annuler un rappel
+supprime la note …                 ⚠ L4, définitif
+oublie que …                       ⚠ L4, définitif
+supprime la fiche de …             ⚠ L4, définitif
+qu’as-tu fait …                    le journal d'exécution
+qu’est-ce qui est sorti …          ce qui a quitté la machine
 ```
 
 Commandes : `/audit` · `/annule` · `/inbox` · `/diagnostic` · `/aide` · `/quitter`
@@ -399,9 +412,9 @@ délibérément privilégié le second.
 | | Mesure |
 |---|---|
 | Outils écrits | **22** |
-| Outils atteignables en parlant | **11** |
+| Outils atteignables en parlant | **19** |
 | Tests | le compte vit dans `docs/28` et se vérifie en lançant `pnpm test` — le figer ici garantirait qu'il se périme |
-| Décisions d'architecture | **95**, chacune avec sa condition de révision |
+| Décisions d'architecture | **96**, chacune avec sa condition de révision |
 | Documents de spécification | **30** |
 | Zones d'ombre recensées | **45**, chacune avec son état |
 | Modules hors circuit | **9**, chacun avec sa condition de levée |

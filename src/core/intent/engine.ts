@@ -21,6 +21,35 @@
  */
 import type { Provenance } from '../types/domain.js';
 import { reconnaitre } from '../temps/expression.js';
+import type { GenreDesigne } from '../context/designation.js';
+
+/**
+ * LES TROIS ESPÈCES DE RÉFÉRENT — un champ dont la valeur n'est pas la valeur.
+ *
+ * Une seule table pour les trois, volontairement : ce sont le même fait, et
+ * deux tables du même fait finissent par diverger (ADR-041). La garde qui
+ * vérifie qu'un champ référencé est vide devrait sinon consulter les deux en
+ * se souvenant de le faire.
+ *
+ * `DESIGNATION:<GENRE>` porte le genre dans le tag plutôt que dans une seconde
+ * clé. Ce n'est pas de la coquetterie : une seconde clé serait facultative, et
+ * une règle qui l'oublierait produirait un référent de genre indéfini que
+ * l'Assistant devrait deviner — c'est-à-dire exactement ce que tout ce
+ * mécanisme existe pour empêcher.
+ */
+export type EspeceDeReferent =
+  | 'ANAPHORA'
+  | 'TEMPORAL'
+  /**
+   * Une mention NOMINALE — « Camille », « le carreleur ».
+   *
+   * Résolue par `EntityResolver`, qui existait avant ce mécanisme et porte ce
+   * qu'un résolveur de désignation n'a pas : les alias confirmés et la preuve
+   * contextuelle de session. La réutiliser plutôt que la réécrire est ce qui
+   * évite deux registres de « comment on retrouve une personne » (ADR-041).
+   */
+  | 'MENTION'
+  | `DESIGNATION:${GenreDesigne}`;
 
 export type IntentProposal =
   | {
@@ -58,9 +87,15 @@ export type IntentProposal =
        * DEUX ESPÈCES DE RÉFÉRENT — ADR-077 a ajouté la seconde.
        *
        * ```text
-       * ANAPHORA   « ça », « celui-ci »   → désigne une ENTITÉ évoquée
-       * TEMPORAL   « jeudi », « demain »  → désigne un INSTANT non nommé
+       * ANAPHORA     « ça », « celui-ci »       → une ENTITÉ évoquée
+       * TEMPORAL     « jeudi », « demain »      → un INSTANT non nommé
+       * DESIGNATION  « la note du carreleur »   → une LIGNE, cherchée par son
+       *                                           nom dans la base  (ADR-096)
        * ```
+       *
+       * La troisième a ouvert six outils d'un coup. Ils étaient écrits,
+       * éprouvés, conformes — et hors d'atteinte, parce qu'ils exigent un
+       * identifiant qu'une phrase ne porte pas.
        *
        * Elles partagent la même table plutôt que d'en avoir deux, et ce n'est
        * pas de l'économie : ce sont **le même fait** — un champ dont la valeur
@@ -72,7 +107,7 @@ export type IntentProposal =
        * et seul un état extérieur — la date du jour, connue de la base — permet
        * de savoir lequel.
        */
-      readonly referents: Readonly<Record<string, 'ANAPHORA' | 'TEMPORAL'>>;
+      readonly referents: Readonly<Record<string, EspeceDeReferent>>;
     }
   | {
       readonly kind: 'CLARIFY';
@@ -136,6 +171,49 @@ function clean(value: string): string {
   return value.trim().replace(/[.!?;,\s]+$/u, '').trim();
 }
 
+
+/**
+ * UNE DÉSIGNATION QUI NE DÉSIGNE RIEN — ADR-096.
+ *
+ * ⚠ CETTE FONCTION FERME UN DÉFAUT QUE J'AI INTRODUIT, PUIS MESURÉ.
+ *
+ * La première version des règles de suppression acceptait n'importe quelle
+ * capture. Résultat mesuré, avant toute correction :
+ *
+ * ```text
+ * « efface ça »  →  memory_forget { memoryId: "ça" }
+ * ```
+ *
+ * C'est EXACTEMENT le défaut d'ADR-073 — « ajoute ça à ma liste » créait une
+ * tâche intitulée « ça » — reproduit dans un outil `L4`, **irréversible**.
+ * L'Assistant aurait cherché les mémoires contenant littéralement « ça », et
+ * en aurait effacé une si une seule correspondait.
+ *
+ * Un pronom ou un nom commun nu ne désigne pas : il RENVOIE. Ces mots ne
+ * peuvent pas fonder une suppression, et la règle doit alors DEMANDER.
+ */
+const DESIGNATION_CREUSE =
+  /^(?:(?:ce|cet|cette|ces|ça|ca|cela|ceci|celui-ci|celle-ci|la|le|les|l|mon|ma|mes|un|une|des)\s*)*(?:notes?|t[âa]ches?|rappels?|m[ée]moires?|fiches?|personnes?|contacts?|[ée]l[ée]ments?|trucs?|choses?)?\s*$/iu;
+
+/**
+ * La question posée quand la cible n'est pas nommée.
+ *
+ * Elle dit le chemin qui MARCHE plutôt que de constater l'échec : `/annule`
+ * couvre la dernière action sans qu'aucun nom soit nécessaire. C'est la règle
+ * de `PRD §23` — on ne répond jamais « je n'ai pas compris » tout court.
+ */
+function ciblerPlutotQueDeviner(quoi: string): IntentProposal {
+  return {
+    kind: 'CLARIFY',
+    question:
+      `Quelle ${quoi} exactement ? Nomme-la — par exemple « supprime la `
+      + `${quoi} du carreleur ». Pour défaire ta dernière action, « /annule » `
+      + 'suffit et ne demande aucun nom.',
+    understood: `que tu veux supprimer une ${quoi}, sans savoir laquelle. `
+      + '« /annule » défait la dernière action.',
+  };
+}
+
 const RULES: readonly Rule[] = [
   /* --- Mémoire : retenir ------------------------------------------------- */
   {
@@ -195,7 +273,7 @@ const RULES: readonly Rule[] = [
     id: 'memory_search',
     exemple: '« que sais-tu sur … »',
     pattern:
-      /^(?:qu(?:'|’)est-ce que (?:je sais|tu sais)(?: sur)?|que sais-tu(?: sur)?|qu(?:'|’)as-tu retenu(?: sur)?|(?:cherche|recherche|retrouve)\s+dans\s+(?:ma|ta)\s+m[ée]moire(?:\s+sur)?)\s+(.+)$/iu,
+      /^(?:qu(?:'|’)est-ce que (?:je sais|tu sais)(?: sur)?|que sais-tu(?: sur)?|qu(?:'|’)as-tu retenu(?: sur)?|montre(?:-moi)?\s+(?:tout\s+)?ce\s+que\s+tu\s+sais(?:\s+sur)?|dis(?:-moi)?\s+(?:tout\s+)?ce\s+que\s+tu\s+sais(?:\s+sur)?|(?:cherche|recherche|retrouve)\s+dans\s+(?:ma|ta)\s+m[ée]moire(?:\s+sur)?)\s+(.+)$/iu,
     build(match) {
       return {
         kind: 'TOOL_CALL',
@@ -551,7 +629,7 @@ const RULES: readonly Rule[] = [
     id: 'briefing_du_jour',
     exemple: '« fais-moi un point »',
     pattern:
-      /^(?:fais(?:-moi)?\s+un\s+point|o[ùu]\s+en\s+suis-je|ma\s+journ[ée]e|quoi\s+de\s+neuf|r[ée]sume\s+ma\s+journ[ée]e)\s*[?.!]*$/iu,
+      /^(?:fais(?:-moi)?\s+(?:un\s+point|le\s+briefing(?:\s+(?:du\s+matin|du\s+jour|de\s+la\s+journ[ée]e))?)|briefing(?:\s+(?:du\s+matin|du\s+jour))?|le\s+point(?:\s+du\s+(?:matin|jour))?|o[ùu]\s+en\s+suis-je|ma\s+journ[ée]e|quoi\s+de\s+neuf|r[ée]sume\s+ma\s+journ[ée]e)\s*[?.!]*$/iu,
     build() {
       return {
         kind: 'TOOL_CALL',
@@ -579,6 +657,216 @@ const RULES: readonly Rule[] = [
         input: {},
         parameterProvenance: {},
         confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: {},
+      };
+    },
+  },
+  /* ====================================================================== *
+   * DÉSIGNER PAR LE NOM — ADR-096, et six outils qui sortent de l'ombre
+   *
+   * Chacune de ces règles porte le texte de la désignation TEL QUEL dans le
+   * champ d'identifiant, et le marque `DESIGNATION:<GENRE>`. Le moteur ne
+   * cherche rien : `propose()` reste une fonction PURE du texte (ADR-073).
+   * C'est l'Assistant qui interroge la base — et qui DEMANDE si plusieurs
+   * lignes répondent.
+   *
+   * ⚠ L'ORDRE COMPTE. Ces règles doivent précéder toute règle générale qui
+   * capturerait les mêmes verbes, et elles suivent la garde
+   * `KNOWN_BUT_UNAVAILABLE` — d'où le retrait, dans la même passe, de l'entrée
+   * qui déclarait la suppression « pas encore construite ». Une capacité niée
+   * est aussi absente qu'une capacité manquante (ADR-075).
+   * ====================================================================== */
+
+  /* --- Tâches : terminer -------------------------------------------------- */
+  {
+    id: 'task_complete_designee',
+    exemple: '« termine la tâche … »',
+    pattern:
+      /^(?:termine|j(?:'|’)ai\s+(?:fait|fini|termin[ée])|coche|marque)\s+(?:(?:la|ma|cette)\s+)?(?:t[âa]ches?\s+)?(?:du\s+|de\s+la\s+|des\s+|de\s+|sur\s+|d(?:'|’))?(.*?)\s*(?:comme\s+(?:faite?|termin[ée]e?))?\s*[?.!]*$/iu,
+    build(match) {
+      const cible = clean(match[1] ?? '');
+      if (DESIGNATION_CREUSE.test(cible)) return ciblerPlutotQueDeviner('tâche');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'task_complete',
+        input: { taskId: cible },
+        parameterProvenance: { taskId: FROM_USER },
+        confidence: 0.85,
+        tier: 0,
+        userConfirms: false,
+        referents: { taskId: 'DESIGNATION:TASK' },
+      };
+    },
+  },
+
+  /* --- Tâches : annuler --------------------------------------------------- */
+  {
+    id: 'task_cancel_designee',
+    exemple: '« annule la tâche … »',
+    pattern: /^(?:annule|supprime|retire)\s+(?:(?:la|ma|cette|une|mes)\s+)?t[âa]ches?\s*(?:du\s+|de\s+la\s+|de\s+|sur\s+|d(?:'|’))?(.*?)\s*[?.!]*$/iu,
+    build(match) {
+      const cible = clean(match[1] ?? '');
+      if (DESIGNATION_CREUSE.test(cible)) return ciblerPlutotQueDeviner('tâche');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'task_cancel',
+        input: { taskId: cible },
+        parameterProvenance: { taskId: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: { taskId: 'DESIGNATION:TASK' },
+      };
+    },
+  },
+
+  /* --- Rappels : annuler -------------------------------------------------- */
+  {
+    id: 'reminder_cancel_designe',
+    exemple: '« annule le rappel … »',
+    pattern: /^(?:annule|supprime|retire)\s+(?:(?:le|mon|ce|cet|mes)\s+)?rappels?\s*(?:du\s+|de\s+la\s+|des\s+|de\s+|pour\s+|sur\s+|d(?:'|’))?(.*?)\s*[?.!]*$/iu,
+    build(match) {
+      const cible = clean(match[1] ?? '');
+      if (DESIGNATION_CREUSE.test(cible)) return ciblerPlutotQueDeviner('rappel');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'reminder_cancel',
+        input: { reminderId: cible },
+        parameterProvenance: { reminderId: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: { reminderId: 'DESIGNATION:REMINDER' },
+      };
+    },
+  },
+
+  /* --- Notes : supprimer — L4, irréversible ------------------------------- */
+  {
+    id: 'note_delete_designee',
+    exemple: '« supprime la note … »',
+    pattern: /^(?:supprime|efface|retire)\s+(?:(?:la|ma|cette|une|des|mes)\s+)?notes?\s*(?:du\s+|de\s+la\s+|des\s+|de\s+|sur\s+|d(?:'|’))?(.*?)\s*[?.!]*$/iu,
+    build(match) {
+      const cible = clean(match[1] ?? '');
+      if (DESIGNATION_CREUSE.test(cible)) return ciblerPlutotQueDeviner('note');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'note_delete',
+        input: { noteId: cible },
+        parameterProvenance: { noteId: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        /* `false`, et c'est structurant : `note_delete` est L4. La
+           confirmation portera sur la VALEUR résolue — donc sur la note
+           réellement visée, pas sur l'intention de supprimer. C'est toute la
+           différence entre « confirmer une suppression » et « confirmer
+           CETTE suppression ». */
+        userConfirms: false,
+        referents: { noteId: 'DESIGNATION:NOTE' },
+      };
+    },
+  },
+
+  /* --- Mémoire : oublier — L4, irréversible ------------------------------- */
+  {
+    id: 'memory_forget_designee',
+    exemple: '« oublie que … »',
+    pattern: /^(?:oublie|efface)\s+(?:que\s+|ce\s+que\s+(?:tu\s+sais|je\s+t(?:'|’)ai\s+dit)\s+sur\s+|la\s+m[ée]moire\s+|tout\s+ce\s+que\s+tu\s+sais\s+sur\s+)?(.*?)\s*[?.!]*$/iu,
+    build(match) {
+      const cible = clean(match[1] ?? '');
+      if (DESIGNATION_CREUSE.test(cible)) return ciblerPlutotQueDeviner('mémoire');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'memory_forget',
+        input: { memoryId: cible },
+        parameterProvenance: { memoryId: FROM_USER },
+        confidence: 0.85,
+        tier: 0,
+        userConfirms: false,
+        referents: { memoryId: 'DESIGNATION:MEMORY' },
+      };
+    },
+  },
+
+  /* --- Entités : supprimer — L4, et PAS une désignation ------------------- */
+  {
+    /**
+     * ⚠ `MENTION`, PAS `DESIGNATION:ENTITY`.
+     *
+     * `EntityResolver` résout déjà les mentions nominales, avec ses alias
+     * confirmés et sa preuve contextuelle de session. Ajouter un genre
+     * `ENTITY` au résolveur de désignation aurait créé DEUX registres de
+     * « comment on retrouve une personne » (ADR-041) — et celui-ci, plus
+     * jeune et plus pauvre, aurait été le seul consulté ici.
+     */
+    id: 'entity_delete_mention',
+    exemple: '« supprime la fiche de … »',
+    pattern:
+      /^(?:supprime|efface|retire)\s+(?:la\s+(?:fiche|personne)\s+(?:de\s+|d(?:'|’))?|le\s+contact\s+)(.+?)\s*[?.!]*$/iu,
+    build(match) {
+      const cible = clean(match[1] ?? '');
+      if (DESIGNATION_CREUSE.test(cible)) return ciblerPlutotQueDeviner('fiche');
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'entity_delete',
+        input: { entityId: cible },
+        parameterProvenance: { entityId: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: { entityId: 'MENTION' },
+      };
+    },
+  },
+
+  /* --- Le journal, et ce qui en est sorti --------------------------------- */
+  {
+    id: 'audit_parle',
+    exemple: '« qu’as-tu fait … »',
+    pattern:
+      /^(?:qu(?:'|’)as-tu\s+fait|qu(?:'|’)est-ce\s+que\s+tu\s+as\s+fait)(?:\s+(aujourd(?:'|’)hui|cette\s+semaine|ce\s+mois(?:-ci)?))?\s*[?.!]*$/iu,
+    build(match) {
+      /* La fenêtre est LUE dans la phrase quand elle y est, et vaut « today »
+         sinon — le défaut du schéma, pas une invention de cette règle. */
+      const dit = (match[1] ?? '').toLowerCase();
+      const window = dit.includes('semaine')
+        ? 'week'
+        : dit.includes('mois')
+          ? 'month'
+          : 'today';
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'audit_query',
+        input: { window, limit: 50 },
+        parameterProvenance: { window: 'SYSTEM', limit: 'SYSTEM' },
+        confidence: 0.95,
+        tier: 0,
+        userConfirms: false,
+        referents: {},
+      };
+    },
+  },
+
+  {
+    id: 'egress_parle',
+    exemple: '« qu’est-ce qui est sorti de la machine »',
+    pattern:
+      /^(?:qu(?:'|’)est-ce\s+qui\s+(?:est\s+sorti|a\s+quitt[ée])|qu(?:'|’)as-tu\s+envoy[ée])(?:\s+de\s+(?:la\s+)?machine)?(?:\s+(aujourd(?:'|’)hui|cette\s+semaine|ce\s+mois(?:-ci)?))?\s*[?.!]*$/iu,
+    build(match) {
+      const dit = (match[1] ?? '').toLowerCase();
+      const window = dit.includes('aujourd')
+        ? 'today'
+        : dit.includes('mois')
+          ? 'month'
+          : 'week';
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'egress_review',
+        input: { window, limit: 50 },
+        parameterProvenance: { window: 'SYSTEM', limit: 'SYSTEM' },
+        confidence: 0.95,
         tier: 0,
         userConfirms: false,
         referents: {},
@@ -675,6 +963,32 @@ interface Absente {
    * commits, ce qui est exactement ce qui s'est passé.
    */
   readonly outilQuiManque: string | null;
+  /**
+   * LA CONTRE-GARDE — ADR-096.
+   *
+   * Une garde de capacité passe AVANT les règles, délibérément (HIGH-4) : une
+   * demande qui nomme une capacité absente ne doit jamais atteindre une règle
+   * correspondant à une AUTRE capacité.
+   *
+   * ⚠ Mais le même ordre produit la faute symétrique, et elle est apparue dès
+   * que la suppression est devenue atteignable :
+   *
+   * ```text
+   * « annule le rappel de la réunion »
+   *    ↳ la garde AGENDA voit « réunion » et répond « aucun agenda n'est
+   *      connecté » — alors que l'utilisateur a nommé un RAPPEL, qui existe.
+   * ```
+   *
+   * La garde niait une capacité présente parce qu'un mot d'une autre capacité
+   * figurait dans le complément. C'est le même coût qu'HIGH-4 pris à l'envers :
+   * l'utilisateur renonce à demander ce que Jarvis sait faire.
+   *
+   * `sauf` désarme la garde quand la phrase nomme explicitement l'objet d'une
+   * capacité PRÉSENTE. Ce n'est pas un contournement de HIGH-4 : HIGH-4
+   * interdisait de SUBSTITUER une capacité à une autre. Ici, la capacité servie
+   * est celle que l'utilisateur a nommée.
+   */
+  readonly sauf?: RegExp;
 }
 
 /**
@@ -704,25 +1018,29 @@ const KNOWN_BUT_UNAVAILABLE: readonly Absente[] = [
        dates ISO qu'il exige — et ADR-036/037 interdisent de les calculer avec
        l'horloge du processus. Voir ADR-075. */
     pattern: /(?<![\p{L}\p{N}_])(rendez-vous|agenda|calendrier|r[ée]union)(?![\p{L}\p{N}_])/iu,
+    /* « annule le rappel de la réunion » nomme un RAPPEL, qui existe. Sans
+       cette ligne, la garde agenda répondrait à sa place. */
+    sauf: /(?<![\p{L}\p{N}_])(rappels?|notes?|t[âa]ches?|liste)(?![\p{L}\p{N}_])/iu,
     capability:
       'accéder à l\'agenda — je sais le lire et l\'écrire, mais aucun agenda ' +
       'n\'est connecté, et je ne sais pas encore résoudre une date dite en ' +
       'français',
     outilQuiManque: null,
   },
-  {
-    /* SUPPRIMER EXISTE — mais seulement sur ma dernière action.
-       `memory_forget`, `note_delete`, `task_cancel` et `reminder_cancel` sont
-       écrits. Ils exigent un identifiant qu'une phrase ne porte pas : désigner
-       « cette note » demande une résolution qui n'existe que pour la dernière
-       opération, par `/annule`. Le dire vaut mieux que de prétendre l'inverse
-       dans un sens comme dans l'autre. */
-    pattern: /\b(supprime|efface|oublie)\b/iu,
-    capability:
-      'supprimer une donnée — je sais défaire ma dernière action avec ' +
-      '« /annule », mais pas encore supprimer un élément que tu me désignes',
-    outilQuiManque: null,
-  },
+  /* ⚠ « SUPPRIMER » A QUITTÉ CETTE TABLE — ADR-096.
+
+     L'entrée disait : « je sais défaire ma dernière action avec /annule, mais
+     pas encore supprimer un élément que tu me désignes ». C'était vrai, et
+     c'était la description exacte du trou : les outils existaient, seul
+     l'identifiant manquait.
+
+     Le résolveur de désignation le fournit. La garde devait donc partir dans
+     la MÊME passe que la capacité — la laisser aurait nié une capacité
+     présente, et `KNOWN_BUT_UNAVAILABLE` est consulté AVANT les règles : le
+     message aurait gagné contre l'outil.
+
+     C'est exactement le défaut qu'ADR-075 a fermé pour quatre autres outils.
+     Ce fichier est celui qui l'avait subi. */
   {
     pattern: /(?<![\p{L}\p{N}_])(allume|[ée]teins|chauffage|lumi[èe]re)(?![\p{L}\p{N}_])/iu,
     capability: 'contrôler la maison',
@@ -769,8 +1087,10 @@ export function createIntentEngine(): IntentEngine {
          une règle qui, elle, correspondrait à une autre capacité. L'ordre
          inverse est précisément ce qui produisait les substitutions
          silencieuses. */
-      for (const { pattern, capability } of KNOWN_BUT_UNAVAILABLE) {
-        if (pattern.test(raw)) return unavailable(capability);
+      for (const { pattern, capability, sauf } of KNOWN_BUT_UNAVAILABLE) {
+        if (!pattern.test(raw)) continue;
+        if (sauf !== undefined && sauf.test(raw)) continue;
+        return unavailable(capability);
       }
 
       for (const rule of RULES) {

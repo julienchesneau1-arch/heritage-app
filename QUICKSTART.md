@@ -157,18 +157,36 @@ annoncée sans exister. Celle-ci en est une copie — vérifiée par
 `tests/architecture/quickstart-promesses.test.ts`, qui échoue si elle dérive.
 
 ```text
-retiens que …                      mémoriser un fait
-que sais-tu sur …                  chercher en mémoire
-enregistre <nom> comme personne    créer une entité
-ajoute … à ma liste                créer une tâche
-rappelle-moi jeudi de …            créer un rappel DATÉ
-mes tâches                         lister les tâches ouvertes
-note …                             prendre une note
-cherche sur le web …               rechercher en ligne
-cherche dans mes documents …       rechercher dans les fichiers
-fais-moi un point                  briefing
-comment vas-tu                     état du système
+retiens que …                         mémoriser un fait
+que sais-tu sur …                     chercher en mémoire
+enregistre <nom> comme personne       créer une entité
+ajoute … à ma liste                   créer une tâche
+rappelle-moi jeudi de …               créer un rappel DATÉ
+mes tâches                            lister les tâches ouvertes
+note …                                prendre une note
+cherche sur le web …                  rechercher en ligne
+cherche dans mes documents …          rechercher dans les fichiers
+fais-moi un point                     briefing du jour
+comment vas-tu                        état du système
+
+termine la tâche …                    marquer une tâche terminée
+annule la tâche …                     annuler une tâche
+annule le rappel …                    annuler un rappel
+supprime la note …                    ⚠ suppression définitive
+oublie que …                          ⚠ suppression définitive
+supprime la fiche de …                ⚠ suppression définitive
+qu’as-tu fait …                       le journal d'exécution
+qu’est-ce qui est sorti de la machine ce qui a quitté la machine
 ```
+
+> **Les huit dernières sont arrivées avec ADR-096.** Leurs outils existaient
+> déjà — il leur manquait seulement de quoi désigner la cible. Les trois
+> marquées ⚠ sont `L4` : Jarvis te montre **ce qu'il a trouvé** et attend ta
+> confirmation avant d'effacer.
+>
+> **Un pronom ne suffit pas.** « efface ça » n'est pas une désignation : Jarvis
+> demande laquelle. Et si ta phrase correspond à plusieurs lignes, il les
+> énumère au lieu d'en choisir une.
 
 Commandes : `/audit` · `/annule` · `/inbox` · `/diagnostic` · `/aide` · `/quitter`
 

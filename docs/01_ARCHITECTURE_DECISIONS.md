@@ -8062,3 +8062,138 @@ d'être de celui-ci :
 > **Pas un ChatGPT vocal. Un système qui fait moins, et qui peut prouver ce
 > qu'il fait. Le pari du projet est que la seconde propriété vaut plus que la
 > première — et c'est un pari, pas un théorème.**
+
+---
+
+## ADR-096 — Désigner par le nom : huit outils sortent de l'ombre
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** ADR-073, ADR-077, ADR-075, ADR-041, `docs/14 §3`
+
+### Le trou, en une ligne
+
+Six outils étaient **écrits, éprouvés, conformes — et hors d'atteinte** :
+
+```text
+task_complete   parameters: [{ name: 'taskId' }]
+note_delete     parameters: [{ name: 'noteId' }]
+memory_forget   parameters: [{ name: 'memoryId' }]
+```
+
+Ils exigent un identifiant qu'une phrase ne porte pas. « Supprime la note du
+carreleur » ne fournit pas d'UUID, et le moteur d'intention est une fonction
+**pure du texte** — il n'a aucune base à interroger.
+
+### La troisième espèce de référent
+
+Le dépôt avait déjà la forme de la réponse, deux fois :
+
+```text
+ANAPHORA     « ça »                    le contexte de conversation résout   ADR-073
+TEMPORAL     « jeudi »                 la base résout                       ADR-077
+DESIGNATION  « la note du carreleur »  la base résout                       ADR-096
+```
+
+Les trois sont **le même fait** — un champ dont la valeur n'est pas encore la
+valeur — et partagent donc une seule table. Le moteur signale, l'Assistant
+résout, et **il demande quand plusieurs lignes répondent**.
+
+`MENTION` s'y ajoute pour `entity_delete`, et passe par `EntityResolver` plutôt
+que par un genre `ENTITY` du nouveau résolveur : deux registres de « comment on
+retrouve une personne » auraient fini par diverger (ADR-041), et le plus jeune
+aurait été le seul consulté.
+
+### Aucune heuristique de départage — et c'est la règle centrale
+
+Quatre des six outils sont `L4`, irréversibles. Une règle « le plus récent » ou
+« celui qui correspond le mieux » effacerait parfois la mauvaise ligne, **et
+personne ne le saurait jamais**.
+
+> Un seul candidat → on résout. Plusieurs → on demande, en les nommant.
+> Aucun → on le dit, sans proposer de repli.
+
+### ⚠ Un défaut que j'ai introduit, puis mesuré
+
+Première rédaction des règles, avant toute garde :
+
+```text
+« efface ça »  →  memory_forget { memoryId: "ça" }
+```
+
+C'est **exactement** le défaut d'ADR-073 — « ajoute ça à ma liste » créait une
+tâche intitulée « ça » — reproduit dans un outil `L4`. L'Assistant aurait
+cherché les mémoires contenant littéralement « ça », et en aurait effacé une si
+une seule correspondait.
+
+`DESIGNATION_CREUSE` refuse désormais les pronoms et les noms communs nus. Un
+pronom **renvoie**, il ne désigne pas.
+
+### ⚠ La fuite qu'il a fallu voir AVANT d'écrire la première requête
+
+Une question de désambiguïsation **énumère** les candidats :
+
+```text
+« J'en trouve deux : “mot de passe de la banque : xxxx” ou … ? »
+```
+
+Sur une mémoire `CREDENTIAL`, cette question **imprime le secret** — dans le
+terminal, dans la passerelle web, et dans tout ce qui journalise la
+conversation. *Le module qui sert à effacer une donnée sensible l'aurait
+affichée en chemin.*
+
+**Aucune règle existante ne l'aurait attrapé** : ce n'est ni une égression, ni
+un log, ni un contexte de modèle. C'est une **question posée à l'utilisateur**,
+et rien ne classait ce canal.
+
+`libelleSur` applique le plancher de `docs/14 §3` : au-dessus de `PERSONAL`, on
+nomme la chose sans la citer. Et une catégorie **illisible** est masquée — le
+repli naturel (`OTHER`, plancher `PERSONAL`) aurait autorisé la citation.
+
+### La faute symétrique de HIGH-4, apparue le même jour
+
+```text
+« annule le rappel de la réunion »
+   ↳ la garde AGENDA voit « réunion » et répond « aucun agenda n'est connecté »
+```
+
+Une garde de capacité passe avant les règles, délibérément (HIGH-4). Le même
+ordre produit l'inverse : **elle niait une capacité présente** parce qu'un mot
+d'une autre capacité figurait dans le complément.
+
+`sauf` la désarme quand la phrase nomme l'objet d'une capacité présente. Ce
+n'est pas un contournement : HIGH-4 interdisait de **substituer** une capacité
+à une autre ; ici, la capacité servie est celle que l'utilisateur a nommée.
+
+### Ce que ça change, mesuré
+
+| | Avant | Après |
+|---|---|---|
+| Outils atteignables en parlant | 11 / 22 | **19 / 22** |
+| Capacités annoncées par `/aide` | 11 | **19** |
+| Actions du quotidien couvertes (`docs/11`) | 6 / 30 | **11 / 30** |
+
+Les trois restants sont les outils d'agenda. Il leur manque un **adaptateur**,
+pas une règle — c'est-à-dire des identifiants, pas du code.
+
+### Deux capacités gagnées sans une ligne d'outil
+
+Parmi les cinq nouvelles actions du quotidien, deux ne tenaient qu'à un synonyme :
+
+```text
+« fais-moi LE BRIEFING du matin »   ne marchait pas
+« fais-moi un point »                marchait
+```
+
+Ce n'était pas une capacité manquante, c'était un **synonyme manquant** — et
+pour l'utilisateur les deux sont indiscernables. Même famille qu'ADR-094.
+
+### La purity du moteur, affinée plutôt qu'affaiblie
+
+`wiring.test.ts` interdisait au moteur de contenir `context/`. Il a rougi dès
+que le moteur a eu besoin du **type** `GenreDesigne`.
+
+L'assertion distingue désormais l'import de type — effacé à la compilation,
+donc aucun code, aucune entrée-sortie — de l'import de valeur, qui permettrait
+au moteur d'interroger la base. La propriété devient **plus** précise : « le
+moteur ne peut pas interroger la base » remplace « le moteur ne prononce pas le
+mot context ».
