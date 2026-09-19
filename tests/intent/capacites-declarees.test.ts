@@ -121,7 +121,26 @@ describe('Jarvis ne ment pas sur son propre catalogue', () => {
        La raison exacte compte pour l'utilisateur : « aucun agenda n'est
        connecté » lui dit qu'il peut y remédier, « pas construit » lui dit
        d'attendre. Ce ne sont pas les mêmes informations. */
-    const agenda = moteur.propose('qu’ai-je dans mon agenda demain');
+    /* ⚠ « L'AGENDA » A CHANGÉ DE CAMP — ADR-097.
+
+       L'assertion attendait `UNSUPPORTED`, et le message disait DEUX choses :
+       « aucun agenda n'est connecté » (vrai) et « je ne sais pas encore
+       résoudre une date dite en français » (FAUX depuis ADR-077, qui fait
+       marcher « rappelle-moi jeudi »).
+
+       La seconde moitié est restée écrite plusieurs ADR durant et a servi de
+       raison de ne pas écrire les règles d'agenda. `calendar_read` a
+       désormais la sienne : LIRE l'agenda est une proposition d'outil, et
+       c'est l'OUTIL qui dira qu'aucun compte n'est connecté — une réponse qui
+       nomme le prérequis au lieu d'une capacité niée.
+
+       Ce qui reste dans cette table, c'est la MODIFICATION : elle exige un
+       identifiant d'événement qui vit chez le fournisseur. */
+    const lecture = moteur.propose('qu’ai-je dans mon agenda demain');
+    expect(lecture.kind, 'lire l’agenda est désormais une proposition').toBe('TOOL_CALL');
+    if (lecture.kind === 'TOOL_CALL') expect(lecture.toolId).toBe('calendar_read');
+
+    const agenda = moteur.propose('décale le rendez-vous du carreleur à vendredi');
     expect(agenda.kind).toBe('UNSUPPORTED');
     if (agenda.kind === 'UNSUPPORTED') {
       /* Apostrophes NORMALISÉES avant comparaison. La première version a
@@ -129,8 +148,10 @@ describe('Jarvis ne ment pas sur son propre catalogue', () => {
          le test attendait « l’écrire » (courbe). Deux caractères différents,
          un seul mot français — et rien ne le distingue à l'œil dans un
          diff. Même leçon qu'ADR-074 sur les phrases entendues. */
-      expect(droite(agenda.understood)).toContain(droite('je sais le lire et l’écrire'));
-      expect(droite(agenda.understood)).toContain(droite('aucun agenda n’est connecté'));
+      /* La VRAIE raison, et elle est actionnable : ce n'est pas « pas
+         construit », c'est « il faut d'abord que je puisse lire ton agenda ». */
+      expect(droite(agenda.understood)).toContain(droite('je sais le faire'));
+      expect(droite(agenda.understood)).toContain(droite('aucun compte'));
     }
 
     /* ⚠ « SUPPRESSION » A CHANGÉ DE NATURE — ADR-096, et pas de sens.

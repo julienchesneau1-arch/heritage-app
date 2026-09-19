@@ -8197,3 +8197,115 @@ donc aucun code, aucune entrée-sortie — de l'import de valeur, qui permettrai
 au moteur d'interroger la base. La propriété devient **plus** précise : « le
 moteur ne peut pas interroger la base » remplace « le moteur ne prononce pas le
 mot context ».
+
+---
+
+## ADR-097 — L'agenda était bloqué par une phrase fausse
+
+**Statut :** accepté · 19/09/2026
+**Contexte :** ADR-077, ADR-094, ADR-096, ADR-036/037, `docs/11`
+
+### Le blocage n'était pas technique
+
+`KNOWN_BUT_UNAVAILABLE` répondait, pour toute phrase contenant « agenda » :
+
+> « je sais le lire et l'écrire, mais aucun agenda n'est connecté, **et je ne
+> sais pas encore résoudre une date dite en français** »
+
+La première moitié était vraie. **La seconde est fausse depuis ADR-077** — c'est
+exactement ce qui fait marcher « rappelle-moi jeudi d'appeler le médecin ».
+
+Elle est restée écrite plusieurs ADR durant, et elle a servi de **raison de ne
+pas écrire les règles d'agenda**.
+
+> C'est ADR-094 dans sa forme la plus coûteuse. Une limite périmée n'est pas
+> seulement fausse : **elle empêche le travail suivant.** Elle se présente
+> comme un obstacle connu, donc on ne la re-teste pas.
+
+### Ce qui est livré
+
+| | |
+|---|---|
+| `calendar_read` | « qu'ai-je de prévu demain », « mon agenda jeudi » |
+| `calendar_create` | « crée un rendez-vous jeudi à 14h avec le carreleur » |
+| `calendar_update` | **reste hors d'atteinte**, et pour une raison précise |
+
+`calendar_update` exige un `eventId` qui vit **chez Google**. Le désigner
+demande de lire l'agenda d'abord, donc un compte connecté. Écrire une règle qui
+échoue serait pire que son absence.
+
+### Une fenêtre, pas un instant
+
+`calendar_read` prend deux bornes. « Qu'ai-je demain » ne désigne pas 9 h : il
+désigne **la journée**. La résoudre à 9 h rendrait un agenda vide en laissant
+croire qu'il l'est.
+
+`resoudreFenetre` rend les deux bornes **de la même requête**. Deux résolutions
+séparées, à minuit moins une seconde, encadreraient deux jours différents — et
+l'agenda affiché ne serait celui d'aucune journée réelle. ADR-041, sur un
+intervalle de quelques millisecondes.
+
+Et **c'est la base qui ajoute le jour**. `+ 24 heures` en TypeScript serait faux
+deux fois par an : au changement d'heure, une journée dure 23 ou 25 heures.
+`+ interval '1 day'` connaît les fuseaux ; l'arithmétique en millisecondes ne
+les connaît pas.
+
+### ⚠ « aujourd'hui » n'était reconnu par rien
+
+`AUJOURD_HUI` existait comme base depuis le premier jour, et n'était produit que
+par « ce soir » / « ce matin ». **Le mot de jour le plus courant du français
+n'était reconnu par aucune phrase.**
+
+C'est le motif d'ADR-075 déplacé d'un cran : *une base sans phrase qui
+l'atteigne est comme un outil sans règle* — la capacité existe, personne ne peut
+la demander. Et l'absence était invisible, parce que rien ne compte les bases
+temporelles atteignables.
+
+### ⚠ Un prérequis manquant n'est pas une panne
+
+Mesuré sur le banc des 30 actions, **dès que les règles ont existé** :
+
+```text
+« qu'ai-je de prévu demain »  →  ERREUR : Aucun fournisseur d'agenda n'est
+                                 configuré : l'agenda est inconnu, pas vide.
+```
+
+Le texte était juste ; **le canal était faux**. `docs/11` interdit qu'une phrase
+du quotidien produise une erreur technique brute, et l'utilisateur ne peut pas
+distinguer « ça a cassé » de « il te manque une étape ».
+
+`PROVIDER_UNAVAILABLE` devient donc `UNSUPPORTED` : la capacité existe, il lui
+manque un prérequis **que l'utilisateur peut fournir**. C'est la distinction
+d'ADR-075, appliquée à la frontière fournisseur.
+
+L'outil, lui, ne change pas : il refuse toujours plutôt que de rendre une liste
+vide sur une journée dont on ne sait rien.
+
+### Une durée par défaut, montrée
+
+« Crée un rendez-vous jeudi à 14h » ne dit pas l'heure de fin. La refuser rend
+la règle inutilisable ; l'inventer en silence serait HIGH-5 **sur un effet
+externe** — un événement chez Google, visible par ses invités.
+
+`DUREE_PAR_DEFAUT_MINUTES = 60`, et `calendar_create` est `L3` : la confirmation
+affiche l'heure retenue avant écriture. Un défaut montré n'est pas un mensonge.
+
+### L'intitulé garde sa préposition
+
+Première version : « Crée un rendez-vous jeudi 14h avec le carreleur » produisait
+un événement intitulé **« le carreleur »**. Pas faux, illisible dans un agenda
+partagé — et un titre d'événement est vu par les invités. Il devient
+« Rendez-vous avec le carreleur ».
+
+### Mesuré
+
+| | Avant | Après |
+|---|---|---|
+| Outils atteignables en parlant | 19 / 22 | **21 / 22** |
+| Capacités annoncées par `/aide` | 19 | **21** |
+
+### Condition de révision
+
+Le premier compte Google réellement connecté. Ce code **n'a jamais parlé à
+l'API réelle** : il est éprouvé contre un transport simulé, ce qui prouve la
+logique et pas le dialogue.

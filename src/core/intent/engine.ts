@@ -49,6 +49,32 @@ export type EspeceDeReferent =
    * évite deux registres de « comment on retrouve une personne » (ADR-041).
    */
   | 'MENTION'
+  /**
+   * Les DEUX bornes d'une journée — ADR-097.
+   *
+   * « Qu'ai-je demain » ne désigne pas un instant : il désigne une JOURNÉE.
+   * `calendar_read` prend deux bornes, et elles doivent venir du même calcul —
+   * deux résolutions séparées à minuit moins une seconde encadreraient deux
+   * jours différents.
+   *
+   * L'Assistant résout donc la fenêtre UNE fois, depuis le champ `:DEBUT`, et
+   * remplit les deux.
+   */
+  | 'FENETRE:DEBUT'
+  | 'FENETRE:FIN'
+  /**
+   * La FIN d'un événement, faute de l'avoir dite — ADR-097.
+   *
+   * « Crée un rendez-vous jeudi à 14h » ne donne aucune heure de fin. La
+   * refuser rendrait la règle inutilisable ; l'inventer en silence serait le
+   * défaut d'HIGH-5 sur un effet EXTERNE — un événement chez Google, visible
+   * par ses invités.
+   *
+   * On applique donc la discipline d'`HEURE_PAR_DEFAUT` (ADR-077) : un défaut
+   * MONTRÉ n'est pas un mensonge. `calendar_create` est `L3`, donc la
+   * confirmation affiche l'heure de fin retenue avant toute écriture.
+   */
+  | 'TEMPORAL:FIN_PAR_DEFAUT'
   | `DESIGNATION:${GenreDesigne}`;
 
 export type IntentProposal =
@@ -873,6 +899,123 @@ const RULES: readonly Rule[] = [
       };
     },
   },
+  /* ====================================================================== *
+   * L'AGENDA — ADR-097
+   *
+   * ⚠ CES RÈGLES ONT ATTENDU UNE RAISON QUI N'EXISTE PLUS.
+   *
+   * `KNOWN_BUT_UNAVAILABLE` disait : « je sais le lire et l'écrire, mais aucun
+   * agenda n'est connecté, ET JE NE SAIS PAS ENCORE RÉSOUDRE UNE DATE DITE EN
+   * FRANÇAIS ». La seconde moitié est fausse depuis ADR-077 — c'est ce qui
+   * fait marcher « rappelle-moi jeudi ». Elle est restée écrite, et elle a
+   * servi de raison de ne pas écrire ces règles.
+   *
+   * Il ne reste donc qu'une seule absence, et ce n'est pas du code : les trois
+   * secrets Google. Sans eux l'outil rend `PROVIDER_UNAVAILABLE`, ce qui est
+   * une RÉPONSE — « aucun agenda connecté » dit quoi faire, là où « je ne sais
+   * pas » dit d'attendre.
+   * ====================================================================== */
+
+  /* --- Agenda : lire une journée ----------------------------------------- */
+  {
+    id: 'calendar_read_jour',
+    exemple: '« qu’ai-je de prévu demain »',
+    pattern:
+      /^(?:qu(?:'|’)ai-je\s+(?:de\s+)?(?:pr[ée]vu|dans\s+(?:mon\s+)?agenda)|qu(?:'|’)est-ce\s+que\s+j(?:'|’)ai\s+(?:de\s+)?pr[ée]vu|mon\s+agenda|mon\s+programme|qu(?:'|’)y\s+a-t-il\s+(?:[àa]\s+)?mon\s+agenda)\s*(.*?)\s*[?.!]*$/iu,
+    build(match) {
+      const dit = clean(match[1] ?? '') || "aujourd'hui";
+
+      /* La même fonction PURE que pour les rappels, sur le même argument.
+         Le moteur reconnaît la forme ; la base calcule la date. */
+      if (reconnaitre(dit) === null) {
+        return {
+          kind: 'CLARIFY',
+          question:
+            'Pour quel jour ? Je comprends « aujourd’hui », « demain », '
+            + '« après-demain », « jeudi », « dans 3 jours ».',
+          understood: 'que tu veux consulter ton agenda',
+        };
+      }
+
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'calendar_read',
+        input: { fromIso: dit, toIso: dit },
+        parameterProvenance: { fromIso: FROM_USER, toIso: FROM_USER },
+        confidence: 0.9,
+        tier: 0,
+        userConfirms: false,
+        referents: { fromIso: 'FENETRE:DEBUT', toIso: 'FENETRE:FIN' },
+      };
+    },
+  },
+
+  /* --- Agenda : créer un événement — L3, confirmation obligatoire --------- */
+  {
+    id: 'calendar_create_evenement',
+    exemple: '« crée un rendez-vous jeudi à 14h … »',
+    pattern:
+      /^(?:cr[ée]e|ajoute|pose|mets)\s+(?:un\s+)?(?:rendez-vous|rdv|[ée]v[ée]nement|r[ée]union)\s+(.+)$/iu,
+    build(match) {
+      const reste = clean(match[1] ?? '');
+      const lu = reconnaitre(reste);
+
+      /* SANS DATE, PAS D'ÉVÉNEMENT — et on le DIT.
+         Poser un rendez-vous à une heure que l'utilisateur n'a pas donnée
+         serait la faute d'HIGH-5, sur un effet EXTERNE cette fois : un
+         événement chez Google, visible par ses invités. */
+      if (lu === null) {
+        return {
+          kind: 'CLARIFY',
+          question:
+            'Pour quand exactement ? Je comprends « jeudi à 14h », '
+            + '« demain matin », « après-demain à 9h30 ».',
+          understood: 'que tu veux créer un rendez-vous',
+        };
+      }
+
+      /* L'INTITULÉ GARDE SA PRÉPOSITION — « Rendez-vous avec le carreleur ».
+
+         La première version retirait « avec » et produisait un événement
+         intitulé « le carreleur ». Ce n'est pas faux, c'est illisible dans un
+         agenda partagé — et un titre d'événement est vu par les invités.
+
+         `calendar_create` est `L3` : la confirmation montre l'intitulé avant
+         écriture, donc l'utilisateur corrige s'il préfère autre chose. */
+      const nu = clean(lu.reste);
+      const titre = /^(?:avec|pour|chez)\s+/iu.test(nu) ? `Rendez-vous ${nu}` : nu;
+      if (clean(nu).length === 0) {
+        return {
+          kind: 'CLARIFY',
+          question: 'Quel intitulé pour ce rendez-vous ?',
+          understood: 'que tu veux créer un rendez-vous, sans savoir lequel',
+        };
+      }
+
+      /* LES DEUX CHAMPS PORTENT LE MÊME TEXTE, et c'est le marqueur qui les
+         distingue. `reste` — l'énoncé tel quel — est ce que l'Assistant
+         repassera à `reconnaitre` : deux appels déterministes de la même
+         fonction pure ne peuvent pas diverger.
+
+         Passer `lu.expression` ici aurait été une faute de type que le
+         compilateur n'aurait pas vue : le chemin temporel de l'Assistant lit
+         une CHAÎNE, et un objet y serait tombé sur « date illisible ». */
+      return {
+        kind: 'TOOL_CALL',
+        toolId: 'calendar_create',
+        input: { title: titre, startsAt: reste, endsAt: reste },
+        parameterProvenance: {
+          title: FROM_USER,
+          startsAt: FROM_USER,
+          endsAt: FROM_USER,
+        },
+        confidence: 0.85,
+        tier: 0,
+        userConfirms: false,
+        referents: { startsAt: 'TEMPORAL', endsAt: 'TEMPORAL:FIN_PAR_DEFAUT' },
+      };
+    },
+  },
 ];
 
 /**
@@ -1009,24 +1152,20 @@ const KNOWN_BUT_UNAVAILABLE: readonly Absente[] = [
     // Vrai : aucun outil d'envoi n'existe, et c'est ce qui bloque A8.
     outilQuiManque: 'message_send',
   },
-  {
-    /* L'AGENDA EXISTE — le message change de nature.
-       `calendar_read`, `calendar_create` et `calendar_update` sont écrits et
-       éprouvés. Ce qui manque est double, et aucune des deux moitiés n'est
-       « la capacité » : (1) aucun ADAPTATEUR n'est branché, donc l'outil rend
-       `PROVIDER_UNAVAILABLE` ; (2) une règle `Tier 0` ne peut pas produire les
-       dates ISO qu'il exige — et ADR-036/037 interdisent de les calculer avec
-       l'horloge du processus. Voir ADR-075. */
-    pattern: /(?<![\p{L}\p{N}_])(rendez-vous|agenda|calendrier|r[ée]union)(?![\p{L}\p{N}_])/iu,
-    /* « annule le rappel de la réunion » nomme un RAPPEL, qui existe. Sans
-       cette ligne, la garde agenda répondrait à sa place. */
-    sauf: /(?<![\p{L}\p{N}_])(rappels?|notes?|t[âa]ches?|liste)(?![\p{L}\p{N}_])/iu,
-    capability:
-      'accéder à l\'agenda — je sais le lire et l\'écrire, mais aucun agenda ' +
-      'n\'est connecté, et je ne sais pas encore résoudre une date dite en ' +
-      'français',
-    outilQuiManque: null,
-  },
+  /* ⚠ « L'AGENDA » A QUITTÉ CETTE TABLE — ADR-097.
+
+     L'entrée disait deux choses. La première était vraie : aucun adaptateur
+     n'est branché sans les trois secrets Google. La seconde — « je ne sais pas
+     encore résoudre une date dite en français » — **est fausse depuis
+     ADR-077**, qui fait marcher « rappelle-moi jeudi ».
+
+     Elle est restée écrite plusieurs ADR durant, et elle a servi de raison de
+     ne pas écrire les règles d'agenda. C'est le motif d'ADR-094 dans sa forme
+     la plus coûteuse : une limite périmée qui empêche le travail suivant.
+
+     `calendar_read` et `calendar_create` ont désormais leurs règles. Sans
+     compte connecté, l'outil rend `PROVIDER_UNAVAILABLE` — « aucun agenda
+     connecté » dit quoi faire, là où « je ne sais pas » disait d'attendre. */
   /* ⚠ « SUPPRIMER » A QUITTÉ CETTE TABLE — ADR-096.
 
      L'entrée disait : « je sais défaire ma dernière action avec /annule, mais
@@ -1041,6 +1180,25 @@ const KNOWN_BUT_UNAVAILABLE: readonly Absente[] = [
 
      C'est exactement le défaut qu'ADR-075 a fermé pour quatre autres outils.
      Ce fichier est celui qui l'avait subi. */
+  {
+    /* MODIFIER UN ÉVÉNEMENT — la seule moitié d'agenda qui reste hors
+       d'atteinte, et pour une raison PRÉCISE, pas par manque de règle.
+
+       `calendar_update` exige un `eventId` qui vit chez Google. Le désigner
+       demande de LIRE l'agenda d'abord — donc un compte connecté. Il n'y a
+       aucune manière d'écrire cette règle qui la rende vraie tant qu'aucun
+       agenda ne répond.
+
+       ⚠ Placée AVANT la garde « maison », et son motif exige un verbe de
+       modification : sans lui, elle avalerait « crée un rendez-vous ». */
+    pattern:
+      /^(?:d[ée]cale|d[ée]place|modifie|change|reporte|avance)(?![\p{L}\p{N}_]).*(?<![\p{L}\p{N}_])(rendez-vous|rdv|[ée]v[ée]nement|r[ée]union)(?![\p{L}\p{N}_])/iu,
+    capability:
+      'modifier un rendez-vous — je sais le faire, mais il faut d\'abord que je '
+      + 'puisse LIRE ton agenda pour savoir duquel tu parles, et aucun compte '
+      + 'n\'est connecté',
+    outilQuiManque: null,
+  },
   {
     pattern: /(?<![\p{L}\p{N}_])(allume|[ée]teins|chauffage|lumi[èe]re)(?![\p{L}\p{N}_])/iu,
     capability: 'contrôler la maison',

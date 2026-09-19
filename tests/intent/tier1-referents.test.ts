@@ -90,6 +90,15 @@ const TEMPS_FIGE = {
     Promise.resolve(
       ok({ iso: '2026-08-20T09:00:00+02:00', humain: 'jeudi 20 août à 09:00' }),
     ),
+  // ADR-097 — la fenêtre de jours, figée comme l'instant.
+  resoudreFenetre: () =>
+    Promise.resolve(
+      ok({
+        debutIso: '2026-08-20T00:00:00Z',
+        finIso: '2026-08-21T00:00:00Z',
+        humain: 'jeudi 20 août',
+      }),
+    ),
 };
 
 /** Passerelle qui enregistre l'appel et le laisse passer. */

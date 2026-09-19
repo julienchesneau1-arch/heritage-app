@@ -148,7 +148,7 @@ faire** : `memory_add` est `L2` (exécution directe), `memory_forget` est `L4`
 | `egress_review` | L1 | — | OTHER | — | Ce qui est parti : où, quelle classe, pourquoi |
 | `system_status` | L1 | — | OTHER | — | Intégrité du journal, opérations sans issue, modèle local |
 
-### ⚠ Le chiffre qui compte vraiment : **19 sur 22**
+### ⚠ Le chiffre qui compte vraiment : **21 sur 22**
 
 **Un outil écrit n'est pas un outil que tu peux déclencher.** C'est la distinction
 qu'aucun tableau d'avancement ne fait, et elle est mesurée par
@@ -156,17 +156,30 @@ qu'aucun tableau d'avancement ne fait, et elle est mesurée par
 
 | | Nombre | Lesquels |
 |---|---|---|
-| **Atteignables en parlant** | **19** | les 11 d'origine, plus `task_complete` `task_cancel` `reminder_cancel` `note_delete` `memory_forget` `entity_delete` `audit_query` `egress_review` |
-| **Hors d'atteinte depuis le CLI** | **3** | `calendar_read` `calendar_create` `calendar_update` |
+| **Atteignables en parlant** | **21** | les 11 d'origine, plus `task_complete` `task_cancel` `reminder_cancel` `note_delete` `memory_forget` `entity_delete` `audit_query` `egress_review` `calendar_read` `calendar_create` |
+| **Hors d'atteinte** | **1** | `calendar_update` |
 
-Les trois derniers sont écrits, testés, conformes — et **aucune phrase ne les
-atteint**. Ce n'est pas un oubli, c'est mesuré et déclaré : il leur manque un
-adaptateur d'agenda, ce qui n'est pas du code mais des identifiants. §6.2.
+**Il n'en reste qu'un**, et sa raison n'est pas un manque de code : modifier un
+événement exige un identifiant qui vit **chez Google**. Le désigner demande de
+lire l'agenda d'abord — donc un compte connecté. Écrire une règle qui échoue
+serait pire que son absence.
 
-> **Ce chiffre était de 11 sur 22 jusqu'à ADR-096.** Huit outils sont sortis de
-> l'ombre sans qu'aucun ne soit écrit : six exigeaient un identifiant qu'une
-> phrase ne porte pas, et deux n'avaient simplement aucune règle. Ce qui a
-> changé n'est pas la capacité — c'est **qui résout la désignation**.
+> **Ce chiffre était de 11 sur 22.** Dix outils sont sortis de l'ombre sans
+> qu'aucun ne soit écrit :
+>
+> - **six** exigeaient un identifiant qu'une phrase ne porte pas (ADR-096) ;
+> - **deux** n'avaient simplement aucune règle ;
+> - **deux** — l'agenda — étaient bloqués par une phrase **périmée** qui disait
+>   « je ne sais pas encore résoudre une date en français », faux depuis
+>   ADR-077 (ADR-097).
+>
+> Ce qui a changé n'est pas la capacité. C'est **qui résout la désignation**,
+> et le fait qu'une limite périmée avait fini par empêcher le travail suivant.
+
+> ⚠ **`calendar_read` et `calendar_create` attendent tes identifiants Google.**
+> Sans eux, Jarvis répond « aucun agenda connecté » — ce qui n'est pas une
+> erreur mais un **prérequis** que tu peux fournir. Trois variables dans
+> `.env`, et l'agenda s'active au démarrage suivant. §6.2.
 
 ### Les phrases qui marchent, mot pour mot
 
@@ -191,6 +204,8 @@ oublie que …                       ⚠ L4, définitif
 supprime la fiche de …             ⚠ L4, définitif
 qu’as-tu fait …                    le journal d'exécution
 qu’est-ce qui est sorti …          ce qui a quitté la machine
+qu’ai-je de prévu demain           lire l'agenda      ⚠ compte Google
+crée un rendez-vous jeudi à 14h …  créer un événement ⚠ compte Google
 ```
 
 Commandes : `/audit` · `/annule` · `/inbox` · `/diagnostic` · `/aide` · `/quitter`
@@ -309,17 +324,38 @@ Et `pnpm secrets:scan` balaye **l'arbre de travail et l'historique git**.
 
 ### 6.2 Ce qui existe mais que tu ne peux pas atteindre
 
-**L'agenda.** `calendar_read`, `calendar_create`, `calendar_update` sont écrits
-et éprouvés. Deux choses manquent, et aucune n'est « la capacité » :
+**L'agenda — il ne manque que tes identifiants.**
 
-1. **aucun adaptateur n'est branché** — l'outil rend `PROVIDER_UNAVAILABLE` ;
-2. **une règle déterministe ne sait pas produire une date ISO** à partir de
-   « jeudi prochain », et il est interdit de la calculer avec l'horloge du
-   processus.
+`calendar_read` et `calendar_create` ont leurs règles depuis ADR-097. Dis
+« qu'ai-je de prévu demain » : Jarvis comprend, résout la journée par la base,
+appelle l'outil — et répond **« aucun agenda connecté »**. Ce n'est pas une
+erreur, c'est un **prérequis nommé**.
 
-Le connecteur Google Calendar **est écrit** (`src/providers/google/calendar.ts`).
-Il attend des identifiants que je n'ai jamais eus et que je n'ai pas voulu
-recevoir par chat.
+> ⚠ **Ces règles ont été bloquées par une phrase périmée.** Le moteur affirmait
+> *« je ne sais pas encore résoudre une date dite en français »* — faux depuis
+> ADR-077, qui fait marcher « rappelle-moi jeudi ». La phrase est restée écrite
+> plusieurs ADR durant et a servi de raison de ne pas écrire les règles.
+>
+> C'est le motif d'ADR-094 dans sa forme la plus coûteuse : **une limite
+> périmée n'est pas seulement fausse, elle empêche le travail suivant.**
+
+Le connecteur Google **est écrit et se branche tout seul** : dès que les trois
+secrets sont au coffre, le fournisseur est construit au démarrage.
+
+```bash
+# dans .env — sur ta machine, jamais dans le dépôt
+GOOGLE_OAUTH_CLIENT_ID=…
+GOOGLE_OAUTH_CLIENT_SECRET=…
+GOOGLE_OAUTH_REFRESH_TOKEN=…
+```
+
+⚠ **Ce code n'a jamais parlé à l'API réelle.** Aucun compte n'était connecté là
+où il a été écrit. Il est éprouvé contre un transport simulé — ce qui prouve la
+logique, pas le dialogue avec Google.
+
+**Modifier un événement** (`calendar_update`) reste le seul outil hors
+d'atteinte, et pas par manque de règle : il exige un identifiant qui vit **chez
+Google**. Le désigner demande de lire l'agenda d'abord.
 
 **Supprimer un élément que tu désignes.** `memory_forget`, `note_delete`,
 `task_cancel`, `reminder_cancel`, `entity_delete` existent. Ils exigent un
@@ -412,9 +448,9 @@ délibérément privilégié le second.
 | | Mesure |
 |---|---|
 | Outils écrits | **22** |
-| Outils atteignables en parlant | **19** |
+| Outils atteignables en parlant | **21** |
 | Tests | le compte vit dans `docs/28` et se vérifie en lançant `pnpm test` — le figer ici garantirait qu'il se périme |
-| Décisions d'architecture | **96**, chacune avec sa condition de révision |
+| Décisions d'architecture | **97**, chacune avec sa condition de révision |
 | Documents de spécification | **30** |
 | Zones d'ombre recensées | **45**, chacune avec son état |
 | Modules hors circuit | **9**, chacun avec sa condition de levée |

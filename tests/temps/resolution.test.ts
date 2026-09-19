@@ -198,6 +198,85 @@ describe.runIf(enabled)('résoudre par la base', () => {
     await db.close();
   });
 
+  /* ==================================================================== *
+   * LA FENÊTRE DE JOURNÉE — ADR-097
+   * ==================================================================== */
+
+  it('une fenêtre couvre la JOURNÉE, pas un instant', async () => {
+    /* `calendar_read` ne prend pas une heure mais deux bornes. « Qu'ai-je
+       demain » désigne la journée entière — la résoudre à 9 h rendrait un
+       agenda vide en laissant croire qu'il l'est. */
+    const r = await createResolveurTemporel(db).resoudreFenetre(
+      { base: 'DEMAIN', heure: 9, minute: 0 },
+      1,
+    );
+    expect(r.ok, r.ok ? '' : r.error.message).toBe(true);
+    if (!r.ok) return;
+
+    // L'heure portée par l'expression est ÉCRASÉE : on veut le jour entier.
+    expect(r.value.debutIso).toMatch(/T\d{2}:00:00Z$/u);
+    expect(r.value.humain).not.toContain('à 09:00');
+  }, 30_000);
+
+  it('⚠ la fin est UN JOUR après le début — calculé par la BASE', async () => {
+    /* `+ 24 heures` en TypeScript serait faux deux fois par an : au changement
+       d'heure, une journée dure 23 ou 25 heures. `+ interval '1 day'` connaît
+       les fuseaux ; l'arithmétique en millisecondes ne les connaît pas.
+
+       On vérifie l'écart en millisecondes parce que c'est la seule chose
+       observable ici — et il doit valoir 24 h dans le cas ordinaire. Le cas du
+       changement d'heure n'est pas reproductible à la demande ; ce qui est
+       éprouvé, c'est que le calcul se fait EN SQL. */
+    const resolveur = createResolveurTemporel(db);
+    const un = await resolveur.resoudreFenetre({ base: 'DEMAIN', heure: 0, minute: 0 }, 1);
+    expect(un.ok).toBe(true);
+    if (!un.ok) return;
+
+    const ecart = Date.parse(un.value.finIso) - Date.parse(un.value.debutIso);
+    expect(ecart).toBe(24 * 3600 * 1000);
+
+    const sept = await resolveur.resoudreFenetre({ base: 'DEMAIN', heure: 0, minute: 0 }, 7);
+    expect(sept.ok).toBe(true);
+    if (!sept.ok) return;
+    expect(Date.parse(sept.value.finIso) - Date.parse(sept.value.debutIso)).toBe(
+      7 * 24 * 3600 * 1000,
+    );
+    expect(sept.value.humain).toContain('7 jours');
+  }, 30_000);
+
+  it('⚠ les deux bornes viennent de la MÊME requête', async () => {
+    /* LA PROPRIÉTÉ QUI JUSTIFIE L'EXISTENCE DE CETTE FONCTION.
+
+       Résoudre `fromIso` puis `toIso` par deux appels séparés produirait, à
+       minuit moins une seconde, deux bornes appartenant à DEUX JOURS
+       DIFFÉRENTS — et l'agenda affiché ne serait celui d'aucune journée
+       réelle. ADR-041, sur un intervalle de quelques millisecondes.
+
+       On le mesure indirectement : le début est toujours un début de journée
+       exact, et la fin tombe à la même heure. Deux calculs indépendants ne
+       garantiraient pas cette égalité. */
+    const r = await createResolveurTemporel(db).resoudreFenetre(
+      { base: 'AUJOURD_HUI', heure: 17, minute: 42 },
+      1,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const heureDebut = r.value.debutIso.slice(11, 19);
+    const heureFin = r.value.finIso.slice(11, 19);
+    expect(heureFin).toBe(heureDebut);
+  }, 30_000);
+
+  it('une fenêtre de moins d’un jour est REFUSÉE', async () => {
+    /* Zéro jour ne couvre rien : `calendar_read` rendrait une liste vide en
+       laissant croire que l'agenda l'est. Le même mensonge sans erreur que
+       le fichier `calendar.ts` refuse déjà de commettre. */
+    const r = await createResolveurTemporel(db).resoudreFenetre(
+      { base: 'DEMAIN', heure: 0, minute: 0 },
+      0,
+    );
+    expect(r.ok).toBe(false);
+  }, 30_000);
+
   it('rend un instant ISO et une forme LISIBLE, issus du même calcul', async () => {
     const r = await createResolveurTemporel(db).resoudre({ base: 'DEMAIN', heure: 9, minute: 0 });
     expect(r.ok).toBe(true);

@@ -293,6 +293,26 @@ export function reconnaitre(texte: string): Reconnaissance | null {
     portion: RegExp,
   ): Reconnaissance => ({ expression, reste: nettoyerReste(sans(reste, portion)) });
 
+  /* ⚠ « AUJOURD'HUI » MANQUAIT — ADR-097, et l'absence était invisible.
+
+     `AUJOURD_HUI` existait comme BASE depuis le premier jour, et n'était
+     produit que par « ce soir » / « ce matin ». Le mot de jour le plus courant
+     du français n'était reconnu par rien : « rappelle-moi aujourd'hui à 18h »
+     tombait sur `HEURE_SEULE`, et « qu'ai-je de prévu aujourd'hui » sur une
+     demande de précision.
+
+     Une base sans phrase qui l'atteigne est le même motif que l'outil sans
+     règle (ADR-075) : la capacité existe, personne ne peut la demander.
+
+     Testé AVANT les autres : aucun ne le contient, mais l'ordre de ce bloc est
+     une propriété qu'on ne laisse pas au hasard. */
+  if (/(?<![\p{L}\p{N}_])aujourd(?:'|’|)hui(?![\p{L}\p{N}_])/u.test(nu)) {
+    return rendre(
+      { base: 'AUJOURD_HUI', heure, minute },
+      /(?<![\p{L}\p{N}_])aujourd(?:'|’)?hui(?![\p{L}\p{N}_])/iu,
+    );
+  }
+
   /* L'ORDRE COMPTE : « après-demain » contient « demain ». Le tester d'abord
      évite qu'une expression précise soit avalée par une plus large — la même
      faute que la règle des tâches commettait sur « ajoute ça » (ADR-073). */

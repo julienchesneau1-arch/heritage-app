@@ -178,6 +178,15 @@ export interface AssistantDeps {
   readonly tier1: Tier1 | null;
 }
 
+/**
+ * La durée d'un rendez-vous dont personne n'a dit la fin — ADR-097.
+ *
+ * Une heure : la convention la plus répandue, et surtout un CHOIX écrit plutôt
+ * qu'une constante enfouie. Condition de révision : le premier agenda réel
+ * connecté, où l'on verra si une heure est la bonne valeur pour Julien.
+ */
+export const DUREE_PAR_DEFAUT_MINUTES = 60;
+
 export function createAssistant(deps: AssistantDeps): Assistant {
   return {
     async say(text: string, options: SayOptions): Promise<AssistantReply> {
@@ -237,6 +246,15 @@ export function createAssistant(deps: AssistantDeps): Assistant {
         .map(([cle]) => cle);
       const mentions = Object.entries(proposal.referents)
         .filter(([, genre]) => genre === 'MENTION')
+        .map(([cle]) => cle);
+      const fenetreDebut = Object.entries(proposal.referents)
+        .filter(([, genre]) => genre === 'FENETRE:DEBUT')
+        .map(([cle]) => cle);
+      const fenetreFin = Object.entries(proposal.referents)
+        .filter(([, genre]) => genre === 'FENETRE:FIN')
+        .map(([cle]) => cle);
+      const finParDefaut = Object.entries(proposal.referents)
+        .filter(([, genre]) => genre === 'TEMPORAL:FIN_PAR_DEFAUT')
         .map(([cle]) => cle);
       const designations = Object.entries(proposal.referents)
         .flatMap(([cle, genre]) =>
@@ -314,6 +332,73 @@ export function createAssistant(deps: AssistantDeps): Assistant {
            avant toute écriture, et peut corriger. Un défaut montré n'est pas
            un mensonge ; un défaut silencieux en serait un. */
         lisible[cle] = instant.value.humain;
+      }
+
+      /* RÉSOUDRE UNE FENÊTRE DE JOURNÉE — ADR-097.
+
+         ⚠ UNE SEULE RÉSOLUTION POUR DEUX BORNES, et c'est la raison d'être de
+         ce bloc. Résoudre `fromIso` puis `toIso` séparément ferait deux appels
+         à la base : à minuit moins une seconde, ils encadreraient DEUX JOURS
+         DIFFÉRENTS, et l'agenda affiché ne serait celui d'aucune journée
+         réelle. ADR-041, sur un intervalle de quelques millisecondes. */
+      for (const cle of fenetreDebut) {
+        const brut = input[cle];
+        if (typeof brut !== 'string') {
+          return { kind: 'ERROR', message: `fenêtre illisible pour « ${cle} »` };
+        }
+        const lu = reconnaitre(brut);
+        if (lu === null) {
+          return {
+            kind: 'CLARIFY',
+            question:
+              'Pour quel jour ? Je comprends « aujourd’hui », « demain », '
+              + '« après-demain », « jeudi », « dans 3 jours ».',
+          };
+        }
+
+        const fenetre = await deps.temps.resoudreFenetre(lu.expression, 1);
+        if (!fenetre.ok) return { kind: 'ERROR', message: fenetre.error.message };
+
+        input = { ...input, [cle]: fenetre.value.debutIso };
+        lisible[cle] = fenetre.value.humain;
+        // LA MÊME résolution remplit la ou les bornes de fin.
+        for (const fin of fenetreFin) {
+          input = { ...input, [fin]: fenetre.value.finIso };
+        }
+      }
+
+      /* LA FIN D'UN ÉVÉNEMENT QUE PERSONNE N'A DITE — ADR-097.
+
+         On résout le DÉBUT une seconde fois, puis on ajoute la durée par
+         défaut. L'addition se fait sur un instant DÉJÀ RÉSOLU par la base, en
+         UTC : aucune horloge de processus n'est lue, et une heure UTC dure une
+         heure même les jours de changement d'heure.
+
+         ⚠ CE DÉFAUT EST MONTRÉ, PAS APPLIQUÉ EN SILENCE. `calendar_create` est
+         `L3` : la confirmation affiche l'heure de fin retenue avant toute
+         écriture. C'est la discipline d'`HEURE_PAR_DEFAUT` (ADR-077), sur un
+         effet externe cette fois. */
+      for (const cle of finParDefaut) {
+        const brut = input[cle];
+        if (typeof brut !== 'string') {
+          return { kind: 'ERROR', message: `date illisible pour « ${cle} »` };
+        }
+        const lu = reconnaitre(brut);
+        if (lu === null) {
+          return {
+            kind: 'CLARIFY',
+            question: 'Pour quand exactement ? Je n’ai pas saisi l’heure.',
+          };
+        }
+        const debut = await deps.temps.resoudre(lu.expression);
+        if (!debut.ok) return { kind: 'ERROR', message: debut.error.message };
+
+        const fin = new Date(
+          new Date(debut.value.iso).getTime() + DUREE_PAR_DEFAUT_MINUTES * 60_000,
+        );
+        input = { ...input, [cle]: fin.toISOString().replace(/\.\d{3}Z$/, 'Z') };
+        lisible[cle] =
+          `${String(DUREE_PAR_DEFAUT_MINUTES)} min après le début (durée par défaut)`;
       }
 
       /* RÉSOUDRE LES DÉSIGNATIONS — ADR-096.
@@ -456,6 +541,34 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           if (result.error.kind === 'POLICY_DENIED') {
             return { kind: 'DENIED', reason: result.error.message };
           }
+
+          /* ⚠ UN PRÉREQUIS MANQUANT N'EST PAS UNE PANNE — ADR-097.
+
+             Mesuré sur le banc des 30 actions, dès que les règles d'agenda ont
+             existé : « qu'ai-je de prévu demain » sans compte Google rendait
+
+                 « ERREUR : Aucun fournisseur d'agenda n'est configuré… »
+
+             Le texte était juste ; le CANAL était faux. `docs/11` interdit
+             qu'une phrase du quotidien produise une erreur technique brute, et
+             l'utilisateur ne peut pas distinguer « ça a cassé » de « il te
+             manque une étape ».
+
+             `PROVIDER_UNAVAILABLE` est la même distinction qu'ADR-075 : la
+             capacité EXISTE, il lui manque un prérequis que l'utilisateur peut
+             fournir. « Aucun agenda connecté » dit quoi faire ; « ERREUR » dit
+             d'attendre.
+
+             L'outil, lui, ne change pas : il refuse toujours plutôt que de
+             rendre une liste vide sur une journée dont on ne sait rien. */
+          if (result.error.kind === 'PROVIDER_UNAVAILABLE') {
+            return {
+              kind: 'UNSUPPORTED',
+              understood: `que tu veux utiliser ${proposal.toolId}`,
+              missing: result.error.message,
+            };
+          }
+
           return { kind: 'ERROR', message: result.error.message };
         }
 

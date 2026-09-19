@@ -99,6 +99,14 @@ const PHRASES: Readonly<Record<string, string>> = {
   entity_delete: 'supprime la fiche de Camille Berthier',
   audit_query: 'qu’as-tu fait aujourd’hui',
   egress_review: 'qu’est-ce qui est sorti de la machine',
+  /* ADR-097 — L'AGENDA. Deux des trois outils ont enfin leurs règles.
+     Ce qui les bloquait n'était pas le code : `KNOWN_BUT_UNAVAILABLE`
+     affirmait « je ne sais pas encore résoudre une date dite en français »,
+     faux depuis ADR-077, et cette phrase a servi de raison de ne pas les
+     écrire. Sans compte Google connecté, l'outil rend `PROVIDER_UNAVAILABLE`
+     — une réponse qui dit quoi faire. */
+  calendar_read: 'qu’ai-je de prévu demain',
+  calendar_create: 'crée un rendez-vous jeudi à 14h avec le carreleur',
 };
 
 describe('la surface parlée de Jarvis', () => {
@@ -144,11 +152,16 @@ describe('la surface parlée de Jarvis', () => {
        Ce qui a changé n'est pas la phrase, c'est QUI résout. Le moteur reste
        une fonction pure du texte ; l'Assistant interroge la base et DEMANDE
        quand plusieurs lignes répondent. */
-    expect(horsAtteinte).toEqual([
-      'calendar_create', // exige des dates ISO ET un adaptateur branché
-      'calendar_read', //   idem — et ADR-036/037 interdisent l'horloge du processus
-      'calendar_update', // idem, plus un identifiant d'événement
-    ]);
+    /* ⚠ IL N'EN RESTE QU'UN, et sa raison n'est pas « pas de règle ».
+
+       `calendar_update` exige un `eventId` qui vit chez Google. Le désigner
+       demande de LIRE l'agenda d'abord — donc un compte connecté. Aucune
+       règle ne peut être écrite qui soit VRAIE tant qu'aucun agenda ne
+       répond, et en écrire une qui échoue serait pire que l'absence.
+
+       C'est la seule ligne de cette liste dont le déblocage ne dépend pas
+       d'un choix d'ingénierie. */
+    expect(horsAtteinte).toEqual(['calendar_update']);
 
     /* CE QUE CETTE LISTE DIT MAINTENANT, ET QU'ELLE NE DISAIT PAS.
        Les douze restants ne sont plus « sans chemin utilisateur » : ils sont
@@ -157,12 +170,13 @@ describe('la surface parlée de Jarvis', () => {
 
          un IDENTIFIANT qu'une phrase ne porte pas   RÉSOLU — ADR-096
          une DATE non encore câblée à l'outil        RÉSOLU — ADR-077
-         aucun ADAPTATEUR d'agenda branché           3 outils, et c'est tout
+         pas de règle d'agenda                       RÉSOLU — ADR-097
+         l'eventId vit chez le fournisseur           1 outil, et c'est tout
 
-       Les trois qui restent ne butent plus sur un verrou de conception. Il
-       leur manque un fournisseur d'agenda et les identifiants qui vont avec —
-       du câblage, et une décision qui n'appartient pas au code. */
-    expect(atteignables).toHaveLength(19);
+       Le dernier ne bute sur aucun verrou de conception : désigner un
+       événement demande de lire l'agenda, donc un compte connecté. C'est la
+       seule ligne dont le déblocage n'appartient pas au code. */
+    expect(atteignables).toHaveLength(21);
     expect(enregistres).toHaveLength(22);
   });
 

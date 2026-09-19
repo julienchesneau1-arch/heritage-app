@@ -177,9 +177,18 @@ oublie que …                          ⚠ suppression définitive
 supprime la fiche de …                ⚠ suppression définitive
 qu’as-tu fait …                       le journal d'exécution
 qu’est-ce qui est sorti de la machine ce qui a quitté la machine
+
+qu’ai-je de prévu demain              lire l'agenda        ⚠ compte Google requis
+crée un rendez-vous jeudi à 14h …     créer un événement   ⚠ compte Google requis
 ```
 
-> **Les huit dernières sont arrivées avec ADR-096.** Leurs outils existaient
+> **Les deux dernières attendent un compte Google.** Sans lui, Jarvis répond
+> « aucun agenda connecté » — pas une erreur, un prérequis que tu peux fournir.
+> Les trois secrets vont dans `.env` : `GOOGLE_OAUTH_CLIENT_ID`,
+> `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`. L'agenda
+> s'active tout seul au démarrage suivant.
+>
+> **Les huit précédentes sont arrivées avec ADR-096.** Leurs outils existaient
 > déjà — il leur manquait seulement de quoi désigner la cible. Les trois
 > marquées ⚠ sont `L4` : Jarvis te montre **ce qu'il a trouvé** et attend ta
 > confirmation avant d'effacer.

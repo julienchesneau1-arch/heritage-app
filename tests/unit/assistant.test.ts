@@ -93,6 +93,17 @@ const TEMPS_FIGE = {
     Promise.resolve(
       ok({ iso: '2026-08-20T09:00:00+02:00', humain: 'jeudi 20 août à 09:00' }),
     ),
+  /* ADR-097 — la fenêtre de jours. Figée comme l'instant : ces tests portent
+     sur l'Assistant, pas sur l'arithmétique des dates, qui a ses propres
+     tests contre la base réelle. */
+  resoudreFenetre: () =>
+    Promise.resolve(
+      ok({
+        debutIso: '2026-08-20T00:00:00Z',
+        finIso: '2026-08-21T00:00:00Z',
+        humain: 'jeudi 20 août',
+      }),
+    ),
 };
 
 describe('Assistant', () => {

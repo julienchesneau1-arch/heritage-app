@@ -134,8 +134,48 @@ function requete(expr: ExpressionTemporelle): { sql: string; params: unknown[] }
   }
 }
 
+/**
+ * UNE FENÊTRE DE JOURS — ADR-097.
+ *
+ * `calendar_read` ne prend pas un instant mais deux bornes. « Qu'ai-je demain »
+ * ne désigne pas 9 h : il désigne **la journée entière**.
+ *
+ * ⚠ LES DEUX BORNES VIENNENT DU MÊME CALCUL, dans la même requête — exactement
+ * pour la raison qui fait déjà venir `iso` et `humain` ensemble. Deux requêtes
+ * séparées à minuit moins une seconde encadreraient DEUX JOURS DIFFÉRENTS, et
+ * l'agenda affiché ne serait celui d'aucune journée réelle. ADR-041, sur un
+ * intervalle de quelques millisecondes.
+ *
+ * ⚠ ET C'EST LA BASE QUI AJOUTE LE JOUR, PAS NOUS. `+ 24 heures` en TypeScript
+ * serait faux deux fois par an : au changement d'heure, une journée dure 23 ou
+ * 25 heures. `+ interval '1 day'` connaît les fuseaux ; l'arithmétique en
+ * millisecondes ne les connaît pas.
+ */
+export interface FenetreResolue {
+  readonly debutIso: string;
+  readonly finIso: string;
+  /** La phrase que l'utilisateur relit — « jeudi 20 août ». */
+  readonly humain: string;
+}
+
+const LigneFenetre = z.object({
+  debut: z.string().min(1),
+  fin: z.string().min(1),
+  humain: z.string().min(1),
+});
+
 export interface ResolveurTemporel {
   resoudre(expr: ExpressionTemporelle): Promise<Result<InstantResolu>>;
+  /**
+   * La fenêtre qui COUVRE le jour désigné, sur `jours` journées.
+   *
+   * L'expression est ramenée au début de journée quoi qu'elle porte : « qu'ai-je
+   * jeudi à 14 h » demande l'agenda de jeudi, pas celui de 14 h à 14 h.
+   */
+  resoudreFenetre(
+    expr: ExpressionTemporelle,
+    jours: number,
+  ): Promise<Result<FenetreResolue>>;
 }
 
 export function createResolveurTemporel(db: Db): ResolveurTemporel {
@@ -200,6 +240,59 @@ export function createResolveurTemporel(db: Db): ResolveurTemporel {
       }
 
       return ok({ iso: valide.data.iso, humain: valide.data.humain });
+    },
+
+    async resoudreFenetre(
+      expr: ExpressionTemporelle,
+      jours: number,
+    ): Promise<Result<FenetreResolue>> {
+      /* Une fenêtre de zéro jour ou moins ne couvre rien : `calendar_read`
+         rendrait une liste vide en laissant croire que l'agenda l'est. */
+      if (!Number.isInteger(jours) || jours < 1) {
+        return err(jarvisError('VALIDATION', `fenêtre invalide : ${String(jours)} jour(s)`));
+      }
+
+      /* L'HEURE EST ÉCRASÉE À ZÉRO, dans l'expression et pas après coup.
+         `date_trunc` en SQL le ferait aussi — mais réutiliser `requete()` tel
+         quel garde UN seul endroit qui sait traduire chaque forme
+         d'expression. Deux traducteurs finiraient par diverger sur la forme
+         ajoutée l'année prochaine. */
+      const auJour: ExpressionTemporelle =
+        'heure' in expr ? { ...expr, heure: 0, minute: 0 } : expr;
+      const { sql, params } = requete(auJour);
+
+      const lu = await db.query<{ debut: string; fin: string; humain: string }>(
+        `SELECT to_char(d AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS debut,
+                to_char((d + make_interval(days => $${String(params.length + 1)}::int))
+                        AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS fin,
+                (ARRAY['lundi','mardi','mercredi','jeudi','vendredi','samedi',
+                       'dimanche'])[EXTRACT(ISODOW FROM d)::int]
+                || ' ' || to_char(d, 'FMDD') || ' ' ||
+                (ARRAY['janvier','février','mars','avril','mai','juin','juillet',
+                       'août','septembre','octobre','novembre','décembre'
+                      ])[EXTRACT(MONTH FROM d)::int] AS humain
+           FROM (SELECT date_trunc('day', ${sql}) AS d) AS calcul`,
+        [...params, jours],
+      );
+      if (!lu.ok) return lu;
+
+      const brut = lu.value.rows[0];
+      if (brut === undefined) {
+        return err(jarvisError('INTERNAL', 'la base n’a rendu aucune fenêtre'));
+      }
+      const valide = LigneFenetre.safeParse(brut);
+      if (!valide.success) {
+        return err(jarvisError('INTERNAL', `fenêtre illisible : ${valide.error.message}`));
+      }
+
+      return ok({
+        debutIso: valide.data.debut,
+        finIso: valide.data.fin,
+        humain:
+          jours === 1
+            ? valide.data.humain
+            : `${valide.data.humain}, sur ${String(jours)} jours`,
+      });
     },
   };
 }
